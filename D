@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rotafolio EPT — Mecánica Automotriz</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg:        #fef9f0;
+            --bg2:       #fff8ec;
+            --card:      #ffffff;
+            --border:    #e8dcc8;
+            --shadow:    rgba(180,140,80,0.15);
+
+            --ink:       #1a1008;
+            --ink2:      #5a4530;
+            --ink3:      #9a8060;
+
+            --amber:     #f59e0b;
+            --amber-lt:  #fef3c7;
+            --amber-md:  #fde68a;
+
+            --sky:       #0ea5e9;
+            --sky-lt:    #e0f2fe;
+
+            --mint:      #10b981;
+            --mint-lt:   #d1fae5;
+
+            --rose:      #f43f5e;
+            --rose-lt:   #ffe4e6;
+
+            --violet:    #8b5cf6;
+            --violet-lt: #ede9fe;
+
+            --orange:    #f97316;
+            --orange-lt: #ffedd5;
+
+            --card-colors: var(--amber), var(--sky), var(--mint), var(--rose),
+                           var(--violet), var(--orange), #ec4899, #14b8a6,
+                           #64748b, var(--amber), var(--sky), var(--mint),
+                           var(--rose), var(--violet), var(--orange), #ec4899,
+                           #14b8a6, #64748b, #6366f1;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: 'Nunito', sans-serif;
+            background-color: var(--bg);
+            background-image:
+                radial-gradient(circle at 20% 20%, rgba(245,158,11,0.08) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(14,165,233,0.08) 0%, transparent 50%),
+                url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23d4b896' fill-opacity='0.18'%3E%3Ccircle cx='20' cy='20' r='1.5'/%3E%3C/g%3E%3C/svg%3E");
+            color: var(--ink);
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+        }
+
+        /* ── HEADER ── */
+        .header {
+            background: linear-gradient(135deg, #1a1008 0%, #2d1f0e 60%, #3d2a12 100%);
+            padding: 0 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 80px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+        }
+
+        .header-brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .header-icon {
+            width: 44px; height: 44px;
+            background: var(--amber);
+            border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.4rem;
+            flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(245,158,11,0.4);
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 1.35rem;
+            font-weight: 900;
+            color: #ffffff;
+            letter-spacing: -0.3px;
+            line-height: 1.2;
+        }
+        .header h1 span {
+            display: block;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--amber);
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+        }
+
+        .btn-back {
+            background: var(--amber);
+            color: var(--ink);
+            border: none;
+            padding: 10px 20px;
+            border-radius: 30px;
+            font-family: 'Nunito', sans-serif;
+            font-weight: 800;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: none;
+            box-shadow: 0 2px 8px rgba(245,158,11,0.4);
+        }
+        .btn-back:hover { transform: translateY(-1px) scale(1.03); box-shadow: 0 4px 14px rgba(245,158,11,0.5); }
+        .btn-back:active { transform: scale(0.98); }
+
+        /* ── LAYOUT ── */
+        .app-container {
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: 32px 24px 48px;
+        }
+
+        /* ── INTRO BANNER ── */
+        .intro-banner {
+            background: linear-gradient(135deg, #fff8ec, #fef3c7);
+            border: 2px solid var(--amber-md);
+            border-radius: 20px;
+            padding: 24px 32px;
+            margin-bottom: 32px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        .intro-banner .big-icon { font-size: 3.5rem; flex-shrink: 0; }
+        .intro-banner h2 { margin: 0 0 6px; font-size: 1.5rem; font-weight: 900; color: var(--ink); }
+        .intro-banner p { margin: 0; color: var(--ink2); font-size: 0.95rem; font-weight: 600; }
+        .intro-count {
+            margin-left: auto;
+            background: var(--amber);
+            color: var(--ink);
+            padding: 10px 20px;
+            border-radius: 50px;
+            font-weight: 900;
+            font-size: 1rem;
+            flex-shrink: 0;
+            white-space: nowrap;
+        }
+
+        /* ── VIEWS ── */
+        .view { display: none; }
+        .view.active { display: block; animation: slideUp 0.35s cubic-bezier(0.34,1.56,0.64,1); }
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ── MENU GRID ── */
+        .section-label {
+            font-size: 0.7rem;
+            font-weight: 800;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--ink3);
+            margin: 0 0 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .section-label::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+        }
+
+        .menu-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 16px;
+        }
+
+        /* Palette cycling via nth-child */
+        .menu-card { --c: var(--amber); }
+        .menu-card:nth-child(7n+1)  { --c: #f59e0b; }
+        .menu-card:nth-child(7n+2)  { --c: #0ea5e9; }
+        .menu-card:nth-child(7n+3)  { --c: #10b981; }
+        .menu-card:nth-child(7n+4)  { --c: #f43f5e; }
+        .menu-card:nth-child(7n+5)  { --c: #8b5cf6; }
+        .menu-card:nth-child(7n+6)  { --c: #f97316; }
+        .menu-card:nth-child(7n+0)  { --c: #ec4899; }
+
+        .menu-card {
+            background: var(--card);
+            border: 2px solid var(--border);
+            border-top: 4px solid var(--c);
+            border-radius: 16px;
+            padding: 20px 20px 18px;
+            cursor: pointer;
+            transition: all 0.22s cubic-bezier(0.34,1.2,0.64,1);
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 2px 8px var(--shadow);
+        }
+        .menu-card::before {
+            content: '';
+            position: absolute;
+            top: 0; right: 0;
+            width: 80px; height: 80px;
+            background: radial-gradient(circle at top right, color-mix(in srgb, var(--c) 12%, transparent), transparent 70%);
+            pointer-events: none;
+        }
+        .menu-card:hover {
+            transform: translateY(-4px) scale(1.02);
+            border-color: var(--c);
+            box-shadow: 0 8px 24px color-mix(in srgb, var(--c) 25%, transparent);
+        }
+        .menu-card:active { transform: scale(0.98); }
+
+        .menu-card .card-num {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: var(--c);
+            background: color-mix(in srgb, var(--c) 12%, transparent);
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 20px;
+            margin-bottom: 10px;
+            letter-spacing: 1px;
+        }
+        .menu-card h3 {
+            margin: 0 0 8px;
+            font-size: 1.05rem;
+            font-weight: 800;
+            color: var(--ink);
+            line-height: 1.3;
+        }
+        .menu-card .card-hint {
+            margin: 0;
+            color: var(--ink3);
+            font-size: 0.82rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .menu-card .card-arrow {
+            position: absolute;
+            right: 16px; bottom: 18px;
+            width: 28px; height: 28px;
+            background: var(--c);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            color: white;
+            font-size: 0.85rem;
+            opacity: 0;
+            transform: translateX(-6px);
+            transition: all 0.2s;
+        }
+        .menu-card:hover .card-arrow {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        /* ── TOOL DETAIL ── */
+        .tool-layout {
+            display: grid;
+            grid-template-columns: 1.8fr 1fr;
+            gap: 24px;
+            align-items: start;
+        }
+
+        /* Tool header strip */
+        .tool-head-strip {
+            background: linear-gradient(135deg, #1a1008, #2d1f0e);
+            border-radius: 20px;
+            padding: 28px 32px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+        .tool-head-strip::after {
+            content: attr(data-num);
+            position: absolute;
+            right: -10px; top: -20px;
+            font-size: 8rem;
+            font-weight: 900;
+            font-family: 'Space Mono', monospace;
+            color: rgba(255,255,255,0.04);
+            line-height: 1;
+            pointer-events: none;
+        }
+        .tool-head-strip .accent-dot {
+            width: 56px; height: 56px;
+            background: var(--amber);
+            border-radius: 16px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.8rem;
+            flex-shrink: 0;
+            box-shadow: 0 4px 16px rgba(245,158,11,0.5);
+        }
+        .tool-head-strip h2 {
+            margin: 0 0 6px;
+            font-size: 1.7rem;
+            font-weight: 900;
+            color: #fff;
+        }
+        .badge {
+            display: inline-block;
+            background: rgba(245,158,11,0.2);
+            color: var(--amber);
+            padding: 4px 14px;
+            border-radius: 20px;
+            font-weight: 800;
+            font-size: 0.78rem;
+            letter-spacing: 0.5px;
+            border: 1px solid rgba(245,158,11,0.35);
+        }
+
+        /* Panels */
+        .panel {
+            background: var(--card);
+            border-radius: 20px;
+            padding: 28px;
+            border: 2px solid var(--border);
+            box-shadow: 0 2px 12px var(--shadow);
+        }
+        .panel-right {
+            background: var(--bg2);
+            border: 2px solid var(--border);
+        }
+
+        .section-title {
+            font-size: 1rem;
+            font-weight: 800;
+            color: var(--ink2);
+            margin: 24px 0 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .section-title:first-child { margin-top: 0; }
+        .section-title::after {
+            content: '';
+            flex: 1;
+            height: 2px;
+            background: var(--border);
+            border-radius: 2px;
+        }
+
+        p.desc {
+            font-size: 1rem;
+            line-height: 1.75;
+            color: var(--ink2);
+            margin: 0;
+        }
+
+        .type-list {
+            list-style: none;
+            padding: 0; margin: 0;
+            display: grid;
+            gap: 10px;
+        }
+        .type-list li {
+            background: var(--bg);
+            padding: 14px 16px;
+            border-radius: 12px;
+            border-left: 4px solid var(--amber);
+            font-size: 0.92rem;
+            color: var(--ink2);
+            line-height: 1.5;
+        }
+        .type-list li strong {
+            color: var(--ink);
+            display: block;
+            font-size: 0.95rem;
+            font-weight: 800;
+            margin-bottom: 4px;
+        }
+
+        /* Alerts */
+        .alert {
+            padding: 18px 20px;
+            border-radius: 16px;
+            font-size: 0.92rem;
+            line-height: 1.65;
+            margin-bottom: 16px;
+        }
+        .alert strong {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 0.9rem;
+            font-weight: 900;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        .alert-pro {
+            background: var(--mint-lt);
+            border: 2px solid #86efac;
+            color: #065f46;
+        }
+        .alert-pro strong { color: #047857; }
+        .alert-fail {
+            background: var(--rose-lt);
+            border: 2px solid #fda4af;
+            color: #881337;
+        }
+        .alert-fail strong { color: #be123c; }
+
+        /* Video */
+        .video-section { margin-top: 20px; }
+        .video-label {
+            font-size: 0.8rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--ink3);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .video-box {
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            border: 2px solid var(--border);
+            background: #111;
+            width: 100%;
+            display: none;
+        }
+        .video-container {
+            position: relative;
+            padding-bottom: 56.25%;
+            height: 0;
+        }
+        .video-container iframe {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            border: none;
+        }
+
+        /* ── RESPONSIVE ── */
+        @media (max-width: 860px) {
+            .tool-layout { grid-template-columns: 1fr; }
+            .intro-banner { flex-wrap: wrap; }
+            .intro-count { margin-left: 0; }
+            .tool-head-strip { padding: 20px; }
+            .tool-head-strip h2 { font-size: 1.4rem; }
+        }
+        @media (max-width: 500px) {
+            .header h1 { font-size: 1.1rem; }
+            .app-container { padding: 16px 14px 32px; }
+            .menu-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+            .menu-card { padding: 14px; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+    <div class="header-brand">
+        <div class="header-icon">⚙️</div>
+        <h1>
+            <span>EPT — Mecánica Automotriz</span>
+            Taller Automotriz
+        </h1>
+    </div>
+    <button class="btn-back" id="btnBack" onclick="showMenu()">← Volver al Panel</button>
+</header>
+
+<div class="app-container">
+
+    <!-- VISTA MENÚ -->
+    <div id="view-menu" class="view">
+
+        <div class="intro-banner">
+            <div class="big-icon">🔧</div>
+            <div>
+                <h2>Fichas de Herramientas</h2>
+                <p>Toca una tarjeta para ver la ficha completa con descripción, variantes, consejos y video.</p>
+            </div>
+            <div class="intro-count">19 herramientas</div>
+        </div>
+
+        <p class="section-label">Elige tu herramienta</p>
+        <div class="menu-grid" id="menu-grid"></div>
+    </div>
+
+    <!-- VISTA DETALLE -->
+    <div id="view-detail" class="view">
+
+        <div class="tool-head-strip" id="tool-head-strip" data-num="1">
+            <div class="accent-dot" id="t-icon">🔩</div>
+            <div>
+                <h2 id="t-title">Cargando...</h2>
+                <div class="badge" id="t-badge">...</div>
+            </div>
+        </div>
+
+        <div class="tool-layout">
+
+            <!-- Panel izquierdo -->
+            <div class="panel">
+                <p class="section-title">🎯 Misión Principal</p>
+                <p class="desc" id="t-desc">...</p>
+
+                <p class="section-title">🧬 Anatomía y Variantes</p>
+                <ul class="type-list" id="t-types"></ul>
+            </div>
+
+            <!-- Panel derecho -->
+            <div class="panel panel-right">
+                <div class="alert alert-pro">
+                    <strong>💡 Nivel Pro</strong>
+                    <span id="t-pro"></span>
+                </div>
+
+                <div class="alert alert-fail">
+                    <strong>⚠️ Precaución — Errores Comunes</strong>
+                    <span id="t-danger"></span>
+                </div>
+
+                <div class="video-section" id="video-section" style="display:none;">
+                    <p class="video-label">▶ Demo en acción</p>
+                    <div class="video-box" id="t-video-box"></div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+    /* ── DATOS ── */
+    const toolData = {
+        "1": {
+            icon:"📏", title: "Calibrador Digital / Vernier", badge: "Metrología de Precisión",
+            desc: "Dispositivo milimétrico que otorga al mecánico la capacidad de registrar anchuras, diámetros internos de tubos y niveles de profundidad. Es vital para asegurar que los componentes del vehículo sigan cumpliendo los estándares de fábrica.",
+            types: [
+                {name: "Mecánico Clásico", desc: "Sistema análogo que requiere alinear marcas visualmente en sus barras de acero. Alcanza resoluciones de 0.02 milímetros."},
+                {name: "Versión Digital", desc: "Equipado con un pequeño visor electrónico que entrega medidas exactas al instante, llegando a calcular hasta 0.01 milímetros sin esfuerzo ocular."}
+            ],
+            pro: "Si necesitas confirmar si los discos de frenado del auto se han desgastado demasiado y requieren cambio urgente, esta es tu herramienta de diagnóstico definitiva.",
+            danger: "Es un equipo sumamente delicado. Presionar sus patas contra una pieza a la fuerza o no guardarlo en su estuche de protección lo descalibrará permanentemente. Limpiar solo con alcohol isopropílico.",
+            video: "2SLQvaGHDV4"
+        },
+        "2": {
+            icon:"🔑", title: "Juego de Llaves Mixtas", badge: "Transmisión de Fuerza Manual",
+            desc: "El equipo de mano base para cualquier estudiante. Creadas para atrapar tuercas y pernos, brindando la longitud necesaria para ejercer gran fuerza rotativa sin que resbalen de las manos.",
+            types: [
+                {name: "Extremo Abierto (U)", desc: "Perfecto para deslizar la herramienta desde el costado cuando no hay acceso por la parte superior del tornillo."},
+                {name: "Extremo Corona", desc: "Anillo cerrado con forma de estrella interna que envuelve el perno al 100%, ideal para aflojar componentes muy atascados sin destruir el metal."}
+            ],
+            pro: "Al estar forjadas en Cromo-Vanadio, soportan castigos tremendos. La inclinación que tiene el lado de la corona te salvará cuando operes partes estrechas de la carrocería.",
+            danger: "El peor error de un novato es meter un tubo largo en el mango para generar más palanca. Esto no solo dobla el acero de la herramienta, sino que puede causar un accidente severo al romperse.",
+            video: "7-ZYw7xLBGQ"
+        },
+        "3": {
+            icon:"🔨", title: "Martillo de Bola", badge: "Conformado y Metalurgia",
+            desc: "Un mazo automotor forjado en aceros de alta dureza térmica (SAE 1045). Su propósito es golpear y modificar la forma de los metales sin destruir su integridad estructural interna.",
+            types: [
+                {name: "Cara Plana", desc: "Sección de choque primario. Se utiliza en conjunción con cinceles o para rectificar placas encorvadas."},
+                {name: "Esfera Trasera", desc: "Diseñada minuciosamente para expandir cabezas de remaches y curvar chapas metálicas en labores de enderezado."}
+            ],
+            pro: "Se convertirá en tu utensilio de confianza en las áreas de hojalatería, o al extraer pasadores mecánicos rebeldes que requieren impactos focalizados.",
+            danger: "Nunca inicies el trabajo sin revisar que el mango esté sólidamente unido al metal. Además, evita chocarlo contra superficies que superen su propia dureza para no astillar la esfera.",
+            video: "xWhgEimTmHU"
+        },
+        "4": {
+            icon:"🧱", title: "Mazo de Goma", badge: "Ensamblaje sin Daño",
+            desc: "Herramienta que aplica toda la fuerza cinética de un martillazo, pero gracias a su inmensa cabeza elástica, absorbe la destrucción y cuida los esmaltes y plásticos del automóvil.",
+            types: [
+                {name: "Caucho de Alta Densidad", desc: "Suele ser de color negro. Genera empujes pesados sobre componentes del chasis que deben calzar a presión sin rayarse."},
+                {name: "Caucho Purificado", desc: "De color blanco, pensado para interiores y chapas pintadas, ya que no deja los clásicos rayones oscuros al golpear."}
+            ],
+            pro: "Sumamente valioso al montar faros, centrar rines de aleación ligera o colocar molduras donde un martillo de acero dejaría abolladuras irreparables.",
+            danger: "Su punto débil es la exposición al clima extremo. Dejarlo al rayo del sol directo hará que la goma pierda su elasticidad y se cuartee a pedazos en el próximo uso.",
+            video: "43B2WLjl9zk"
+        },
+        "5": {
+            icon:"✂️", title: "Alicates Profesionales", badge: "Sujeción y Corte Eléctrico",
+            desc: "Pinzas articuladas que multiplican la fuerza de apriete de los dedos. Indispensables para agarrar terminales, pelar cables eléctricos o torcer alambres dentro del compartimiento del motor.",
+            types: [
+                {name: "Alicate Universal", desc: "Combina una mandíbula ruda para prensar objetos y una sección de cuchillas posteriores para guillotinar cables."},
+                {name: "Cortador Diagonal", desc: "Carece de zona de agarre; sus filos están diseñados únicamente para rebanar plásticos y cables de cobre limpiamente."},
+                {name: "Pinza de Aguja", desc: "Sus mandíbulas extremadamente largas te permiten introducirte en huecos angostos para rescatar fusibles o pernos caídos."}
+            ],
+            pro: "Si tu proyecto incluye arreglar el sistema de luces o instalar componentes electrónicos, los mangos con aislamiento de estas pinzas te darán seguridad y precisión.",
+            danger: "Usar estas pinzas para golpear o clavar arruinará el perno central de su articulación, dejándolas flojas. Tampoco intentes cortar clavos de acero grueso si no son del tipo adecuado.",
+            video: "C8ohADX4b9o"
+        },
+        "6": {
+            icon:"🪛", title: "Juego de Destornilladores", badge: "Fijación y Torque Interno",
+            desc: "Instrumentos de varilla prolongada creados para anclarse a las cabezas de la tornillería y transferir la rotación manual, permitiendo desmantelar tableros y sensores.",
+            types: [
+                {name: "Pala (Plano)", desc: "Encaja en tornillos de corte simple y ayuda a remover con cuidado las grapas plásticas de las puertas."},
+                {name: "Estrella (Phillips)", desc: "Posee una punta en aspas que se auto-centra, evitando que la herramienta resbale y dañe la pieza al hacer fuerza."},
+                {name: "Estrella Moderna (Torx)", desc: "Cuenta con seis aristas redondeadas. Resiste niveles de torque muy altos sin deformar la cabeza del tornillo."}
+            ],
+            pro: "Material esencial si necesitas desarmar partes plásticas del interior del habitáculo, cambiar módulos de inyección o retirar la carcasa del filtro de aire.",
+            danger: "El peor maltrato es utilizarlos como barra para abrir latas o hacer palanca entre dos metales. La varilla de acero se doblará, inutilizando la herramienta.",
+            video: "NIU8VC0q6G4"
+        },
+        "7": {
+            icon:"🔍", title: "Cuenta Hilos Óptico", badge: "Inspección Microscópica",
+            desc: "Aparato de aumento técnico tipo microscopio de bolsillo. Mantiene una lente de cristal a una distancia exacta de una regleta base, ayudando a evaluar daños que escapan a la vista normal.",
+            types: [
+                {name: "Soporte Rígido Metálico", desc: "Elaborados en acero que impiden que el enfoque se mueva, logrando estudiar los objetos con márgenes de 0.1 milímetros."},
+                {name: "Visor Electrónico", desc: "Opciones recientes que incluyen focos emisores de luz para aclarar las sombras proyectadas en los rincones del motor."}
+            ],
+            pro: "Es tu salvavidas para comprobar si la espiral de una bujía está desgastada o para encontrar fisuras por fatiga en componentes de alta fricción.",
+            danger: "Protege su cristal como si fuera el lente de una cámara profesional. Jamás lo limpies con telas ásperas o dedos grasosos; usa exclusivamente paños de microfibra.",
+            video: "NYFWT1Zk5pE"
+        },
+        "8": {
+            icon:"🌀", title: "Machos y Terrajas", badge: "Mecanizado y Talla de Roscas",
+            desc: "Kit de rescate mecánico para metales. Sus filos endurecidos permiten excavar surcos espirales nuevos en piezas lisas, o restaurar caminos de rosca destruidos por el óxido.",
+            types: [
+                {name: "Pieza Tipo Macho", desc: "Cumple la función de introducirse en un orificio vacío y raspar las paredes internas para que puedas insertar un tornillo."},
+                {name: "Corona Terraja", desc: "Funciona al revés: se enrosca por el exterior de un fierro liso cilíndrico, cortándolo hasta convertirlo en un perno enroscable."}
+            ],
+            pro: "Apreciarás este equipo el día que la cabeza de un tornillo viejo se parta dentro del chasis y te toque reconstruir todo el anclaje desde cero para salvar el trabajo.",
+            danger: "Regla sagrada: aplica siempre líquido de corte para enfriar el metal. Al girar, avanza un poco y luego retrocede para quebrar la viruta; si giras sin parar, partirás la herramienta.",
+            video: "rCmWA-SWG-w"
+        },
+        "9": {
+            icon:"⚖️", title: "Torquímetro", badge: "Calibrador de Tensión Mecánica",
+            desc: "El instrumento definitivo de precisión para armar motores. Se encarga de limitar y notificar exactamente cuánta fuerza (Newton-metro) estás ejerciendo sobre un tornillo de ensamblaje.",
+            types: [
+                {name: "Sistema de Chasquido (Trueno)", desc: "Al alcanzar el límite que ajustaste en el mango, el brazo interno colapsa levemente lanzando un 'clac' que percibes en la mano."},
+                {name: "Visor Digital", desc: "Monitores electrónicos que ilustran la fuerza en curso mediante números y disparan alarmas acústicas al llegar a la meta."}
+            ],
+            pro: "Sellar la cabeza de los cilindros (culata) exige que todos los tornillos tengan idéntica presión. Si omites esta herramienta, el calor torcerá las piezas y el auto fallará.",
+            danger: "Nunca lo utilices como palanca ordinaria para aflojar. Cuando finalices la jornada, destraba el regulador hasta la medida mínima o su resorte perderá la calibración para siempre.",
+            video: "lDosc7zeHNo"
+        },
+        "10": {
+            icon:"🔋", title: "Batería y Cargador Inteligente", badge: "Acumulación de Energía Autónoma",
+            desc: "El suministro vital para liberar al operario de los cables. Retiene energía electroquímica que luego se transfiere a herramientas de alto poder de forma portátil e inmediata.",
+            types: [
+                {name: "Bloques de Iones de Litio", desc: "Química purificada que ofrece pesos reducidos, mantiene la potencia hasta el final y elimina el famoso 'efecto memoria' de recarga."},
+                {name: "Estación de Suministro Procesada", desc: "Bases con chips inteligentes que escanean el calor interno de las celdas para no causar cortocircuitos o incendios durante el abastecimiento."}
+            ],
+            pro: "Permite movilizar herramientas brutales, como llaves percutoras, hasta la vía pública o debajo del auto sin el riesgo de tropezarse con enredos de cables eléctricos.",
+            danger: "Descargar estas baterías al cero por ciento y almacenarlas así por meses matará las celdas definitivamente. Mantenlas a temperatura ambiente y al 50% si no las vas a utilizar.",
+            video: "mCUGNGVUVrU"
+        },
+        "11": {
+            icon:"🔄", title: "Compresor de Anillos", badge: "Herramienta de Ensamble de Motor",
+            desc: "Cinturón de acero flexible que rodea al pistón. Su función es achicar y alinear los delicados aros de fricción para que la pieza entera resbale dentro del motor sin romperse.",
+            types: [
+                {name: "Cinta de Ajuste Rápido", desc: "Banda metálica que se aprieta progresivamente girando una llave dentada lateral, adaptándose a diversos tamaños de máquina."},
+                {name: "Camisas de Tamaño Fijo", desc: "Conos sólidos de medida exacta. Optimizan el tiempo en talleres de producción constante porque no requieren calibración previa."}
+            ],
+            pro: "Los aros del pistón son súper frágiles. Tratar de empujarlos con los dedos hacia adentro de la recámara de combustión los astillará, arruinando la presión del motor.",
+            danger: "Inspecciona con tacto que la banda no tenga filos puntiagudos o láminas dobladas; de lo contrario, rayarás irreparablemente las paredes inmaculadas del bloque de aluminio.",
+            video: "ia7WAsqXpCA"
+        },
+        "12": {
+            icon:"🗜️", title: "Compresor de Muelles de Válvula", badge: "Prensa de Alta Tensión",
+            desc: "Un extractor de fuerza pesada que doblega la resistencia de los resortes internos de la culata. Achica el muelle lo suficiente para dejar libre el seguro que retiene las válvulas del coche.",
+            types: [
+                {name: "Estructura Tipo Prensa (C)", desc: "Armatoste gigante que envuelve por completo la cabeza del motor cuando esta ya está separada y sobre el banco de trabajo."},
+                {name: "Soporte Aéreo", desc: "Se engancha desde la parte de arriba, brindando la enorme ventaja de intervenir los sellos de goma sin desmontar el bloque entero."}
+            ],
+            pro: "El instrumento mandatario si necesitas diagnosticar un motor que consume su propio aceite y echa humo por culpa de retenes o guías de válvula quemados.",
+            danger: "Precaución extrema: Los resortes guardan presiones violentas. Si no ajustas bien las mandíbulas, el resorte botará las diminutas trabas de acero a la velocidad de una bala.",
+            video: "JiteaPoUUpg"
+        },
+        "13": {
+            icon:"↔️", title: "Extractor de Rodajes", badge: "Separador por Tracción",
+            desc: "Sistema de anclaje diseñado para retirar ruedas y baleros que fueron insertados a presión extrema. Genera una palanca en retroceso que separa las partes sin usar fuerza bruta destructiva.",
+            types: [
+                {name: "Cuerpo de 3 Brazos", desc: "La configuración perfecta. Al rodear la pieza por tres lados, asegura que el jalón sea completamente recto y nada se ladee o se rompa."},
+                {name: "Uñas de Expansión Interna", desc: "Entran cerradas en el hueco del rodaje y luego se abren para atraparlo desde adentro y sacarlo del escondite."},
+                {name: "Placas Separadoras", desc: "Bordes biselados tipo cuchillo que se insertan a la fuerza detrás del rodaje cuando no hay espacio para meter los ganchos normales."}
+            ],
+            pro: "Es tu solución garantizada para reparar bombas de líquido refrigerante averiadas o expulsar los rodajes ruidosos que arruinan la carga del alternador.",
+            danger: "El peor trato que le puedes dar es golpear el tornillo maestro con un martillo mientras está tensionado. Esa rosca central siempre debe ir bañada en grasa de alta densidad.",
+            video: "5WSLXQidAHk"
+        },
+        "14": {
+            icon:"🚗", title: "Extractor de Suspensión", badge: "Domador de Chasis",
+            desc: "Torres de acero templado formuladas para achicar las monumentales espirales que sostienen el peso del vehículo. Reducen la longitud del resorte para que puedas desarmar el conjunto de amortiguación.",
+            types: [
+                {name: "Soportes Paralelos Roscados", desc: "Pares de varillas que muerden los costados del muelle y se van encogiendo lentamente girando sus tuercas superiores."},
+                {name: "Base Hidráulica Fija", desc: "Máquina de pedestal que emplea la contundencia de un cilindro de aceite para aplastar el resorte en pocos segundos con máxima protección."}
+            ],
+            pro: "Obligatorio para cualquier mantenimiento de la zona de rodamiento, desde reemplazar un amortiguador estallado hasta cambiar los topes de rebote desgastados.",
+            danger: "ALERTA ROJA: Queda terminantemente vetado usar pistolas de aire comprimido para girar las varillas manuales. La revolución rápida derretirá los surcos y el muelle explotará hacia tu cuerpo.",
+            video: "iSJDM7Ux0iY"
+        },
+        "15": {
+            icon:"⚙️", title: "Extractor Homocinética", badge: "Liberador de Ejes Cardán",
+            desc: "Base de contención creada para zafar la junta articulada móvil de las llantas tractoras. Su tirón hacia atrás libera el seguro interno de la barra sin destrozar las canicas metálicas del sistema.",
+            types: [
+                {name: "Marco Regulable", desc: "Estructura tipo herradura con múltiples orificios. Se ajusta a cualquier medida, abrazando el eje desde la parte trasera para empujar."},
+                {name: "Impacto Inercial", desc: "Cuenta con un cilindro pesado de metal suelto en la barra. El mecánico lo jala con rabia hacia atrás para propinar un tirón seco y separarlo."}
+            ],
+            pro: "Herramienta que amarás el día que inspecciones un auto y notes que la bota protectora tipo acordeón de la llanta está rasgada y botando grasa negra por todos lados.",
+            danger: "El interior de estas juntas está colmado de grasa de molibdeno, un químico asquerosamente pegajoso. Lava a fondo las roscas de la herramienta luego de usarla o sus pernos se bloquearán.",
+            video: "3sBIBKfYhLk"
+        },
+        "16": {
+            icon:"🎯", title: "Desmontador de Poleas", badge: "Tracción Frontal del Motor",
+            desc: "Disco de extracción severa destinado a desacoplar poleas del frente de la máquina. Empuja directamente contra el centro del eje para que la polea salga perfectamente recta y no sufra fisuras en sus bordes.",
+            types: [
+                {name: "Base Pata de Gallo", desc: "Cuenta con ranuras por donde pasas pernos largos que se atornillan directo al cuerpo de la polea, afianzándola desde su vientre."},
+                {name: "Garras Externas", desc: "Si la polea del coche no tiene huecos de anclaje, estas uñas agarran el perímetro exterior para traccionarla hacia atrás."}
+            ],
+            pro: "Es la puerta de entrada a los trabajos más complejos del taller: extraer el balanceador inferior te permitirá acceder a la cadena o correa de distribución del vehículo.",
+            danger: "Asegúrate de que el espárrago empujador central esté en un ángulo recto perfecto de 90 grados. Una leve inclinación destruirá el hilo del cigüeñal o partirá la rueda de aluminio.",
+            video: "qHIrfAKFTkY"
+        },
+        "17": {
+            icon:"🔬", title: "Micrómetro Int/Ext", badge: "La Élite de la Precisión",
+            desc: "El célebre tornillo de Palmer. Es el cenit de la evaluación métrica manual. Rastrea y confirma dimensiones minúsculas que ni siquiera el calibrador digital percibe, marcando hasta la milésima de milímetro.",
+            types: [
+                {name: "Formato de Exteriores", desc: "Arco macizo metálico que abraza ejes redondos o platinas para buscar variaciones imperceptibles de grosor a lo largo de la pieza."},
+                {name: "Cabezales de Interiores", desc: "Sistemas expansibles que entran a los huecos cerrados para diagnosticar el estado real de la cavidad donde trabaja el pistón."},
+                {name: "Monitores LCD", desc: "Evitan que tengas que contar líneas mentales en el tambor, ilustrando la dimensión real instantánea en su pequeña pantalla."}
+            ],
+            pro: "Sin este aparato nunca sabrás si los componentes móviles del motor sufrieron desgastes ovalados ocultos tras años de fricción continua contra el metal.",
+            danger: "Solo debes rotar la pequeñísima perilla posterior (el trinquete) que emite unos clics suaves al hacer tope. Forzar el tambor principal gigante torcerá el micro-hilo interno y lo destruirá.",
+            video: "ihLY5b0l1mo"
+        },
+        "18": {
+            icon:"💨", title: "Pistola Neumática", badge: "Tornado de Impactos",
+            desc: "El cañón desarmador del mecánico. Convierte ventiscas de aire comprimido en poderosas percusiones rotativas internas que doblegan tuercas petrificadas en segundos sin exigirte esfuerzo.",
+            types: [
+                {name: "Encastre de Media Pulgada", desc: "El formato sagrado y versátil, con el peso y la potencia idóneos para arrancar neumáticos y piezas de chasis en autos de calle."},
+                {name: "Artillería de Pulgada", desc: "Herramientas de un peso formidable, fabricadas con un solo fin: zafar las tuercas gigantescas del sector de camiones y maquinaria pesada."},
+                {name: "Dados Impacto (Negros)", desc: "Acoples construidos en cromo-molibdeno grueso que jamás se rompen bajo la fuerza de la herramienta."}
+            ],
+            pro: "Es tu mejor recurso en la batalla contra el tiempo. Desarmar los eslabones oxidados y podridos de una suspensión manual toma horas; esta bestia lo hace en tres segundos.",
+            danger: "Regla imperativa de vida o muerte: Jamás ensambles dados cromados y brillantes de mano a esta máquina. Los golpes fragmentarán el cromo lanzando esquirlas cortantes al ambiente.",
+            video: "xdDidKZZTzI"
+        },
+        "19": {
+            icon:"⚡", title: "Martillo Neumático", badge: "Demolición Quirúrgica",
+            desc: "Poderoso cañón eólico que eyecta percusiones de alta frecuencia en línea recta, destrozando obstáculos de metal. Dispone de accionamiento en retroceso para salvar las puntas que quedan atoradas en el chasis.",
+            types: [
+                {name: "Cincelador de Paleta", desc: "Inserta espátulas afiladas que acuchillan láminas arruinadas de carrocería o decapitan pernos fusionados."},
+                {name: "Manojo de Agujas", desc: "Varillas de acero independientes que bailan frenéticamente. Mágicas para erradicar óxido profundo escondido en los pisos rugosos del vehículo."}
+            ],
+            pro: "Es tu herramienta definitiva cuando te toque lidiar con los tubos del silenciador de escape, los cuales se sueldan entre sí por los cambios de temperatura y se niegan a salir.",
+            danger: "Disparar este cañón en el vacío (sin que la punta metálica choque duro contra algo) provocará que su pistón interno arremeta contra el propio tambor, destrozando la herramienta por dentro.",
+            video: "znyI-vSliY0"
+        }
+    };
+
+    /* ── GENERAR MENÚ ── */
+    const menuGrid = document.getElementById('menu-grid');
+    for (let id in toolData) {
+        const item = toolData[id];
+        const card = document.createElement('div');
+        card.className = 'menu-card';
+        card.innerHTML = `
+            <div class="card-num">#${id}</div>
+            <h3>${item.icon} ${item.title}</h3>
+            <p class="card-hint">Toca para ver la ficha</p>
+            <div class="card-arrow">→</div>
+        `;
+        card.onclick = () => loadTool(id);
+        menuGrid.appendChild(card);
+    }
+
+    /* ── ROUTING QR ── */
+    const urlParams = new URLSearchParams(window.location.search);
+    const toolId = urlParams.get('id');
+
+    function sanitize(text) {
+        if (!text) return "";
+        return text.replace(/\[cite_start\]/gi, '').replace(/\[cite[^\]]*\]/gi, '');
+    }
+
+    if (toolId && toolData[toolId]) {
+        loadTool(toolId);
+    } else {
+        document.getElementById('view-menu').classList.add('active');
+    }
+
+    /* ── LOAD TOOL ── */
+    function loadTool(id) {
+        const data = toolData[id];
+
+        document.getElementById('t-title').textContent = data.title;
+        document.getElementById('t-badge').textContent = data.badge;
+        document.getElementById('t-icon').textContent = data.icon;
+        document.getElementById('t-desc').textContent = sanitize(data.desc);
+        document.getElementById('t-pro').textContent = sanitize(data.pro);
+        document.getElementById('t-danger').textContent = sanitize(data.danger);
+        document.getElementById('tool-head-strip').setAttribute('data-num', id);
+
+        const typesList = document.getElementById('t-types');
+        typesList.innerHTML = '';
+        data.types.forEach(t => {
+            typesList.innerHTML += `<li><strong>⚙️ ${sanitize(t.name)}</strong>${sanitize(t.desc)}</li>`;
+        });
+
+        // Video
+        const videoBox   = document.getElementById('t-video-box');
+        const videoSect  = document.getElementById('video-section');
+        videoBox.innerHTML = '';
+
+        if (data.video && data.video.trim() !== "") {
+            const vid = data.video;
+            const sq  = encodeURIComponent(data.title + ' mecánica automotriz tutorial');
+            const yt  = 'https://www.youtube.com/results?search_query=' + sq;
+
+            videoSect.style.display = 'block';
+            videoBox.style.display  = 'block';
+            videoBox.innerHTML = `
+                <div class="video-container">
+                    <iframe id="vframe" src="https://www.youtube.com/embed/${vid}?rel=0"
+                        allowfullscreen style="border:none;"
+                        onload="checkVid(this,'${vid}','${yt}')"></iframe>
+                </div>
+                <div id="vfallback" style="display:none;padding:22px;text-align:center;background:#fff8ec;border-radius:0 0 14px 14px;">
+                    <p style="color:#5a4530;margin:0 0 12px;font-size:0.9rem;font-weight:700;">📺 Video no disponible</p>
+                    <a href="${yt}" target="_blank"
+                       style="display:inline-block;background:#f43f5e;color:#fff;padding:9px 20px;border-radius:30px;text-decoration:none;font-weight:800;font-size:0.85rem;">
+                       🔍 Buscar en YouTube
+                    </a>
+                </div>`;
+        } else {
+            videoSect.style.display = 'none';
+        }
+
+        document.getElementById('view-menu').classList.remove('active');
+        document.getElementById('view-detail').classList.add('active');
+        document.getElementById('btnBack').style.display = 'block';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function checkVid(iframe, videoId, ytUrl) {
+        const img = new Image();
+        img.onload = () => {
+            if (img.naturalWidth === 120) showFallback();
+        };
+        img.onerror = () => showFallback();
+        img.src = 'https://img.youtube.com/vi/' + videoId + '/hqdefault.jpg';
+        function showFallback() {
+            const f = document.getElementById('vframe');
+            const fb = document.getElementById('vfallback');
+            if (f)  f.style.display = 'none';
+            if (fb) fb.style.display = 'block';
+        }
+    }
+
+    function showMenu() {
+        document.getElementById('view-detail').classList.remove('active');
+        document.getElementById('view-menu').classList.add('active');
+        document.getElementById('btnBack').style.display = 'none';
+        document.getElementById('t-video-box').innerHTML = '';
+    }
+
+    /* limpia artefactos de citas */
+    setInterval(() => {
+        const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+        let n;
+        while (n = walk.nextNode()) {
+            if (n.nodeValue.includes('[cite')) {
+                n.nodeValue = n.nodeValue.replace(/\[cite_start\]/gi,'').replace(/\[cite[^\]]*\]/gi,'');
+            }
+        }
+    }, 500);
+</script>
+</body>
+</html>
