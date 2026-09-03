@@ -4,26 +4,84 @@ import { GastoItem } from "@/lib/types";
 
 interface Props { onAdd: (items: GastoItem[]) => void }
 
-function fileToGasto(file: File): Promise<GastoItem> {
+/** Lado máximo en píxeles tras comprimir. Suficiente para leer un comprobante. */
+const MAX_LADO = 1800;
+const CALIDAD_JPEG = 0.82;
+
+function leerComoDataURL(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      resolve({
-        id: Date.now().toString(36) + Math.random().toString(36).slice(2),
-        nombre: file.name,
-        tamanoKB: Math.round(file.size / 1024),
-        base64: result.split(",")[1],
-        mimeType: file.type || "image/jpeg",
-        numero_solicitud: "",
-        fecha_solicitud: new Date().toISOString().split("T")[0],
-        empresa: "", responsable: "", area_proyecto: "", solicitante: "", motivo: "",
-        estado: "PENDIENTE", procesado: false, procesando: false,
-      });
-    };
+    reader.onload = () => resolve(reader.result as string);
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+}
+
+/**
+ * Reduce y recomprime la imagen en el navegador.
+ * Una foto de celular pesa 4-6 MB; en base64 crece un 33% más y Gemini
+ * la rechaza o tarda muchísimo. Así baja a ~200-500 KB sin perder legibilidad.
+ * Los PDFs se dejan intactos.
+ */
+async function comprimirImagen(file: File): Promise<{ dataUrl: string; mimeType: string }> {
+  const original = await leerComoDataURL(file);
+
+  if (!file.type.startsWith("image/")) {
+    return { dataUrl: original, mimeType: file.type || "application/pdf" };
+  }
+
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error("no-decodable"));
+      el.src = original;
+    });
+
+    const escala = Math.min(1, MAX_LADO / Math.max(img.width, img.height));
+    // Ya es pequeña y liviana: no vale la pena recomprimir.
+    if (escala === 1 && file.size < 900_000) {
+      return { dataUrl: original, mimeType: file.type };
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(img.width * escala);
+    canvas.height = Math.round(img.height * escala);
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return { dataUrl: original, mimeType: file.type };
+
+    // Fondo blanco: los PNG transparentes salen negros al pasar a JPEG.
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    return {
+      dataUrl: canvas.toDataURL("image/jpeg", CALIDAD_JPEG),
+      mimeType: "image/jpeg",
+    };
+  } catch {
+    // Si algo falla al comprimir, se envía la original.
+    return { dataUrl: original, mimeType: file.type || "image/jpeg" };
+  }
+}
+
+async function fileToGasto(file: File): Promise<GastoItem> {
+  const { dataUrl, mimeType } = await comprimirImagen(file);
+  const base64 = dataUrl.split(",")[1];
+
+  return {
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2),
+    nombre: file.name,
+    // Tamaño real que se enviará, no el del archivo original.
+    tamanoKB: Math.round((base64.length * 3) / 4 / 1024),
+    base64,
+    mimeType,
+    numero_solicitud: "",
+    fecha_solicitud: new Date().toISOString().split("T")[0],
+    empresa: "", responsable: "", area_proyecto: "", solicitante: "", motivo: "",
+    estado: "PENDIENTE", procesado: false, procesando: false,
+  };
 }
 
 const ACCEPT = "image/*,application/pdf";

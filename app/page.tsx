@@ -60,8 +60,9 @@ export default function Home() {
       }
       updateItem(id, {
         procesado: true, procesando: false, extraido, drive_url,
-        empresa: items.find(i => i.id === id)?.empresa || extraido.proveedor,
-        motivo: items.find(i => i.id === id)?.motivo || extraido.detalle,
+        error: undefined,
+        empresa: item.empresa || extraido.proveedor,
+        motivo: item.motivo || extraido.detalle,
       });
     } catch (e) {
       updateItem(id, { procesando: false, error: (e as Error).message });

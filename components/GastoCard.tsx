@@ -30,7 +30,7 @@ export default function GastoCard({ item, onChange, onProcesar, onEliminar }: Pr
       <div style={{
         display: "flex", alignItems: "center", gap: "12px",
         padding: "12px 14px",
-        borderBottom: expanded ? "1px solid var(--border)" : "none",
+        borderBottom: expanded || item.error ? "1px solid var(--border)" : "none",
         background: "var(--surface2)",
       }}>
         {/* File icon */}
@@ -62,6 +62,12 @@ export default function GastoCard({ item, onChange, onProcesar, onEliminar }: Pr
           )}
           {item.error && <span className="badge badge-error">Error</span>}
           {item.procesado && !item.error && <span className="badge badge-ok">✓ Extraído</span>}
+          {item.error && !item.procesando && (
+            <button className="btn-primary" style={{ padding: "6px 12px", fontSize: "12px" }}
+              onClick={() => onProcesar(item.id)}>
+              Reintentar
+            </button>
+          )}
           {item.drive_url && (
             <a href={item.drive_url} target="_blank" rel="noreferrer"
               style={{
@@ -92,6 +98,21 @@ export default function GastoCard({ item, onChange, onProcesar, onEliminar }: Pr
           >×</button>
         </div>
       </div>
+
+      {/* Error message — siempre visible, aunque la tarjeta esté colapsada */}
+      {item.error && (
+        <div style={{
+          padding: "11px 14px",
+          background: "var(--danger-bg)",
+          borderBottom: "1px solid var(--border)",
+          display: "flex", alignItems: "flex-start", gap: "8px",
+        }}>
+          <span style={{ fontSize: "13px", lineHeight: 1.4, flexShrink: 0 }}>⚠️</span>
+          <p style={{ fontSize: "12px", color: "var(--danger)", lineHeight: 1.5, fontWeight: 500 }}>
+            {item.error}
+          </p>
+        </div>
+      )}
 
       {expanded && (
         <>
