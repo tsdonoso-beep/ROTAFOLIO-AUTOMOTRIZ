@@ -2,32 +2,23 @@
 import { useCallback, useRef, useState } from "react";
 import { GastoItem } from "@/lib/types";
 
-interface Props {
-  onAdd: (items: GastoItem[]) => void;
-}
+interface Props { onAdd: (items: GastoItem[]) => void }
 
 function fileToGasto(file: File): Promise<GastoItem> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result as string;
-      const base64 = result.split(",")[1];
       resolve({
         id: Date.now().toString(36) + Math.random().toString(36).slice(2),
         nombre: file.name,
         tamanoKB: Math.round(file.size / 1024),
-        base64,
+        base64: result.split(",")[1],
         mimeType: file.type || "image/jpeg",
         numero_solicitud: "",
         fecha_solicitud: new Date().toISOString().split("T")[0],
-        empresa: "",
-        responsable: "",
-        area_proyecto: "",
-        solicitante: "",
-        motivo: "",
-        estado: "PENDIENTE",
-        procesado: false,
-        procesando: false,
+        empresa: "", responsable: "", area_proyecto: "", solicitante: "", motivo: "",
+        estado: "PENDIENTE", procesado: false, procesando: false,
       });
     };
     reader.onerror = reject;
@@ -42,85 +33,121 @@ export default function UploadZone({ onAdd }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
 
-  const handleFiles = useCallback(
-    async (files: FileList | File[]) => {
-      const arr = Array.from(files).filter(
-        (f) => f.type.startsWith("image/") || f.type === "application/pdf"
-      );
-      if (!arr.length) return;
-      const gastos = await Promise.all(arr.map(fileToGasto));
-      onAdd(gastos);
-    },
-    [onAdd]
-  );
+  const handleFiles = useCallback(async (files: FileList | File[]) => {
+    const arr = Array.from(files).filter(f => f.type.startsWith("image/") || f.type === "application/pdf");
+    if (!arr.length) return;
+    const gastos = await Promise.all(arr.map(fileToGasto));
+    onAdd(gastos);
+  }, [onAdd]);
 
-  const onDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      setDragging(false);
-      handleFiles(e.dataTransfer.files);
-    },
-    [handleFiles]
-  );
+  const onDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    handleFiles(e.dataTransfer.files);
+  }, [handleFiles]);
 
   return (
-    <section className="space-y-3">
-      {/* Drop zone — visible en desktop */}
+    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+      {/* Drop zone — desktop */}
       <div
+        className="hidden md:flex"
         onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
         onClick={() => inputRef.current?.click()}
-        className={`hidden md:flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-10 transition ${
-          dragging
-            ? "border-emerald-500 bg-emerald-50"
-            : "border-slate-300 bg-slate-50 hover:border-emerald-400 hover:bg-emerald-50/50"
-        }`}
+        style={{
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: "16px",
+          padding: "48px 24px",
+          borderRadius: "20px",
+          cursor: "pointer",
+          transition: "all 0.2s",
+          background: dragging
+            ? "rgba(16,223,160,0.08)"
+            : "rgba(255,255,255,0.02)",
+          border: `2px dashed ${dragging ? "var(--accent)" : "rgba(255,255,255,0.1)"}`,
+          boxShadow: dragging ? "inset 0 0 40px rgba(16,223,160,0.05)" : "none",
+        }}
       >
-        <span className="text-4xl">📎</span>
-        <p className="text-center text-sm text-slate-500">
-          Arrastra imágenes o PDFs aquí<br />
-          <span className="text-emerald-600 font-medium">o haz clic para seleccionar</span>
-        </p>
-        <input ref={inputRef} type="file" accept={ACCEPT} multiple className="hidden" onChange={(e) => e.target.files && handleFiles(e.target.files)} />
+        <div style={{
+          width: 56, height: 56,
+          background: dragging ? "var(--accent-dim)" : "rgba(255,255,255,0.04)",
+          borderRadius: "16px",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: "24px",
+          transition: "all 0.2s",
+          border: "1px solid var(--border2)",
+        }}>
+          {dragging ? "✨" : "📎"}
+        </div>
+        <div style={{ textAlign: "center" }}>
+          <p style={{ fontSize: "14px", fontWeight: 600, color: "var(--text)", marginBottom: "4px", fontFamily: "var(--font-sora), sans-serif" }}>
+            Arrastra tus comprobantes aquí
+          </p>
+          <p style={{ fontSize: "12px", color: "var(--text2)" }}>
+            o <span style={{ color: "var(--accent)" }}>haz clic para seleccionar</span> · Imágenes y PDF
+          </p>
+        </div>
+        <input ref={inputRef} type="file" accept={ACCEPT} multiple className="hidden"
+          onChange={(e) => e.target.files && handleFiles(e.target.files)} />
       </div>
 
-      {/* Botones móvil — siempre visibles en mobile */}
-      <div className="flex gap-3 md:hidden">
-        <button
-          onClick={() => inputRef.current?.click()}
-          className="flex-1 flex flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 py-6 text-sm text-slate-600 active:bg-slate-100"
-        >
-          <span className="text-3xl">📁</span>
-          Galería / Archivos
-        </button>
+      {/* Mobile buttons */}
+      <div className="flex md:hidden" style={{ gap: "12px" }}>
         <button
           onClick={() => cameraRef.current?.click()}
-          className="flex-1 flex flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-emerald-300 bg-emerald-50 py-6 text-sm text-emerald-700 active:bg-emerald-100"
+          style={{
+            flex: 1,
+            display: "flex", flexDirection: "column", alignItems: "center", gap: "10px",
+            padding: "28px 16px",
+            borderRadius: "20px",
+            border: "1px solid var(--accent-dim)",
+            background: "rgba(16,223,160,0.06)",
+            color: "var(--accent)",
+            cursor: "pointer",
+            transition: "all 0.15s",
+            fontFamily: "var(--font-sora), sans-serif",
+          }}
         >
-          <span className="text-3xl">📷</span>
-          Tomar foto
+          <span style={{ fontSize: "28px" }}>📷</span>
+          <span style={{ fontSize: "13px", fontWeight: 600 }}>Tomar foto</span>
         </button>
-        <input ref={inputRef} type="file" accept={ACCEPT} multiple className="hidden" onChange={(e) => e.target.files && handleFiles(e.target.files)} />
-        <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => e.target.files && handleFiles(e.target.files)} />
-      </div>
-
-      {/* En desktop también botones compactos bajo el drop */}
-      <div className="hidden md:flex gap-2">
         <button
           onClick={() => inputRef.current?.click()}
-          className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
+          style={{
+            flex: 1,
+            display: "flex", flexDirection: "column", alignItems: "center", gap: "10px",
+            padding: "28px 16px",
+            borderRadius: "20px",
+            border: "1px solid var(--border2)",
+            background: "rgba(255,255,255,0.03)",
+            color: "var(--text2)",
+            cursor: "pointer",
+            transition: "all 0.15s",
+            fontFamily: "var(--font-sora), sans-serif",
+          }}
         >
+          <span style={{ fontSize: "28px" }}>📁</span>
+          <span style={{ fontSize: "13px", fontWeight: 600 }}>Galería</span>
+        </button>
+      </div>
+
+      {/* Desktop extra buttons */}
+      <div className="hidden md:flex" style={{ gap: "8px" }}>
+        <button className="btn-ghost" onClick={() => inputRef.current?.click()}>
           📁 Seleccionar archivos
         </button>
-        <button
-          onClick={() => cameraRef.current?.click()}
-          className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700 hover:bg-emerald-100"
-        >
+        <button className="btn-ghost" onClick={() => cameraRef.current?.click()}>
           📷 Cámara
         </button>
-        <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => e.target.files && handleFiles(e.target.files)} />
       </div>
-    </section>
+
+      <input ref={inputRef} type="file" accept={ACCEPT} multiple className="hidden"
+        onChange={(e) => e.target.files && handleFiles(e.target.files)} />
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden"
+        onChange={(e) => e.target.files && handleFiles(e.target.files)} />
+    </div>
   );
 }

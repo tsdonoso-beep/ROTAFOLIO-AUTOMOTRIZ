@@ -12,12 +12,12 @@ import { subirADrive } from "@/lib/drive";
 import { deleteProyecto, getProyectos, saveProyecto } from "@/lib/proyectos";
 
 export default function Home() {
-  const [apiKey, setApiKey] = useState("");
-  const [items, setItems] = useState<GastoItem[]>([]);
-  const [proyectos, setProyectos] = useState<Proyecto[]>([]);
+  const [apiKey, setApiKey]             = useState("");
+  const [items, setItems]               = useState<GastoItem[]>([]);
+  const [proyectos, setProyectos]       = useState<Proyecto[]>([]);
   const [proyectoActual, setProyectoActual] = useState<Proyecto | null>(null);
-  const [showModal, setShowModal] = useState(false);
-  const [tab, setTab] = useState<"gastos" | "resumen">("gastos");
+  const [showModal, setShowModal]       = useState(false);
+  const [tab, setTab]                   = useState<"gastos" | "resumen">("gastos");
 
   useEffect(() => {
     setApiKey(getApiKey());
@@ -27,73 +27,49 @@ export default function Home() {
   }, []);
 
   const updateItem = useCallback((id: string, patch: Partial<GastoItem>) => {
-    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, ...patch } : i)));
+    setItems(prev => prev.map(i => i.id === id ? { ...i, ...patch } : i));
   }, []);
 
   const eliminarItem = useCallback((id: string) => {
-    setItems((prev) => prev.filter((i) => i.id !== id));
+    setItems(prev => prev.filter(i => i.id !== id));
   }, []);
 
   const agregarItems = useCallback((nuevos: GastoItem[]) => {
-    setItems((prev) => [...prev, ...nuevos]);
+    setItems(prev => [...prev, ...nuevos]);
   }, []);
 
-  const procesarItem = useCallback(
-    async (id: string) => {
-      if (!apiKey) {
-        alert("Primero configura tu Gemini API Key (botón ⚙ API Key arriba).");
-        return;
+  const procesarItem = useCallback(async (id: string) => {
+    if (!apiKey) {
+      alert("Primero configura tu Gemini API Key (botón arriba a la derecha).");
+      return;
+    }
+    const item = items.find(i => i.id === id);
+    if (!item) return;
+    updateItem(id, { procesando: true, error: undefined });
+    try {
+      const { extraido } = await extraerComprobante(item.base64, item.mimeType, apiKey);
+      let drive_url: string | undefined;
+      if (proyectoActual) {
+        try {
+          const ext = item.nombre.split(".").pop() ?? "jpg";
+          const fileName = `${extraido.proveedor || item.nombre}_${Date.now()}.${ext}`.replace(/\s+/g, "_");
+          const result = await subirADrive({ base64: item.base64, mimeType: item.mimeType, fileName, centroCostos: proyectoActual.centro_costos, caja: proyectoActual.caja });
+          drive_url = result.url;
+        } catch { /* Drive error no bloquea */ }
       }
-      const item = items.find((i) => i.id === id);
-      if (!item) return;
-
-      updateItem(id, { procesando: true, error: undefined });
-
-      try {
-        // 1. Extraer con Gemini
-        const { extraido } = await extraerComprobante(item.base64, item.mimeType, apiKey);
-
-        // 2. Subir imagen a Drive (si hay proyecto activo)
-        let drive_url: string | undefined;
-        if (proyectoActual) {
-          try {
-            const ext = item.nombre.split(".").pop() ?? "jpg";
-            const fileName = `${extraido.proveedor || item.nombre}_${Date.now()}.${ext}`.replace(/\s+/g, "_");
-            const result = await subirADrive({
-              base64: item.base64,
-              mimeType: item.mimeType,
-              fileName,
-              centroCostos: proyectoActual.centro_costos,
-              caja: proyectoActual.caja,
-            });
-            drive_url = result.url;
-          } catch (driveErr) {
-            console.warn("Drive upload failed:", driveErr);
-            // No bloquea el flujo, solo avisa
-          }
-        }
-
-        updateItem(id, {
-          procesado: true,
-          procesando: false,
-          extraido,
-          drive_url,
-          // Pre-rellenar campos vacíos con lo extraído
-          empresa: items.find((i) => i.id === id)?.empresa || extraido.proveedor,
-          motivo: items.find((i) => i.id === id)?.motivo || extraido.detalle,
-        });
-      } catch (e) {
-        updateItem(id, { procesando: false, error: (e as Error).message });
-      }
-    },
-    [apiKey, items, proyectoActual, updateItem]
-  );
+      updateItem(id, {
+        procesado: true, procesando: false, extraido, drive_url,
+        empresa: items.find(i => i.id === id)?.empresa || extraido.proveedor,
+        motivo: items.find(i => i.id === id)?.motivo || extraido.detalle,
+      });
+    } catch (e) {
+      updateItem(id, { procesando: false, error: (e as Error).message });
+    }
+  }, [apiKey, items, proyectoActual, updateItem]);
 
   const procesarTodos = async () => {
-    const pendientes = items.filter((i) => !i.procesado && !i.procesando);
-    for (const item of pendientes) {
-      await procesarItem(item.id);
-    }
+    const pendientes = items.filter(i => !i.procesado && !i.procesando);
+    for (const item of pendientes) await procesarItem(item.id);
   };
 
   const crearProyecto = (p: Proyecto) => {
@@ -104,119 +80,212 @@ export default function Home() {
   };
 
   const eliminarProyecto = (id: string) => {
-    if (!confirm("¿Eliminar este proyecto? Los gastos cargados no se borran.")) return;
+    if (!confirm("¿Eliminar este proyecto?")) return;
     deleteProyecto(id);
     const ps = getProyectos();
     setProyectos(ps);
     setProyectoActual(ps[0] ?? null);
   };
 
-  const pendientesCount = items.filter((i) => !i.procesado && !i.procesando).length;
-  const procesadosCount = items.filter((i) => i.procesado).length;
-  const totalSoles = items
-    .filter((i) => i.procesado)
-    .reduce((s, i) => s + (i.extraido?.monto_total ?? 0), 0);
+  const pendientesCount  = items.filter(i => !i.procesado && !i.procesando).length;
+  const procesadosCount  = items.filter(i => i.procesado).length;
+  const totalSoles       = items.filter(i => i.procesado).reduce((s, i) => s + (i.extraido?.monto_total ?? 0), 0);
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* HEADER */}
-      <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-lg font-bold text-white">R</div>
-            <div className="leading-tight">
-              <div className="text-[15px] font-bold tracking-tight text-slate-800">FOTO-GRAMA</div>
-              <div className="text-[10px] uppercase tracking-wide text-slate-400">Rendición Automotriz</div>
+    <div style={{ minHeight: "100dvh" }}>
+      {/* ═══ HEADER ═══ */}
+      <header style={{
+        position: "sticky", top: 0, zIndex: 30,
+        background: "rgba(10,11,15,0.85)",
+        backdropFilter: "blur(24px)",
+        WebkitBackdropFilter: "blur(24px)",
+        borderBottom: "1px solid var(--border)",
+      }}>
+        <div style={{
+          maxWidth: 900, margin: "0 auto",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "12px 16px", gap: 16,
+        }}>
+          {/* Logo */}
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{
+              width: 38, height: 38, borderRadius: "12px",
+              background: "linear-gradient(135deg, var(--accent) 0%, #0FBFB0 100%)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: "18px", flexShrink: 0,
+              boxShadow: "0 4px 16px rgba(16,223,160,0.3)",
+            }}>
+              📸
+            </div>
+            <div>
+              <p className="font-display" style={{ fontSize: "15px", fontWeight: 800, color: "var(--text)", letterSpacing: "-0.03em", lineHeight: 1 }}>
+                FOTO-GRAMA
+              </p>
+              <p style={{ fontSize: "10px", color: "var(--text3)", letterSpacing: "0.08em", textTransform: "uppercase", marginTop: "2px" }}>
+                Rendición Automotriz
+              </p>
             </div>
           </div>
           <ApiKeyConfig onChange={setApiKey} />
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl space-y-5 px-4 py-6">
-        {/* SELECTOR DE PROYECTO */}
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3 flex-wrap">
-              <span className="text-sm font-medium text-slate-600">Proyecto activo:</span>
+      <main style={{ maxWidth: 900, margin: "0 auto", padding: "20px 16px 100px", display: "flex", flexDirection: "column", gap: 16 }}>
+
+        {/* ═══ STAT CARDS ═══ */}
+        {items.length > 0 && (
+          <div className="stagger" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+            {[
+              { label: "Archivos", value: items.length, icon: "📁" },
+              { label: "Procesados", value: procesadosCount, icon: "✦", accent: true },
+              { label: "Total S/", value: totalSoles > 0 ? `${totalSoles.toFixed(2)}` : "—", icon: "💰", accent: totalSoles > 0 },
+            ].map((s) => (
+              <div key={s.label} className="animate-fadein" style={{
+                background: "var(--surface)",
+                border: `1px solid ${s.accent ? "rgba(16,223,160,0.2)" : "var(--border)"}`,
+                borderRadius: "16px",
+                padding: "14px",
+                textAlign: "center",
+              }}>
+                <p style={{ fontSize: "18px", marginBottom: "4px" }}>{s.icon}</p>
+                <p className="font-display" style={{ fontSize: "18px", fontWeight: 800, color: s.accent ? "var(--accent)" : "var(--text)", letterSpacing: "-0.02em" }}>
+                  {s.value}
+                </p>
+                <p style={{ fontSize: "10px", color: "var(--text3)", marginTop: "2px", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", fontFamily: "var(--font-sora), sans-serif" }}>
+                  {s.label}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ═══ PROYECTO SELECTOR ═══ */}
+        <div style={{
+          background: "var(--surface)",
+          border: "1px solid var(--border)",
+          borderRadius: "20px",
+          padding: "16px",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", flex: 1 }}>
+              <p style={{ fontSize: "11px", fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: "var(--font-sora), sans-serif", whiteSpace: "nowrap" }}>
+                Proyecto activo
+              </p>
               {proyectos.length > 0 ? (
                 <select
-                  className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-700 focus:border-emerald-500 outline-none"
+                  className="fg-input"
+                  style={{ maxWidth: 280, padding: "8px 12px", fontSize: "13px", flex: 1 }}
                   value={proyectoActual?.id ?? ""}
-                  onChange={(e) => setProyectoActual(proyectos.find((p) => p.id === e.target.value) ?? null)}
+                  onChange={e => setProyectoActual(proyectos.find(p => p.id === e.target.value) ?? null)}
                 >
-                  {proyectos.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.nombre} — {p.centro_costos} / {p.caja}
-                    </option>
+                  {proyectos.map(p => (
+                    <option key={p.id} value={p.id}>{p.nombre} — {p.centro_costos} / {p.caja}</option>
                   ))}
                 </select>
               ) : (
-                <span className="text-sm text-slate-400">Sin proyectos creados</span>
+                <span style={{ fontSize: "13px", color: "var(--text3)" }}>Sin proyectos creados</span>
               )}
               {proyectoActual && (
-                <button onClick={() => eliminarProyecto(proyectoActual.id)} className="text-xs text-red-400 hover:text-red-600">
+                <button
+                  onClick={() => eliminarProyecto(proyectoActual.id)}
+                  style={{ background: "none", border: "none", color: "var(--danger)", fontSize: "12px", cursor: "pointer", opacity: 0.6, padding: "4px" }}
+                >
                   Eliminar
                 </button>
               )}
             </div>
-            <button
-              onClick={() => setShowModal(true)}
-              className="rounded-lg bg-emerald-600 px-4 py-1.5 text-sm text-white hover:bg-emerald-700"
-            >
-              + Nuevo Proyecto
+            <button className="btn-primary" onClick={() => setShowModal(true)}
+              style={{ whiteSpace: "nowrap", padding: "9px 16px", fontSize: "13px" }}>
+              + Nuevo
             </button>
           </div>
           {proyectoActual && (
-            <div className="mt-2 flex gap-4 text-xs text-slate-500">
-              <span>📁 Centro: <strong className="text-slate-700">{proyectoActual.centro_costos}</strong></span>
-              <span>🗂 Caja: <strong className="text-slate-700">{proyectoActual.caja}</strong></span>
+            <div style={{ display: "flex", gap: 16, marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border)" }}>
+              <span style={{ fontSize: "11px", color: "var(--text3)" }}>
+                📁 <span style={{ color: "var(--text2)" }}>{proyectoActual.centro_costos}</span>
+              </span>
+              <span style={{ fontSize: "11px", color: "var(--text3)" }}>
+                🗂 <span style={{ color: "var(--text2)" }}>{proyectoActual.caja}</span>
+              </span>
             </div>
           )}
-        </section>
+        </div>
 
-        {/* UPLOAD */}
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm space-y-4">
-          <h2 className="text-sm font-semibold text-slate-700">Subir Comprobantes</h2>
+        {/* ═══ UPLOAD ═══ */}
+        <div style={{
+          background: "var(--surface)",
+          border: "1px solid var(--border)",
+          borderRadius: "20px",
+          padding: "16px",
+        }}>
+          <p className="font-display" style={{ fontSize: "12px", fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "14px" }}>
+            Subir Comprobantes
+          </p>
           <UploadZone onAdd={agregarItems} />
-          {items.length > 0 && (
-            <div className="flex flex-wrap items-center gap-3 pt-1">
-              <div className="flex gap-4 text-sm text-slate-500">
-                <span><strong className="text-slate-800">{items.length}</strong> archivo(s)</span>
-                {procesadosCount > 0 && <span className="text-emerald-600"><strong>{procesadosCount}</strong> procesado(s)</span>}
-                {totalSoles > 0 && <span className="text-emerald-700 font-semibold">S/ {totalSoles.toFixed(2)}</span>}
-              </div>
-              {pendientesCount > 0 && (
-                <button onClick={procesarTodos} className="ml-auto rounded-lg bg-emerald-600 px-4 py-1.5 text-sm text-white hover:bg-emerald-700">
-                  Extraer todos ({pendientesCount}) con IA
-                </button>
-              )}
+
+          {items.length > 0 && pendientesCount > 0 && (
+            <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border)", display: "flex", justifyContent: "flex-end" }}>
+              <button className="btn-primary" onClick={procesarTodos}
+                style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: "14px" }}>✦</span>
+                Extraer todos ({pendientesCount}) con IA
+              </button>
             </div>
           )}
-        </section>
+        </div>
 
-        {/* TABS */}
+        {/* ═══ TABS + CONTENT ═══ */}
         {items.length > 0 && (
           <>
-            <div className="flex gap-1 rounded-xl bg-slate-200 p-1">
-              <TabBtn active={tab === "gastos"} onClick={() => setTab("gastos")}>
-                📋 Gastos ({items.length})
-              </TabBtn>
-              <TabBtn active={tab === "resumen"} onClick={() => setTab("resumen")}>
-                📊 Resumen ({procesadosCount})
-              </TabBtn>
+            {/* Tab pills */}
+            <div style={{
+              display: "flex", gap: 6,
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+              borderRadius: "14px",
+              padding: "5px",
+            }}>
+              {[
+                { key: "gastos", label: `Gastos`, count: items.length },
+                { key: "resumen", label: `Resumen`, count: procesadosCount },
+              ].map(t => (
+                <button
+                  key={t.key}
+                  onClick={() => setTab(t.key as "gastos" | "resumen")}
+                  style={{
+                    flex: 1, padding: "9px 16px",
+                    borderRadius: "10px",
+                    border: "none",
+                    cursor: "pointer",
+                    transition: "all 0.2s",
+                    fontFamily: "var(--font-sora), sans-serif",
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    letterSpacing: "-0.01em",
+                    background: tab === t.key ? "rgba(255,255,255,0.08)" : "transparent",
+                    color: tab === t.key ? "var(--text)" : "var(--text3)",
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+                  }}
+                >
+                  {t.label}
+                  <span style={{
+                    fontSize: "11px", fontWeight: 700,
+                    background: tab === t.key ? "var(--accent)" : "rgba(255,255,255,0.08)",
+                    color: tab === t.key ? "#0A0B0F" : "var(--text3)",
+                    padding: "1px 7px", borderRadius: "999px",
+                    transition: "all 0.2s",
+                  }}>
+                    {t.count}
+                  </span>
+                </button>
+              ))}
             </div>
 
             {tab === "gastos" && (
-              <div className="space-y-4">
-                {items.map((item) => (
-                  <GastoCard
-                    key={item.id}
-                    item={item}
-                    onChange={updateItem}
-                    onProcesar={procesarItem}
-                    onEliminar={eliminarItem}
-                  />
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {items.map(item => (
+                  <GastoCard key={item.id} item={item}
+                    onChange={updateItem} onProcesar={procesarItem} onEliminar={eliminarItem} />
                 ))}
               </div>
             )}
@@ -225,29 +294,33 @@ export default function Home() {
           </>
         )}
 
+        {/* ═══ EMPTY STATE ═══ */}
         {items.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-16 text-center text-slate-400">
-            <span className="mb-3 text-5xl">🧾</span>
-            <p className="text-sm">Sube imágenes o PDFs de comprobantes para empezar.</p>
-            <p className="text-xs mt-1">Soporta: facturas, boletas, recibos, tickets</p>
+          <div style={{
+            display: "flex", flexDirection: "column", alignItems: "center",
+            justifyContent: "center", paddingTop: 64, paddingBottom: 64, textAlign: "center", gap: 16,
+          }}>
+            <div style={{
+              width: 80, height: 80, borderRadius: "24px",
+              background: "var(--surface)", border: "1px solid var(--border)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: "36px",
+            }}>
+              🧾
+            </div>
+            <div>
+              <p className="font-display" style={{ fontSize: "18px", fontWeight: 700, color: "var(--text)", letterSpacing: "-0.02em", marginBottom: 6 }}>
+                Sin comprobantes
+              </p>
+              <p style={{ fontSize: "13px", color: "var(--text2)", lineHeight: 1.6 }}>
+                Sube imágenes o PDFs de facturas, boletas,<br />recibos o tickets para comenzar.
+              </p>
+            </div>
           </div>
         )}
       </main>
 
       {showModal && <ProyectoModal onCrear={crearProyecto} onCerrar={() => setShowModal(false)} />}
     </div>
-  );
-}
-
-function TabBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`flex-1 rounded-lg py-1.5 text-sm font-medium transition ${
-        active ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"
-      }`}
-    >
-      {children}
-    </button>
   );
 }

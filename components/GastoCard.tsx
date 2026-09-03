@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import { GastoItem } from "@/lib/types";
 
 interface Props {
@@ -9,110 +10,176 @@ interface Props {
 }
 
 export default function GastoCard({ item, onChange, onProcesar, onEliminar }: Props) {
+  const [expanded, setExpanded] = useState(true);
   const e = item.extraido;
 
-  const field = (label: string, key: keyof GastoItem, type = "text") => (
-    <div>
-      <label className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-slate-500">{label}</label>
-      <input
-        type={type}
-        className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:border-emerald-500 outline-none"
-        value={(item[key] as string) ?? ""}
-        onChange={(ev) => onChange(item.id, { [key]: ev.target.value })}
-      />
-    </div>
-  );
+  const isImg = item.mimeType.startsWith("image/");
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      {/* Cabecera */}
-      <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-lg">{item.mimeType === "application/pdf" ? "📄" : "🖼"}</span>
-          <span className="truncate text-sm font-medium text-slate-700">{item.nombre}</span>
-          <span className="shrink-0 text-xs text-slate-400">{item.tamanoKB} KB</span>
+    <div
+      className="animate-fadein"
+      style={{
+        background: "var(--surface)",
+        border: "1px solid var(--border)",
+        borderRadius: "20px",
+        overflow: "hidden",
+        transition: "box-shadow 0.2s",
+      }}
+    >
+      {/* Header */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: "12px",
+        padding: "14px 16px",
+        borderBottom: "1px solid var(--border)",
+        background: "rgba(255,255,255,0.02)",
+      }}>
+        {/* File icon */}
+        <div style={{
+          width: 40, height: 40, borderRadius: "12px",
+          background: isImg ? "rgba(16,223,160,0.1)" : "rgba(99,102,241,0.12)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: "18px", flexShrink: 0,
+          border: `1px solid ${isImg ? "rgba(16,223,160,0.2)" : "rgba(99,102,241,0.2)"}`,
+        }}>
+          {isImg ? "🖼" : "📄"}
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+
+        {/* Name + size */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontFamily: "var(--font-sora), sans-serif" }}>
+            {item.nombre}
+          </p>
+          <p style={{ fontSize: "11px", color: "var(--text3)", marginTop: "1px" }}>{item.tamanoKB} KB</p>
+        </div>
+
+        {/* Status + actions */}
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
           {item.procesando && (
-            <span className="text-xs text-emerald-600 animate-pulse">Procesando…</span>
+            <span style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", color: "var(--accent)" }}>
+              <span className="animate-spin" style={{ display: "inline-block", width: 12, height: 12, border: "2px solid currentColor", borderTopColor: "transparent", borderRadius: "50%" }} />
+              <span className="hidden sm:inline">Procesando</span>
+            </span>
           )}
           {item.error && (
-            <span className="text-xs text-red-500" title={item.error}>⚠ Error</span>
+            <span className="badge badge-error">Error</span>
           )}
           {item.procesado && !item.error && (
-            <span className="text-xs text-emerald-600">✓ Extraído</span>
+            <span className="badge badge-ok">✓ Extraído</span>
           )}
           {item.drive_url && (
             <a href={item.drive_url} target="_blank" rel="noreferrer"
-              className="rounded-lg bg-blue-50 px-2.5 py-1 text-xs text-blue-600 hover:bg-blue-100">
-              📁 Drive
+              style={{
+                fontSize: "12px", color: "var(--accent)", padding: "4px 10px",
+                borderRadius: "8px", border: "1px solid var(--accent-dim)",
+                background: "var(--accent-dim)", textDecoration: "none", fontWeight: 600,
+              }}>
+              Drive ↗
             </a>
           )}
           {!item.procesado && !item.procesando && (
-            <button onClick={() => onProcesar(item.id)}
-              className="rounded-lg bg-emerald-600 px-3 py-1 text-xs text-white hover:bg-emerald-700">
-              Extraer con IA
+            <button className="btn-primary" style={{ padding: "7px 14px", fontSize: "12px" }}
+              onClick={() => onProcesar(item.id)}>
+              IA ✦
             </button>
           )}
-          <button onClick={() => onEliminar(item.id)}
-            className="text-slate-400 hover:text-red-500 text-lg leading-none">×</button>
-        </div>
-      </div>
-
-      {/* Datos extraídos */}
-      {e && (
-        <div className="border-b border-slate-100 bg-emerald-50/50 px-4 py-3 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-          <Row label="Proveedor" value={e.proveedor} />
-          <Row label="Tipo" value={e.tipo_comprobante} />
-          <Row label="N° Comprobante" value={e.numero_comprobante} />
-          <Row label="Fecha" value={e.fecha_comprobante} />
-          <Row label="Forma de pago" value={e.forma_pago} />
-          <Row label="Total" value={`${e.moneda === "USD" ? "$" : "S/"} ${e.monto_total?.toFixed(2)}`} bold />
-          <div className="col-span-2"><Row label="Detalle" value={e.detalle} /></div>
-        </div>
-      )}
-
-      {/* Campos manuales */}
-      <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
-        {field("N° Solicitud", "numero_solicitud")}
-        {field("Fecha Solicitud", "fecha_solicitud", "date")}
-        {field("Empresa", "empresa")}
-        {field("Responsable", "responsable")}
-        {field("Área / Proyecto", "area_proyecto")}
-        {field("Solicitante", "solicitante")}
-        <div className="sm:col-span-2">
-          <label className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-slate-500">
-            Descripción / Motivo del Gasto
-          </label>
-          <textarea
-            rows={2}
-            className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:border-emerald-500 outline-none resize-none"
-            value={item.motivo}
-            onChange={(e) => onChange(item.id, { motivo: e.target.value })}
-          />
-        </div>
-        <div>
-          <label className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-slate-500">Estado</label>
-          <select
-            className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm focus:border-emerald-500 outline-none"
-            value={item.estado}
-            onChange={(e) => onChange(item.id, { estado: e.target.value as GastoItem["estado"] })}
+          <button
+            onClick={() => setExpanded(v => !v)}
+            style={{ background: "none", border: "none", color: "var(--text3)", fontSize: "18px", cursor: "pointer", lineHeight: 1, padding: "4px" }}
           >
-            <option value="PENDIENTE">PENDIENTE</option>
-            <option value="PAGADO">PAGADO</option>
-            <option value="ANULADO">ANULADO</option>
-          </select>
+            {expanded ? "⌃" : "⌄"}
+          </button>
+          <button
+            onClick={() => onEliminar(item.id)}
+            style={{ background: "none", border: "none", color: "var(--text3)", fontSize: "20px", cursor: "pointer", lineHeight: 1, padding: "4px", transition: "color 0.2s" }}
+            onMouseOver={e2 => (e2.currentTarget.style.color = "var(--danger)")}
+            onMouseOut={e2 => (e2.currentTarget.style.color = "var(--text3)")}
+          >×</button>
         </div>
       </div>
+
+      {expanded && (
+        <>
+          {/* AI extracted data */}
+          {e && (
+            <div style={{
+              padding: "14px 16px",
+              borderBottom: "1px solid var(--border)",
+              background: "rgba(16,223,160,0.04)",
+            }}>
+              <p style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.1em", color: "var(--accent)", textTransform: "uppercase", marginBottom: "12px", fontFamily: "var(--font-sora), sans-serif" }}>
+                ✦ Datos extraídos por IA
+              </p>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                <AIRow label="Proveedor" value={e.proveedor} />
+                <AIRow label="Tipo" value={e.tipo_comprobante} />
+                <AIRow label="N° Comprobante" value={e.numero_comprobante} />
+                <AIRow label="Fecha" value={e.fecha_comprobante} />
+                <AIRow label="Forma de pago" value={e.forma_pago} />
+                <AIRow label="Total" value={`${e.moneda === "USD" ? "$" : "S/"} ${e.monto_total?.toFixed(2)}`} accent />
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <AIRow label="Detalle" value={e.detalle} />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Manual fields */}
+          <div style={{ padding: "16px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+            <Field label="N° Solicitud" value={item.numero_solicitud}
+              onChange={v => onChange(item.id, { numero_solicitud: v })} />
+            <Field label="Fecha Solicitud" value={item.fecha_solicitud} type="date"
+              onChange={v => onChange(item.id, { fecha_solicitud: v })} />
+            <Field label="Empresa" value={item.empresa}
+              onChange={v => onChange(item.id, { empresa: v })} />
+            <Field label="Responsable" value={item.responsable}
+              onChange={v => onChange(item.id, { responsable: v })} />
+            <Field label="Área / Proyecto" value={item.area_proyecto}
+              onChange={v => onChange(item.id, { area_proyecto: v })} />
+            <Field label="Solicitante" value={item.solicitante}
+              onChange={v => onChange(item.id, { solicitante: v })} />
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label className="fg-label">Descripción / Motivo del Gasto</label>
+              <textarea
+                className="fg-input"
+                style={{ resize: "none", minHeight: "72px" }}
+                rows={2}
+                value={item.motivo}
+                onChange={(ev) => onChange(item.id, { motivo: ev.target.value })}
+              />
+            </div>
+            <div>
+              <label className="fg-label">Estado</label>
+              <select className="fg-input" value={item.estado}
+                onChange={(ev) => onChange(item.id, { estado: ev.target.value as GastoItem["estado"] })}>
+                <option value="PENDIENTE">Pendiente</option>
+                <option value="PAGADO">Pagado</option>
+                <option value="ANULADO">Anulado</option>
+              </select>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
-function Row({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
+function AIRow({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
-    <div className="flex gap-1">
-      <span className="shrink-0 text-slate-500">{label}:</span>
-      <span className={`truncate text-slate-700 ${bold ? "font-semibold" : ""}`}>{value || "—"}</span>
+    <div>
+      <p style={{ fontSize: "10px", color: "var(--text3)", marginBottom: "2px", fontFamily: "var(--font-sora), sans-serif", letterSpacing: "0.05em" }}>{label}</p>
+      <p style={{ fontSize: "13px", fontWeight: accent ? 700 : 500, color: accent ? "var(--accent)" : "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {value || "—"}
+      </p>
+    </div>
+  );
+}
+
+function Field({ label, value, onChange, type = "text" }: { label: string; value: string; onChange: (v: string) => void; type?: string }) {
+  return (
+    <div>
+      <label className="fg-label">{label}</label>
+      <input type={type} className="fg-input" value={value}
+        onChange={(e) => onChange(e.target.value)} />
     </div>
   );
 }

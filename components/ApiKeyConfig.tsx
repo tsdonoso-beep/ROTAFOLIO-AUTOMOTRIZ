@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { clearApiKey, getApiKey, maskApiKey, pareceKeyValida, setApiKey } from "@/lib/apikey";
 import { testConexion } from "@/lib/gemini";
 
@@ -9,12 +9,21 @@ export default function ApiKeyConfig({ onChange }: { onChange?: (k: string) => v
   const [input, setInput] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; texto: string } | null>(null);
   const [testing, setTesting] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const k = getApiKey();
     setSaved(k);
     setInput(k);
   }, []);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    if (open) document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
 
   const guardar = () => {
     const val = input.trim();
@@ -24,6 +33,7 @@ export default function ApiKeyConfig({ onChange }: { onChange?: (k: string) => v
     setSaved(val);
     setMsg(null);
     onChange?.(val);
+    setOpen(false);
   };
 
   const borrar = () => {
@@ -39,60 +49,98 @@ export default function ApiKeyConfig({ onChange }: { onChange?: (k: string) => v
     setMsg(null);
     try {
       const r = await testConexion(input.trim());
-      setMsg(r.ok ? { ok: true, texto: `✅ Conexión OK — ${r.modelo}` } : { ok: false, texto: `❌ ${r.error}` });
+      setMsg(r.ok ? { ok: true, texto: `Conexión OK — ${r.modelo}` } : { ok: false, texto: r.error ?? "Error" });
     } catch (e) {
-      setMsg({ ok: false, texto: `❌ ${(e as Error).message}` });
+      setMsg({ ok: false, texto: (e as Error).message });
     } finally {
       setTesting(false);
     }
   };
 
   return (
-    <div className="relative">
+    <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((v) => !v)}
-        className={`rounded-lg border px-3 py-1.5 text-sm transition ${
-          saved
-            ? "border-emerald-500/40 bg-emerald-50 text-emerald-700"
-            : "border-amber-400/40 bg-amber-50 text-amber-700"
-        }`}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          padding: "8px 14px",
+          borderRadius: "12px",
+          border: `1px solid ${saved ? "rgba(16,223,160,0.3)" : "rgba(245,166,35,0.3)"}`,
+          background: saved ? "rgba(16,223,160,0.08)" : "rgba(245,166,35,0.08)",
+          color: saved ? "var(--accent)" : "var(--warn)",
+          fontSize: "13px",
+          fontWeight: 600,
+          fontFamily: "var(--font-sora), sans-serif",
+          cursor: "pointer",
+          transition: "all 0.2s",
+          letterSpacing: "-0.01em",
+        }}
       >
-        ⚙ API Key {saved ? `· ${maskApiKey(saved)}` : "· sin configurar"}
+        <span style={{ fontSize: "15px" }}>{saved ? "🔑" : "⚠"}</span>
+        <span className="hidden sm:inline">{saved ? maskApiKey(saved) : "API Key"}</span>
       </button>
+
       {open && (
-        <div className="absolute right-0 z-20 mt-2 w-80 rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
-          <h3 className="mb-1 font-semibold text-slate-800">Gemini API Key</h3>
-          <p className="mb-3 text-xs text-slate-500">
-            Tu key personal para consumir Gemini. Se guarda solo en este navegador.
-            Consíguela en <strong>aistudio.google.com</strong>.
+        <div
+          className="animate-fadein"
+          style={{
+            position: "absolute",
+            right: 0,
+            top: "calc(100% + 10px)",
+            zIndex: 50,
+            width: "320px",
+            background: "var(--surface2)",
+            border: "1px solid var(--border2)",
+            borderRadius: "18px",
+            padding: "20px",
+            boxShadow: "0 24px 64px rgba(0,0,0,0.6)",
+          }}
+        >
+          <p className="font-display" style={{ fontWeight: 700, fontSize: "15px", marginBottom: "4px", color: "var(--text)" }}>
+            Gemini API Key
+          </p>
+          <p style={{ fontSize: "12px", color: "var(--text2)", marginBottom: "16px", lineHeight: 1.5 }}>
+            Tu clave personal de <strong style={{ color: "var(--text)" }}>aistudio.google.com</strong>. Solo se guarda en este navegador.
           </p>
           <input
             type="password"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 outline-none"
+            className="fg-input"
             placeholder="AIza..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && guardar()}
           />
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button onClick={guardar} className="rounded-lg bg-slate-800 px-3 py-1.5 text-sm text-white">
+          <div style={{ display: "flex", gap: "8px", marginTop: "12px", flexWrap: "wrap" }}>
+            <button className="btn-primary" onClick={guardar} style={{ flex: 1 }}>
               Guardar
             </button>
             <button
+              className="btn-ghost"
               onClick={probar}
               disabled={testing || !input.trim()}
-              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 disabled:opacity-40"
             >
-              {testing ? "Probando…" : "🔌 Probar"}
+              {testing ? (
+                <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span className="animate-spin" style={{ display: "inline-block", width: 12, height: 12, border: "2px solid currentColor", borderTopColor: "transparent", borderRadius: "50%" }} />
+                  Probando
+                </span>
+              ) : "Probar"}
             </button>
             {saved && (
-              <button onClick={borrar} className="rounded-lg px-3 py-1.5 text-sm text-red-500">
+              <button
+                onClick={borrar}
+                style={{ background: "transparent", border: "none", color: "var(--danger)", fontSize: "13px", cursor: "pointer", padding: "10px 8px" }}
+              >
                 Borrar
               </button>
             )}
           </div>
           {msg && (
-            <p className={`mt-2 text-xs ${msg.ok ? "text-emerald-600" : "text-red-600"}`}>{msg.texto}</p>
+            <p style={{ marginTop: "10px", fontSize: "12px", color: msg.ok ? "var(--accent)" : "var(--danger)", display: "flex", alignItems: "center", gap: "5px" }}>
+              {msg.ok ? "✓" : "✕"} {msg.texto}
+            </p>
           )}
         </div>
       )}

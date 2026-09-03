@@ -1,74 +1,121 @@
 "use client";
 import { GastoItem } from "@/lib/types";
 
-interface Props {
-  items: GastoItem[];
-}
+interface Props { items: GastoItem[] }
 
 const moneda = (n: number) =>
   `S/ ${n.toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-export default function TablaResumen({ items }: Props) {
-  const procesados = items.filter((i) => i.procesado && !i.error);
-  const total = procesados.reduce((s, i) => s + (i.extraido?.monto_total ?? 0), 0);
+const estadoStyle = (estado: string) => {
+  if (estado === "PAGADO")  return { background: "rgba(16,223,160,0.12)", color: "var(--accent)" };
+  if (estado === "ANULADO") return { background: "rgba(255,90,90,0.12)",  color: "var(--danger)" };
+  return { background: "rgba(245,166,35,0.12)", color: "var(--warn)" };
+};
 
+export default function TablaResumen({ items }: Props) {
+  const procesados = items.filter(i => i.procesado && !i.error);
+  const total = procesados.reduce((s, i) => s + (i.extraido?.monto_total ?? 0), 0);
   if (!procesados.length) return null;
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-        <h2 className="font-semibold text-slate-800">Resumen de Gastos</h2>
-        <span className="text-sm font-semibold text-emerald-700">{moneda(total)}</span>
+    <div style={{
+      background: "var(--surface)",
+      border: "1px solid var(--border)",
+      borderRadius: "20px",
+      overflow: "hidden",
+    }}>
+      {/* Header */}
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "16px 20px",
+        borderBottom: "1px solid var(--border)",
+        background: "rgba(255,255,255,0.02)",
+      }}>
+        <p className="font-display" style={{ fontSize: "14px", fontWeight: 700, color: "var(--text)" }}>
+          Resumen de Gastos
+        </p>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <span style={{ fontSize: "12px", color: "var(--text2)" }}>{procesados.length} comprobantes</span>
+          <span style={{
+            fontSize: "15px", fontWeight: 800, color: "var(--accent)",
+            fontFamily: "var(--font-sora), sans-serif", letterSpacing: "-0.02em",
+          }}>
+            {moneda(total)}
+          </span>
+        </div>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs">
+
+      {/* Table — scroll on mobile */}
+      <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
           <thead>
-            <tr className="bg-slate-50 text-left text-[10px] uppercase tracking-wide text-slate-500">
-              <th className="px-3 py-2">N° Sol.</th>
-              <th className="px-3 py-2">Proveedor</th>
-              <th className="px-3 py-2">Detalle</th>
-              <th className="px-3 py-2">Comprobante</th>
-              <th className="px-3 py-2">Fecha Comp.</th>
-              <th className="px-3 py-2 text-right">Total S/</th>
-              <th className="px-3 py-2">Estado</th>
-              <th className="px-3 py-2">Imagen</th>
+            <tr style={{ borderBottom: "1px solid var(--border)" }}>
+              {["N° Sol.", "Proveedor", "Detalle", "Comprobante", "Fecha", "Total S/", "Estado", "Imagen"].map(h => (
+                <th key={h} style={{
+                  padding: "10px 16px", textAlign: h === "Total S/" ? "right" : "left",
+                  fontSize: "10px", fontWeight: 700, letterSpacing: "0.07em",
+                  textTransform: "uppercase", color: "var(--text3)",
+                  fontFamily: "var(--font-sora), sans-serif", whiteSpace: "nowrap",
+                }}>
+                  {h}
+                </th>
+              ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
-            {procesados.map((item) => {
-              const e = item.extraido!;
+          <tbody>
+            {procesados.map((item, idx) => {
+              const ex = item.extraido!;
               return (
-                <tr key={item.id} className="hover:bg-slate-50">
-                  <td className="px-3 py-2 font-mono text-slate-600">{item.numero_solicitud || "—"}</td>
-                  <td className="px-3 py-2 font-medium text-slate-700 max-w-[120px] truncate">{e.proveedor || "—"}</td>
-                  <td className="px-3 py-2 text-slate-500 max-w-[160px] truncate">{e.detalle || item.motivo || "—"}</td>
-                  <td className="px-3 py-2 text-slate-600">
-                    <span className="rounded bg-slate-100 px-1.5 py-0.5">{e.tipo_comprobante}</span>
-                    {e.numero_comprobante && <span className="ml-1 text-slate-400">{e.numero_comprobante}</span>}
+                <tr key={item.id} style={{
+                  borderBottom: idx < procesados.length - 1 ? "1px solid var(--border)" : "none",
+                  transition: "background 0.15s",
+                }}
+                  onMouseOver={e => (e.currentTarget.style.background = "rgba(255,255,255,0.025)")}
+                  onMouseOut={e => (e.currentTarget.style.background = "transparent")}
+                >
+                  <td style={{ padding: "12px 16px", color: "var(--text3)", fontFamily: "monospace", whiteSpace: "nowrap" }}>
+                    {item.numero_solicitud || "—"}
                   </td>
-                  <td className="px-3 py-2 text-slate-500">{e.fecha_comprobante || "—"}</td>
-                  <td className="px-3 py-2 text-right font-semibold text-slate-800">
-                    {e.monto_total ? moneda(e.monto_total) : "—"}
+                  <td style={{ padding: "12px 16px", fontWeight: 600, color: "var(--text)", maxWidth: "130px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {ex.proveedor || "—"}
                   </td>
-                  <td className="px-3 py-2">
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                      item.estado === "PAGADO"
-                        ? "bg-emerald-100 text-emerald-700"
-                        : item.estado === "ANULADO"
-                        ? "bg-red-100 text-red-600"
-                        : "bg-amber-100 text-amber-700"
-                    }`}>
+                  <td style={{ padding: "12px 16px", color: "var(--text2)", maxWidth: "160px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {ex.detalle || item.motivo || "—"}
+                  </td>
+                  <td style={{ padding: "12px 16px", whiteSpace: "nowrap" }}>
+                    <span style={{
+                      background: "rgba(255,255,255,0.05)", padding: "3px 8px",
+                      borderRadius: "6px", fontSize: "10px", fontWeight: 700,
+                      color: "var(--text2)", letterSpacing: "0.05em",
+                      fontFamily: "var(--font-sora), sans-serif",
+                    }}>
+                      {ex.tipo_comprobante}
+                    </span>
+                    {ex.numero_comprobante && (
+                      <span style={{ marginLeft: "6px", color: "var(--text3)", fontSize: "11px" }}>
+                        {ex.numero_comprobante}
+                      </span>
+                    )}
+                  </td>
+                  <td style={{ padding: "12px 16px", color: "var(--text2)", whiteSpace: "nowrap" }}>
+                    {ex.fecha_comprobante || "—"}
+                  </td>
+                  <td style={{ padding: "12px 16px", textAlign: "right", fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap", fontFamily: "var(--font-sora), sans-serif" }}>
+                    {ex.monto_total ? moneda(ex.monto_total) : "—"}
+                  </td>
+                  <td style={{ padding: "12px 16px" }}>
+                    <span className="badge" style={estadoStyle(item.estado)}>
                       {item.estado}
                     </span>
                   </td>
-                  <td className="px-3 py-2">
+                  <td style={{ padding: "12px 16px" }}>
                     {item.drive_url ? (
                       <a href={item.drive_url} target="_blank" rel="noreferrer"
-                        className="text-blue-600 hover:underline">
-                        🔗 Ver
+                        style={{ color: "var(--accent)", fontWeight: 600, textDecoration: "none", fontSize: "12px" }}>
+                        ↗ Ver
                       </a>
                     ) : (
-                      <span className="text-slate-300">—</span>
+                      <span style={{ color: "var(--text3)" }}>—</span>
                     )}
                   </td>
                 </tr>
@@ -76,14 +123,18 @@ export default function TablaResumen({ items }: Props) {
             })}
           </tbody>
           <tfoot>
-            <tr className="bg-slate-50 font-semibold">
-              <td colSpan={5} className="px-3 py-2 text-right text-slate-600">TOTAL</td>
-              <td className="px-3 py-2 text-right text-emerald-700">{moneda(total)}</td>
+            <tr style={{ borderTop: "1px solid var(--border)", background: "rgba(255,255,255,0.02)" }}>
+              <td colSpan={5} style={{ padding: "12px 16px", textAlign: "right", fontSize: "11px", fontWeight: 700, color: "var(--text2)", textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: "var(--font-sora), sans-serif" }}>
+                Total General
+              </td>
+              <td style={{ padding: "12px 16px", textAlign: "right", fontSize: "16px", fontWeight: 800, color: "var(--accent)", fontFamily: "var(--font-sora), sans-serif", letterSpacing: "-0.02em" }}>
+                {moneda(total)}
+              </td>
               <td colSpan={2} />
             </tr>
           </tfoot>
         </table>
       </div>
-    </section>
+    </div>
   );
 }
