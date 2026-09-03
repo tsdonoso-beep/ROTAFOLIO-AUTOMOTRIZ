@@ -97,46 +97,47 @@ export default function Home() {
       {/* ═══ HEADER ═══ */}
       <header style={{
         position: "sticky", top: 0, zIndex: 30,
-        background: "rgba(10,11,15,0.85)",
-        backdropFilter: "blur(24px)",
-        WebkitBackdropFilter: "blur(24px)",
+        background: "#FFFFFF",
         borderBottom: "1px solid var(--border)",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
       }}>
         <div style={{
-          maxWidth: 900, margin: "0 auto",
+          maxWidth: 960, margin: "0 auto",
           display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "12px 16px", gap: 16,
+          padding: "14px 20px", gap: 16,
         }}>
-          {/* Logo */}
           <div style={{ display: "flex", alignItems: "center" }}>
-            <Logo height={26} />
+            <Logo height={24} />
           </div>
           <ApiKeyConfig onChange={setApiKey} />
         </div>
       </header>
 
-      <main style={{ maxWidth: 900, margin: "0 auto", padding: "20px 16px 100px", display: "flex", flexDirection: "column", gap: 16 }}>
+      <main style={{ maxWidth: 960, margin: "0 auto", padding: "24px 20px 100px", display: "flex", flexDirection: "column", gap: 16 }}>
 
         {/* ═══ STAT CARDS ═══ */}
         {items.length > 0 && (
           <div className="stagger" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
             {[
-              { label: "Archivos", value: items.length, icon: "📁" },
-              { label: "Procesados", value: procesadosCount, icon: "✦", accent: true },
-              { label: "Total S/", value: totalSoles > 0 ? `${totalSoles.toFixed(2)}` : "—", icon: "💰", accent: totalSoles > 0 },
+              { label: "Archivos", value: items.length, accent: false },
+              { label: "Procesados", value: procesadosCount, accent: procesadosCount > 0 },
+              { label: "Total S/", value: totalSoles > 0 ? totalSoles.toFixed(2) : "—", accent: totalSoles > 0 },
             ].map((s) => (
               <div key={s.label} className="animate-fadein" style={{
-                background: "var(--surface)",
-                border: `1px solid ${s.accent ? "rgba(16,223,160,0.2)" : "var(--border)"}`,
-                borderRadius: "16px",
-                padding: "14px",
+                background: "#FFFFFF",
+                border: "1px solid var(--border)",
+                borderRadius: "12px",
+                padding: "16px",
                 textAlign: "center",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
               }}>
-                <p style={{ fontSize: "18px", marginBottom: "4px" }}>{s.icon}</p>
-                <p className="font-display" style={{ fontSize: "18px", fontWeight: 800, color: s.accent ? "var(--accent)" : "var(--text)", letterSpacing: "-0.02em" }}>
+                <p className="font-display" style={{
+                  fontSize: "22px", fontWeight: 800, letterSpacing: "-0.03em",
+                  color: s.accent ? "var(--accent)" : "var(--text)",
+                }}>
                   {s.value}
                 </p>
-                <p style={{ fontSize: "10px", color: "var(--text3)", marginTop: "2px", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", fontFamily: "var(--font-sora), sans-serif" }}>
+                <p style={{ fontSize: "10px", color: "var(--text3)", marginTop: "3px", fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", fontFamily: "var(--font-sora), sans-serif" }}>
                   {s.label}
                 </p>
               </div>
@@ -146,10 +147,11 @@ export default function Home() {
 
         {/* ═══ PROYECTO SELECTOR ═══ */}
         <div style={{
-          background: "var(--surface)",
+          background: "#FFFFFF",
           border: "1px solid var(--border)",
-          borderRadius: "20px",
-          padding: "16px",
+          borderRadius: "12px",
+          padding: "16px 18px",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
         }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", flex: 1 }}>
@@ -198,12 +200,13 @@ export default function Home() {
 
         {/* ═══ UPLOAD ═══ */}
         <div style={{
-          background: "var(--surface)",
+          background: "#FFFFFF",
           border: "1px solid var(--border)",
-          borderRadius: "20px",
-          padding: "16px",
+          borderRadius: "12px",
+          padding: "16px 18px",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
         }}>
-          <p className="font-display" style={{ fontSize: "12px", fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "14px" }}>
+          <p className="font-display" style={{ fontSize: "11px", fontWeight: 700, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.09em", marginBottom: "14px" }}>
             Subir Comprobantes
           </p>
           <UploadZone onAdd={agregarItems} />
@@ -224,41 +227,43 @@ export default function Home() {
           <>
             {/* Tab pills */}
             <div style={{
-              display: "flex", gap: 6,
-              background: "var(--surface)",
+              display: "flex", gap: 4,
+              background: "#FFFFFF",
               border: "1px solid var(--border)",
-              borderRadius: "14px",
-              padding: "5px",
+              borderRadius: "10px",
+              padding: "4px",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
             }}>
               {[
-                { key: "gastos", label: `Gastos`, count: items.length },
-                { key: "resumen", label: `Resumen`, count: procesadosCount },
+                { key: "gastos", label: "Gastos", count: items.length },
+                { key: "resumen", label: "Resumen", count: procesadosCount },
               ].map(t => (
                 <button
                   key={t.key}
                   onClick={() => setTab(t.key as "gastos" | "resumen")}
                   style={{
-                    flex: 1, padding: "9px 16px",
-                    borderRadius: "10px",
-                    border: "none",
+                    flex: 1, padding: "8px 16px",
+                    borderRadius: "7px",
+                    border: tab === t.key ? "1px solid var(--border2)" : "1px solid transparent",
                     cursor: "pointer",
-                    transition: "all 0.2s",
+                    transition: "all 0.15s",
                     fontFamily: "var(--font-sora), sans-serif",
                     fontSize: "13px",
                     fontWeight: 600,
                     letterSpacing: "-0.01em",
-                    background: tab === t.key ? "rgba(255,255,255,0.08)" : "transparent",
+                    background: tab === t.key ? "#FFFFFF" : "transparent",
                     color: tab === t.key ? "var(--text)" : "var(--text3)",
+                    boxShadow: tab === t.key ? "0 1px 3px rgba(0,0,0,0.07)" : "none",
                     display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
                   }}
                 >
                   {t.label}
                   <span style={{
-                    fontSize: "11px", fontWeight: 700,
-                    background: tab === t.key ? "var(--accent)" : "rgba(255,255,255,0.08)",
-                    color: tab === t.key ? "#0A0B0F" : "var(--text3)",
+                    fontSize: "10px", fontWeight: 700,
+                    background: tab === t.key ? "var(--accent)" : "rgba(0,0,0,0.06)",
+                    color: tab === t.key ? "#FFFFFF" : "var(--text3)",
                     padding: "1px 7px", borderRadius: "999px",
-                    transition: "all 0.2s",
+                    transition: "all 0.15s",
                   }}>
                     {t.count}
                   </span>
@@ -283,21 +288,22 @@ export default function Home() {
         {items.length === 0 && (
           <div style={{
             display: "flex", flexDirection: "column", alignItems: "center",
-            justifyContent: "center", paddingTop: 64, paddingBottom: 64, textAlign: "center", gap: 16,
+            justifyContent: "center", paddingTop: 56, paddingBottom: 56, textAlign: "center", gap: 14,
           }}>
             <div style={{
-              width: 80, height: 80, borderRadius: "24px",
-              background: "var(--surface)", border: "1px solid var(--border)",
+              width: 72, height: 72, borderRadius: "20px",
+              background: "#FFFFFF", border: "1px solid var(--border)",
               display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: "36px",
+              fontSize: "32px",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
             }}>
               🧾
             </div>
             <div>
-              <p className="font-display" style={{ fontSize: "18px", fontWeight: 700, color: "var(--text)", letterSpacing: "-0.02em", marginBottom: 6 }}>
+              <p className="font-display" style={{ fontSize: "17px", fontWeight: 700, color: "var(--text)", letterSpacing: "-0.02em", marginBottom: 5 }}>
                 Sin comprobantes
               </p>
-              <p style={{ fontSize: "13px", color: "var(--text2)", lineHeight: 1.6 }}>
+              <p style={{ fontSize: "13px", color: "var(--text2)", lineHeight: 1.65 }}>
                 Sube imágenes o PDFs de facturas, boletas,<br />recibos o tickets para comenzar.
               </p>
             </div>

@@ -24,9 +24,9 @@ export default function ProyectoModal({ onCrear, onCerrar }: Props) {
         position: "fixed", inset: 0, zIndex: 50,
         display: "flex", alignItems: "center", justifyContent: "center",
         padding: "16px",
-        background: "rgba(0,0,0,0.7)",
-        backdropFilter: "blur(8px)",
-        WebkitBackdropFilter: "blur(8px)",
+        background: "rgba(15,25,35,0.45)",
+        backdropFilter: "blur(6px)",
+        WebkitBackdropFilter: "blur(6px)",
       }}
       onClick={(e) => e.target === e.currentTarget && onCerrar()}
     >
@@ -34,26 +34,26 @@ export default function ProyectoModal({ onCrear, onCerrar }: Props) {
         className="animate-fadein"
         style={{
           width: "100%", maxWidth: "440px",
-          background: "var(--surface2)",
-          border: "1px solid var(--border2)",
-          borderRadius: "24px",
+          background: "#FFFFFF",
+          border: "1px solid var(--border)",
+          borderRadius: "16px",
           padding: "28px",
-          boxShadow: "0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.04)",
+          boxShadow: "0 24px 64px rgba(0,0,0,0.15), 0 2px 8px rgba(0,0,0,0.08)",
         }}
       >
         {/* Icon + title */}
         <div style={{ display: "flex", alignItems: "center", gap: "14px", marginBottom: "24px" }}>
           <div style={{
-            width: 48, height: 48, borderRadius: "16px",
-            background: "var(--accent-dim)",
-            border: "1px solid rgba(16,223,160,0.25)",
+            width: 44, height: 44, borderRadius: "12px",
+            background: "rgba(4,95,108,0.08)",
+            border: "1px solid rgba(4,95,108,0.18)",
             display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: "22px",
+            fontSize: "20px",
           }}>
             📁
           </div>
           <div>
-            <h2 className="font-display" style={{ fontSize: "18px", fontWeight: 800, color: "var(--text)", letterSpacing: "-0.02em" }}>
+            <h2 className="font-display" style={{ fontSize: "17px", fontWeight: 800, color: "var(--text)", letterSpacing: "-0.02em" }}>
               Nuevo Proyecto
             </h2>
             <p style={{ fontSize: "12px", color: "var(--text2)", marginTop: "2px" }}>
@@ -66,7 +66,7 @@ export default function ProyectoModal({ onCrear, onCerrar }: Props) {
           >×</button>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
           <div>
             <label className="fg-label">Nombre del Proyecto</label>
             <input className="fg-input" value={nombre} onChange={e => setNombre(e.target.value)}

@@ -47,7 +47,7 @@ export default function UploadZone({ onAdd }: Props) {
   }, [handleFiles]);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
       {/* Drop zone — desktop */}
       <div
         className="hidden md:flex"
@@ -59,35 +59,33 @@ export default function UploadZone({ onAdd }: Props) {
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          gap: "16px",
-          padding: "48px 24px",
-          borderRadius: "20px",
+          gap: "14px",
+          padding: "40px 24px",
+          borderRadius: "10px",
           cursor: "pointer",
           transition: "all 0.2s",
-          background: dragging
-            ? "rgba(16,223,160,0.08)"
-            : "rgba(255,255,255,0.02)",
-          border: `2px dashed ${dragging ? "var(--accent)" : "rgba(255,255,255,0.1)"}`,
-          boxShadow: dragging ? "inset 0 0 40px rgba(16,223,160,0.05)" : "none",
+          background: dragging ? "rgba(4,95,108,0.05)" : "var(--surface2)",
+          border: `2px dashed ${dragging ? "var(--accent)" : "rgba(0,0,0,0.12)"}`,
         }}
       >
         <div style={{
-          width: 56, height: 56,
-          background: dragging ? "var(--accent-dim)" : "rgba(255,255,255,0.04)",
-          borderRadius: "16px",
+          width: 48, height: 48,
+          background: dragging ? "rgba(4,95,108,0.1)" : "#FFFFFF",
+          borderRadius: "12px",
           display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: "24px",
+          fontSize: "20px",
           transition: "all 0.2s",
           border: "1px solid var(--border2)",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
         }}>
           {dragging ? "✨" : "📎"}
         </div>
         <div style={{ textAlign: "center" }}>
-          <p style={{ fontSize: "14px", fontWeight: 600, color: "var(--text)", marginBottom: "4px", fontFamily: "var(--font-sora), sans-serif" }}>
+          <p style={{ fontSize: "14px", fontWeight: 600, color: "var(--text)", marginBottom: "3px", fontFamily: "var(--font-sora), sans-serif" }}>
             Arrastra tus comprobantes aquí
           </p>
           <p style={{ fontSize: "12px", color: "var(--text2)" }}>
-            o <span style={{ color: "var(--accent)" }}>haz clic para seleccionar</span> · Imágenes y PDF
+            o <span style={{ color: "var(--accent)", fontWeight: 600 }}>haz clic para seleccionar</span> · Imágenes y PDF
           </p>
         </div>
         <input ref={inputRef} type="file" accept={ACCEPT} multiple className="hidden"
@@ -95,41 +93,42 @@ export default function UploadZone({ onAdd }: Props) {
       </div>
 
       {/* Mobile buttons */}
-      <div className="flex md:hidden" style={{ gap: "12px" }}>
+      <div className="flex md:hidden" style={{ gap: "10px" }}>
         <button
           onClick={() => cameraRef.current?.click()}
           style={{
             flex: 1,
-            display: "flex", flexDirection: "column", alignItems: "center", gap: "10px",
-            padding: "28px 16px",
-            borderRadius: "20px",
-            border: "1px solid var(--accent-dim)",
-            background: "rgba(16,223,160,0.06)",
+            display: "flex", flexDirection: "column", alignItems: "center", gap: "8px",
+            padding: "24px 16px",
+            borderRadius: "10px",
+            border: "1px solid rgba(4,95,108,0.2)",
+            background: "rgba(4,95,108,0.05)",
             color: "var(--accent)",
             cursor: "pointer",
             transition: "all 0.15s",
             fontFamily: "var(--font-sora), sans-serif",
           }}
         >
-          <span style={{ fontSize: "28px" }}>📷</span>
+          <span style={{ fontSize: "26px" }}>📷</span>
           <span style={{ fontSize: "13px", fontWeight: 600 }}>Tomar foto</span>
         </button>
         <button
           onClick={() => inputRef.current?.click()}
           style={{
             flex: 1,
-            display: "flex", flexDirection: "column", alignItems: "center", gap: "10px",
-            padding: "28px 16px",
-            borderRadius: "20px",
+            display: "flex", flexDirection: "column", alignItems: "center", gap: "8px",
+            padding: "24px 16px",
+            borderRadius: "10px",
             border: "1px solid var(--border2)",
-            background: "rgba(255,255,255,0.03)",
+            background: "#FFFFFF",
             color: "var(--text2)",
             cursor: "pointer",
             transition: "all 0.15s",
             fontFamily: "var(--font-sora), sans-serif",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
           }}
         >
-          <span style={{ fontSize: "28px" }}>📁</span>
+          <span style={{ fontSize: "26px" }}>📁</span>
           <span style={{ fontSize: "13px", fontWeight: 600 }}>Galería</span>
         </button>
       </div>

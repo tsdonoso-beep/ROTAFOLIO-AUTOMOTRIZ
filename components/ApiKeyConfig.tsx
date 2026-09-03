@@ -64,13 +64,13 @@ export default function ApiKeyConfig({ onChange }: { onChange?: (k: string) => v
         style={{
           display: "flex",
           alignItems: "center",
-          gap: "8px",
-          padding: "8px 14px",
-          borderRadius: "12px",
-          border: `1px solid ${saved ? "rgba(16,223,160,0.3)" : "rgba(245,166,35,0.3)"}`,
-          background: saved ? "rgba(16,223,160,0.08)" : "rgba(245,166,35,0.08)",
+          gap: "7px",
+          padding: "7px 13px",
+          borderRadius: "8px",
+          border: `1px solid ${saved ? "rgba(4,95,108,0.25)" : "rgba(180,83,9,0.25)"}`,
+          background: saved ? "rgba(4,95,108,0.06)" : "rgba(180,83,9,0.06)",
           color: saved ? "var(--accent)" : "var(--warn)",
-          fontSize: "13px",
+          fontSize: "12px",
           fontWeight: 600,
           fontFamily: "var(--font-sora), sans-serif",
           cursor: "pointer",
@@ -78,7 +78,7 @@ export default function ApiKeyConfig({ onChange }: { onChange?: (k: string) => v
           letterSpacing: "-0.01em",
         }}
       >
-        <span style={{ fontSize: "15px" }}>{saved ? "🔑" : "⚠"}</span>
+        <span style={{ fontSize: "14px" }}>{saved ? "🔑" : "⚠"}</span>
         <span className="hidden sm:inline">{saved ? maskApiKey(saved) : "API Key"}</span>
       </button>
 
@@ -88,14 +88,14 @@ export default function ApiKeyConfig({ onChange }: { onChange?: (k: string) => v
           style={{
             position: "absolute",
             right: 0,
-            top: "calc(100% + 10px)",
+            top: "calc(100% + 8px)",
             zIndex: 50,
             width: "320px",
-            background: "var(--surface2)",
+            background: "#FFFFFF",
             border: "1px solid var(--border2)",
-            borderRadius: "18px",
+            borderRadius: "14px",
             padding: "20px",
-            boxShadow: "0 24px 64px rgba(0,0,0,0.6)",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.12), 0 1px 4px rgba(0,0,0,0.06)",
           }}
         >
           <p className="font-display" style={{ fontWeight: 700, fontSize: "15px", marginBottom: "4px", color: "var(--text)" }}>
@@ -116,11 +116,7 @@ export default function ApiKeyConfig({ onChange }: { onChange?: (k: string) => v
             <button className="btn-primary" onClick={guardar} style={{ flex: 1 }}>
               Guardar
             </button>
-            <button
-              className="btn-ghost"
-              onClick={probar}
-              disabled={testing || !input.trim()}
-            >
+            <button className="btn-ghost" onClick={probar} disabled={testing || !input.trim()}>
               {testing ? (
                 <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                   <span className="animate-spin" style={{ display: "inline-block", width: 12, height: 12, border: "2px solid currentColor", borderTopColor: "transparent", borderRadius: "50%" }} />

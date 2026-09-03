@@ -1,20 +1,33 @@
 @import "tailwindcss";
 
 :root {
-  --bg:       #0A0B0F;
-  --surface:  #12141C;
-  --surface2: #1A1D27;
-  --border:   rgba(255,255,255,0.07);
-  --border2:  rgba(255,255,255,0.12);
-  --accent:   #10DFA0;
-  --accent-dim: rgba(16,223,160,0.12);
-  --accent-glow: rgba(16,223,160,0.25);
-  --text:     #F0F2F8;
-  --text2:    #8890A4;
-  --text3:    #474F62;
-  --danger:   #FF5A5A;
-  --warn:     #F5A623;
-  --radius:   20px;
+  /* Grama light palette */
+  --bg:           #ECF0F3;
+  --surface:      #FFFFFF;
+  --surface2:     #F4F7F9;
+  --border:       rgba(0,0,0,0.08);
+  --border2:      rgba(0,0,0,0.14);
+
+  /* Brand teal (from Grama logo) */
+  --accent:       #045f6c;
+  --accent-dark:  #1A3840;     /* CTA button — same shade as Grama's "Crear Nuevo" */
+  --accent-dim:   rgba(4,95,108,0.09);
+  --accent-glow:  rgba(4,95,108,0.18);
+
+  /* Text */
+  --text:         #0F1923;
+  --text2:        #4B5C6B;
+  --text3:        #8FA3B1;
+
+  /* Status */
+  --danger:       #DC2626;
+  --warn:         #B45309;
+  --success:      #065F46;
+  --danger-bg:    rgba(220,38,38,0.08);
+  --warn-bg:      rgba(180,83,9,0.09);
+  --success-bg:   rgba(6,95,70,0.09);
+
+  --radius:       12px;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -25,24 +38,17 @@ body {
   font-family: var(--font-dm), 'DM Sans', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   min-height: 100dvh;
-  /* Subtle grid texture */
-  background-image:
-    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(16,223,160,0.08) 0%, transparent 70%),
-    linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
-  background-size: 100% 100%, 40px 40px, 40px 40px;
 }
 
 /* --- Typography --- */
 .font-display { font-family: var(--font-sora), 'Sora', sans-serif; }
 
-/* --- Glass card --- */
+/* --- Card --- */
 .glass {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.05);
 }
 
 .glass-2 {
@@ -54,9 +60,9 @@ body {
 /* --- Inputs --- */
 .fg-input {
   width: 100%;
-  background: rgba(255,255,255,0.04);
+  background: #FFFFFF;
   border: 1px solid var(--border2);
-  border-radius: 12px;
+  border-radius: 9px;
   padding: 10px 14px;
   font-size: 14px;
   color: var(--text);
@@ -73,48 +79,58 @@ body {
 .fg-input::placeholder { color: var(--text3); }
 
 select.fg-input option {
-  background: #1A1D27;
+  background: #FFFFFF;
   color: var(--text);
 }
 
 /* --- Buttons --- */
 .btn-primary {
-  background: var(--accent);
-  color: #0A0B0F;
+  background: var(--accent-dark);
+  color: #FFFFFF;
   font-weight: 600;
   font-family: var(--font-sora), sans-serif;
   font-size: 13px;
   padding: 10px 20px;
-  border-radius: 12px;
+  border-radius: 9px;
   border: none;
   cursor: pointer;
   transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
   letter-spacing: -0.01em;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.btn-primary:hover { opacity: 0.9; box-shadow: 0 4px 20px var(--accent-glow); }
+.btn-primary:hover {
+  opacity: 0.88;
+  box-shadow: 0 4px 16px var(--accent-glow);
+}
 .btn-primary:active { transform: scale(0.97); }
 .btn-primary:disabled { opacity: 0.35; cursor: not-allowed; }
 
 .btn-ghost {
-  background: rgba(255,255,255,0.05);
+  background: #FFFFFF;
   color: var(--text2);
   font-size: 13px;
   padding: 10px 16px;
-  border-radius: 12px;
+  border-radius: 9px;
   border: 1px solid var(--border2);
   cursor: pointer;
-  transition: background 0.2s, color 0.2s;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
   font-family: var(--font-dm), sans-serif;
 }
 
-.btn-ghost:hover { background: rgba(255,255,255,0.09); color: var(--text); }
+.btn-ghost:hover {
+  background: var(--surface2);
+  color: var(--text);
+  border-color: rgba(0,0,0,0.18);
+}
 
 /* --- Label --- */
 .fg-label {
   display: block;
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text3);
@@ -129,26 +145,23 @@ select.fg-input option {
   padding: 3px 10px;
   border-radius: 999px;
   font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
+  font-weight: 700;
+  letter-spacing: 0.04em;
   font-family: var(--font-sora), sans-serif;
 }
 
-.badge-ok    { background: rgba(16,223,160,0.15); color: var(--accent); }
-.badge-warn  { background: rgba(245,166,35,0.15);  color: var(--warn); }
-.badge-error { background: rgba(255,90,90,0.15);   color: var(--danger); }
-
-/* --- Divider --- */
-.fg-divider { border: none; border-top: 1px solid var(--border); margin: 0; }
+.badge-ok    { background: var(--success-bg); color: var(--success); }
+.badge-warn  { background: var(--warn-bg);    color: var(--warn); }
+.badge-error { background: var(--danger-bg);  color: var(--danger); }
 
 /* --- Scrollbar --- */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--text3); border-radius: 4px; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
 
 /* --- Animation --- */
 @keyframes fadeUp {
-  from { opacity: 0; transform: translateY(10px); }
+  from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
@@ -156,16 +169,11 @@ select.fg-input option {
   to { transform: rotate(360deg); }
 }
 
-@keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 0 0 var(--accent-glow); }
-  50%       { box-shadow: 0 0 0 6px transparent; }
-}
-
-.animate-fadein { animation: fadeUp 0.35s ease both; }
+.animate-fadein { animation: fadeUp 0.3s ease both; }
 .animate-spin   { animation: spin 1s linear infinite; }
 
 /* Staggered children */
-.stagger > *:nth-child(1) { animation-delay: 0.05s; }
-.stagger > *:nth-child(2) { animation-delay: 0.10s; }
-.stagger > *:nth-child(3) { animation-delay: 0.15s; }
-.stagger > *:nth-child(4) { animation-delay: 0.20s; }
+.stagger > *:nth-child(1) { animation-delay: 0.04s; }
+.stagger > *:nth-child(2) { animation-delay: 0.08s; }
+.stagger > *:nth-child(3) { animation-delay: 0.12s; }
+.stagger > *:nth-child(4) { animation-delay: 0.16s; }
