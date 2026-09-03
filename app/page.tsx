@@ -5,6 +5,7 @@ import UploadZone from "@/components/UploadZone";
 import GastoCard from "@/components/GastoCard";
 import TablaResumen from "@/components/TablaResumen";
 import ProyectoModal from "@/components/ProyectoModal";
+import Logo from "@/components/Logo";
 import { GastoItem, Proyecto } from "@/lib/types";
 import { getApiKey } from "@/lib/apikey";
 import { extraerComprobante } from "@/lib/gemini";
@@ -107,24 +108,8 @@ export default function Home() {
           padding: "12px 16px", gap: 16,
         }}>
           {/* Logo */}
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{
-              width: 38, height: 38, borderRadius: "12px",
-              background: "linear-gradient(135deg, var(--accent) 0%, #0FBFB0 100%)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: "18px", flexShrink: 0,
-              boxShadow: "0 4px 16px rgba(16,223,160,0.3)",
-            }}>
-              📸
-            </div>
-            <div>
-              <p className="font-display" style={{ fontSize: "15px", fontWeight: 800, color: "var(--text)", letterSpacing: "-0.03em", lineHeight: 1 }}>
-                FOTO-GRAMA
-              </p>
-              <p style={{ fontSize: "10px", color: "var(--text3)", letterSpacing: "0.08em", textTransform: "uppercase", marginTop: "2px" }}>
-                Rendición Automotriz
-              </p>
-            </div>
+          <div style={{ display: "flex", alignItems: "center" }}>
+            <Logo height={26} />
           </div>
           <ApiKeyConfig onChange={setApiKey} />
         </div>
