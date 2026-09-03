@@ -1,8 +1,8 @@
 import { GastoExtraido } from "./types";
 import { PROMPT_EXTRACCION } from "./prompt";
 
-const GEMINI_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
+const GEMINI_MODEL = "gemini-2.5-flash-lite-preview-06-17";
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 export async function extraerComprobante(
   base64: string,
@@ -56,7 +56,7 @@ export async function testConexion(
       const t = await res.text();
       return { ok: false, error: t.slice(0, 150) };
     }
-    return { ok: true, modelo: "gemini-2.0-flash" };
+    return { ok: true, modelo: GEMINI_MODEL };
   } catch (e) {
     return { ok: false, error: (e as Error).message };
   }
