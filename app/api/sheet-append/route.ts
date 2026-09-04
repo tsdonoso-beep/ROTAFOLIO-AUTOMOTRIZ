@@ -132,9 +132,14 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     console.error("Sheet append error:", e);
     const msg = (e as Error).message;
-    const amigable = /not found/i.test(msg)
+
+    // La API de Sheets se habilita por separado de la de Drive: es el fallo
+    // más común al conectar la planilla por primera vez.
+    const amigable = /has not been used in project|is disabled/i.test(msg)
+      ? "La API de Google Sheets no está habilitada en el proyecto de Google Cloud. Actívala en la consola de Google Cloud y espera un par de minutos."
+      : /not found/i.test(msg)
       ? "No se encontró la planilla. Verifica el ID y que esté compartida con la cuenta de servicio."
-      : /permission/i.test(msg)
+      : /permission|forbidden/i.test(msg)
       ? "La cuenta de servicio no tiene permiso de edición sobre la planilla."
       : msg;
     return NextResponse.json({ error: amigable }, { status: 500 });
