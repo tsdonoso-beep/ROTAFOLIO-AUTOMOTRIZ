@@ -102,7 +102,12 @@ export default function ApiKeyConfig({ onChange }: { onChange?: (k: string) => v
             Gemini API Key
           </p>
           <p style={{ fontSize: "12px", color: "var(--text2)", marginBottom: "16px", lineHeight: 1.5 }}>
-            Tu clave personal de <strong style={{ color: "var(--text)" }}>aistudio.google.com</strong>. Solo se guarda en este navegador.
+            Tu clave personal de{" "}
+            <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer"
+              style={{ color: "var(--accent)", fontWeight: 600 }}>
+              aistudio.google.com/apikey
+            </a>
+            . Solo se guarda en este navegador.
           </p>
           <input
             type="password"
@@ -112,6 +117,13 @@ export default function ApiKeyConfig({ onChange }: { onChange?: (k: string) => v
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && guardar()}
           />
+
+          {input.trim() && !pareceKeyValida(input) && (
+            <p style={{ marginTop: 8, fontSize: "11.5px", color: "var(--warn)", lineHeight: 1.5 }}>
+              ⚠ Las claves de Gemini empiezan con <strong>AIza</strong>. Esta parece
+              ser de otro tipo de credencial de Google y no funcionará.
+            </p>
+          )}
           <div style={{ display: "flex", gap: "8px", marginTop: "12px", flexWrap: "wrap" }}>
             <button className="btn-primary" onClick={guardar} style={{ flex: 1 }}>
               Guardar
