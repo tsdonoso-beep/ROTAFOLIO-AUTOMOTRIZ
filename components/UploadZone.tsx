@@ -72,6 +72,8 @@ async function fileToGasto(file: File): Promise<GastoItem> {
 
   return {
     id: Date.now().toString(36) + Math.random().toString(36).slice(2),
+    // Lo asigna la página al agregarlo, según el proyecto activo.
+    proyecto_id: "",
     nombre: file.name,
     // Tamaño real que se enviará, no el del archivo original.
     tamanoKB: Math.round((base64.length * 3) / 4 / 1024),

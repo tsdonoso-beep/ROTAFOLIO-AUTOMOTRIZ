@@ -1,31 +1,52 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import ApiKeyConfig from "@/components/ApiKeyConfig";
 import UploadZone from "@/components/UploadZone";
 import GastoCard from "@/components/GastoCard";
 import TablaResumen from "@/components/TablaResumen";
 import ProyectoModal from "@/components/ProyectoModal";
+import LoginGate from "@/components/LoginGate";
 import Logo from "@/components/Logo";
-import { GastoItem, Proyecto } from "@/lib/types";
+import { GastoItem, Proyecto, Usuario } from "@/lib/types";
 import { getApiKey } from "@/lib/apikey";
 import { extraerComprobante } from "@/lib/gemini";
 import { subirADrive } from "@/lib/drive";
+import { registrarEnPlanilla } from "@/lib/sheet";
 import { deleteProyecto, getProyectos, saveProyecto } from "@/lib/proyectos";
+import { getGastos, saveGastos } from "@/lib/gastos";
+import { cerrarSesion, getSesion } from "@/lib/usuarios";
 
 export default function Home() {
-  const [apiKey, setApiKey]             = useState("");
-  const [items, setItems]               = useState<GastoItem[]>([]);
-  const [proyectos, setProyectos]       = useState<Proyecto[]>([]);
+  const [usuario, setUsuario]     = useState<Usuario | null>(null);
+  const [cargando, setCargando]   = useState(true);
+  const [apiKey, setApiKey]       = useState("");
+  // Todos los gastos de todos los proyectos; en pantalla se filtran.
+  const [items, setItems]         = useState<GastoItem[]>([]);
+  const [proyectos, setProyectos] = useState<Proyecto[]>([]);
   const [proyectoActual, setProyectoActual] = useState<Proyecto | null>(null);
-  const [showModal, setShowModal]       = useState(false);
-  const [tab, setTab]                   = useState<"gastos" | "resumen">("gastos");
+  const [showModal, setShowModal] = useState(false);
+  const [tab, setTab]             = useState<"gastos" | "resumen">("gastos");
 
   useEffect(() => {
+    setUsuario(getSesion());
     setApiKey(getApiKey());
+    setItems(getGastos());
     const ps = getProyectos();
     setProyectos(ps);
     if (ps.length) setProyectoActual(ps[0]);
+    setCargando(false);
   }, []);
+
+  // Persiste en cada cambio para no perder el trabajo al recargar.
+  useEffect(() => {
+    if (!cargando) saveGastos(items);
+  }, [items, cargando]);
+
+  /** Solo los gastos del proyecto activo: así las rendiciones no se mezclan. */
+  const visibles = useMemo(
+    () => (proyectoActual ? items.filter(i => i.proyecto_id === proyectoActual.id) : []),
+    [items, proyectoActual]
+  );
 
   const updateItem = useCallback((id: string, patch: Partial<GastoItem>) => {
     setItems(prev => prev.map(i => i.id === id ? { ...i, ...patch } : i));
@@ -36,62 +57,130 @@ export default function Home() {
   }, []);
 
   const agregarItems = useCallback((nuevos: GastoItem[]) => {
-    setItems(prev => [...prev, ...nuevos]);
-  }, []);
+    if (!proyectoActual) {
+      alert("Primero crea o selecciona un proyecto.");
+      return;
+    }
+    // Cada comprobante queda amarrado al proyecto en el que se subió.
+    setItems(prev => [...prev, ...nuevos.map(n => ({ ...n, proyecto_id: proyectoActual.id }))]);
+  }, [proyectoActual]);
 
   const procesarItem = useCallback(async (id: string) => {
     if (!apiKey) {
-      alert("Primero configura tu Gemini API Key (botón arriba a la derecha).");
+      alert("Primero configura tu Gemini API Key (botón 🔑 arriba a la derecha).");
       return;
     }
     const item = items.find(i => i.id === id);
     if (!item) return;
+
+    if (!item.base64) {
+      updateItem(id, { error: "La imagen ya no está en el navegador (se recargó la página). Vuelve a subir el archivo para procesarlo." });
+      return;
+    }
+
+    const proyecto = proyectos.find(p => p.id === item.proyecto_id) ?? null;
     updateItem(id, { procesando: true, error: undefined });
+
     try {
       const { extraido } = await extraerComprobante(item.base64, item.mimeType, apiKey);
+
       let drive_url: string | undefined;
-      if (proyectoActual) {
+      if (proyecto) {
         try {
-          const ext = item.nombre.split(".").pop() ?? "jpg";
+          const ext = item.mimeType === "application/pdf" ? "pdf" : "jpg";
           const fileName = `${extraido.proveedor || item.nombre}_${Date.now()}.${ext}`.replace(/\s+/g, "_");
-          const result = await subirADrive({ base64: item.base64, mimeType: item.mimeType, fileName, centroCostos: proyectoActual.centro_costos, caja: proyectoActual.caja });
+          const result = await subirADrive({
+            base64: item.base64, mimeType: item.mimeType, fileName,
+            centroCostos: proyecto.centro_costos, caja: proyecto.caja,
+          });
           drive_url = result.url;
-        } catch { /* Drive error no bloquea */ }
+        } catch { /* un fallo de Drive no debe perder la extracción */ }
       }
+
       updateItem(id, {
         procesado: true, procesando: false, extraido, drive_url,
         error: undefined,
         empresa: item.empresa || extraido.proveedor,
-        motivo: item.motivo || extraido.detalle,
+        motivo:  item.motivo  || extraido.detalle,
       });
     } catch (e) {
       updateItem(id, { procesando: false, error: (e as Error).message });
     }
-  }, [apiKey, items, proyectoActual, updateItem]);
+  }, [apiKey, items, proyectos, updateItem]);
+
+  /** Agrega una fila a la planilla. Es append-only: no se puede deshacer. */
+  const registrarItem = useCallback(async (id: string) => {
+    const item = items.find(i => i.id === id);
+    const proyecto = proyectos.find(p => p.id === item?.proyecto_id);
+    if (!item || !proyecto || !usuario) return;
+
+    if (!item.procesado || !item.extraido) {
+      updateItem(id, { error_registro: "Primero extrae los datos con IA." });
+      return;
+    }
+
+    updateItem(id, { registrando: true, error_registro: undefined });
+    try {
+      const { fecha } = await registrarEnPlanilla(item, proyecto, usuario);
+      updateItem(id, {
+        registrando: false,
+        registrado: { usuario_id: usuario.id, usuario_nombre: usuario.nombre, fecha },
+      });
+    } catch (e) {
+      updateItem(id, { registrando: false, error_registro: (e as Error).message });
+    }
+  }, [items, proyectos, usuario, updateItem]);
 
   const procesarTodos = async () => {
-    const pendientes = items.filter(i => !i.procesado && !i.procesando);
-    for (const item of pendientes) await procesarItem(item.id);
+    for (const item of visibles.filter(i => !i.procesado && !i.procesando)) {
+      await procesarItem(item.id);
+    }
+  };
+
+  const registrarTodos = async () => {
+    const listos = visibles.filter(i => i.procesado && !i.registrado && !i.registrando);
+    if (!listos.length) return;
+    if (!confirm(`Se agregarán ${listos.length} filas a la planilla a nombre de ${usuario?.nombre}. Esta acción no se puede deshacer. ¿Continuar?`)) return;
+    for (const item of listos) await registrarItem(item.id);
   };
 
   const crearProyecto = (p: Proyecto) => {
-    saveProyecto(p);
+    // saveProyecto devuelve el existente si ya había uno con el mismo
+    // centro de costos + caja, evitando rendiciones duplicadas.
+    const guardado = saveProyecto(p);
     setProyectos(getProyectos());
-    setProyectoActual(p);
+    setProyectoActual(guardado);
     setShowModal(false);
   };
 
   const eliminarProyecto = (id: string) => {
-    if (!confirm("¿Eliminar este proyecto?")) return;
+    const cuantos = items.filter(i => i.proyecto_id === id).length;
+    const aviso = cuantos
+      ? `Este proyecto tiene ${cuantos} comprobante(s) cargado(s). Se eliminarán de esta pantalla (lo ya registrado en la planilla y en Drive se conserva). ¿Continuar?`
+      : "¿Eliminar este proyecto?";
+    if (!confirm(aviso)) return;
+
     deleteProyecto(id);
+    setItems(prev => prev.filter(i => i.proyecto_id !== id));
     const ps = getProyectos();
     setProyectos(ps);
     setProyectoActual(ps[0] ?? null);
   };
 
-  const pendientesCount  = items.filter(i => !i.procesado && !i.procesando).length;
-  const procesadosCount  = items.filter(i => i.procesado).length;
-  const totalSoles       = items.filter(i => i.procesado).reduce((s, i) => s + (i.extraido?.monto_total ?? 0), 0);
+  const salir = () => {
+    cerrarSesion();
+    setUsuario(null);
+  };
+
+  const pendientesCount = visibles.filter(i => !i.procesado && !i.procesando).length;
+  const procesadosCount = visibles.filter(i => i.procesado).length;
+  const registradosCount = visibles.filter(i => i.registrado).length;
+  const porRegistrar    = visibles.filter(i => i.procesado && !i.registrado).length;
+  const totalSoles      = visibles.filter(i => i.procesado)
+    .reduce((s, i) => s + (i.extraido?.monto_total ?? 0), 0);
+
+  if (cargando) return <div style={{ minHeight: "100dvh" }} />;
+  if (!usuario) return <LoginGate onEntrar={setUsuario} />;
 
   return (
     <div style={{ minHeight: "100dvh" }}>
@@ -105,40 +194,69 @@ export default function Home() {
         <div style={{
           maxWidth: 960, margin: "0 auto",
           display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "14px 20px", gap: 16,
+          padding: "14px 20px", gap: 12,
         }}>
-          <div style={{ display: "flex", alignItems: "center" }}>
-            <Logo height={24} />
+          <Logo height={24} />
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <ApiKeyConfig onChange={setApiKey} />
+            <button
+              onClick={salir}
+              title={`${usuario.nombre} — cerrar sesión`}
+              style={{
+                display: "flex", alignItems: "center", gap: 8,
+                padding: "5px 10px 5px 5px", borderRadius: "999px",
+                border: "1px solid var(--border2)", background: "#FFFFFF",
+                cursor: "pointer", transition: "background 0.15s",
+              }}
+              onMouseOver={e => (e.currentTarget.style.background = "var(--surface2)")}
+              onMouseOut={e => (e.currentTarget.style.background = "#FFFFFF")}
+            >
+              <span style={{
+                width: 26, height: 26, borderRadius: "50%",
+                background: "var(--accent)", color: "#FFFFFF",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: "10px", fontWeight: 700,
+                fontFamily: "var(--font-sora), sans-serif",
+              }}>
+                {usuario.iniciales}
+              </span>
+              <span className="hidden sm:inline" style={{
+                fontSize: "12px", fontWeight: 600, color: "var(--text2)",
+                fontFamily: "var(--font-sora), sans-serif",
+              }}>
+                Salir
+              </span>
+            </button>
           </div>
-          <ApiKeyConfig onChange={setApiKey} />
         </div>
       </header>
 
       <main style={{ maxWidth: 960, margin: "0 auto", padding: "24px 20px 100px", display: "flex", flexDirection: "column", gap: 16 }}>
 
         {/* ═══ STAT CARDS ═══ */}
-        {items.length > 0 && (
-          <div className="stagger" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+        {visibles.length > 0 && (
+          <div className="stagger" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
             {[
-              { label: "Archivos", value: items.length, accent: false },
-              { label: "Procesados", value: procesadosCount, accent: procesadosCount > 0 },
-              { label: "Total S/", value: totalSoles > 0 ? totalSoles.toFixed(2) : "—", accent: totalSoles > 0 },
+              { label: "Archivos",   value: String(visibles.length), accent: false },
+              { label: "Procesados", value: String(procesadosCount), accent: procesadosCount > 0 },
+              { label: "Registrados", value: String(registradosCount), accent: registradosCount > 0 },
+              { label: "Total S/",   value: totalSoles > 0 ? totalSoles.toFixed(2) : "—", accent: totalSoles > 0 },
             ].map((s) => (
               <div key={s.label} className="animate-fadein" style={{
                 background: "#FFFFFF",
                 border: "1px solid var(--border)",
                 borderRadius: "12px",
-                padding: "16px",
+                padding: "14px 10px",
                 textAlign: "center",
                 boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
               }}>
                 <p className="font-display" style={{
-                  fontSize: "22px", fontWeight: 800, letterSpacing: "-0.03em",
+                  fontSize: "20px", fontWeight: 800, letterSpacing: "-0.03em",
                   color: s.accent ? "var(--accent)" : "var(--text)",
                 }}>
                   {s.value}
                 </p>
-                <p style={{ fontSize: "10px", color: "var(--text3)", marginTop: "3px", fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", fontFamily: "var(--font-sora), sans-serif" }}>
+                <p style={{ fontSize: "9px", color: "var(--text3)", marginTop: "3px", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", fontFamily: "var(--font-sora), sans-serif" }}>
                   {s.label}
                 </p>
               </div>
@@ -162,13 +280,18 @@ export default function Home() {
               {proyectos.length > 0 ? (
                 <select
                   className="fg-input"
-                  style={{ maxWidth: 280, padding: "8px 12px", fontSize: "13px", flex: 1 }}
+                  style={{ maxWidth: 300, padding: "8px 12px", fontSize: "13px", flex: 1 }}
                   value={proyectoActual?.id ?? ""}
                   onChange={e => setProyectoActual(proyectos.find(p => p.id === e.target.value) ?? null)}
                 >
-                  {proyectos.map(p => (
-                    <option key={p.id} value={p.id}>{p.nombre} — {p.centro_costos} / {p.caja}</option>
-                  ))}
+                  {proyectos.map(p => {
+                    const n = items.filter(i => i.proyecto_id === p.id).length;
+                    return (
+                      <option key={p.id} value={p.id}>
+                        {p.nombre} — {p.centro_costos} / {p.caja}{n ? ` (${n})` : ""}
+                      </option>
+                    );
+                  })}
                 </select>
               ) : (
                 <span style={{ fontSize: "13px", color: "var(--text3)" }}>Sin proyectos creados</span>
@@ -188,7 +311,7 @@ export default function Home() {
             </button>
           </div>
           {proyectoActual && (
-            <div style={{ display: "flex", gap: 16, marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border)" }}>
+            <div style={{ display: "flex", gap: 16, marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border)", flexWrap: "wrap" }}>
               <span style={{ fontSize: "11px", color: "var(--text3)" }}>
                 📁 <span style={{ color: "var(--text2)" }}>{proyectoActual.centro_costos}</span>
               </span>
@@ -212,21 +335,25 @@ export default function Home() {
           </p>
           <UploadZone onAdd={agregarItems} />
 
-          {items.length > 0 && pendientesCount > 0 && (
-            <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border)", display: "flex", justifyContent: "flex-end" }}>
-              <button className="btn-primary" onClick={procesarTodos}
-                style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: "14px" }}>✦</span>
-                Extraer todos ({pendientesCount}) con IA
-              </button>
+          {(pendientesCount > 0 || porRegistrar > 0) && (
+            <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border)", display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
+              {pendientesCount > 0 && (
+                <button className="btn-ghost" onClick={procesarTodos}>
+                  ✦ Extraer todos ({pendientesCount})
+                </button>
+              )}
+              {porRegistrar > 0 && (
+                <button className="btn-primary" onClick={registrarTodos}>
+                  📋 Registrar {porRegistrar} en planilla
+                </button>
+              )}
             </div>
           )}
         </div>
 
         {/* ═══ TABS + CONTENT ═══ */}
-        {items.length > 0 && (
+        {visibles.length > 0 && (
           <>
-            {/* Tab pills */}
             <div style={{
               display: "flex", gap: 4,
               background: "#FFFFFF",
@@ -236,7 +363,7 @@ export default function Home() {
               boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
             }}>
               {[
-                { key: "gastos", label: "Gastos", count: items.length },
+                { key: "gastos", label: "Gastos", count: visibles.length },
                 { key: "resumen", label: "Resumen", count: procesadosCount },
               ].map(t => (
                 <button
@@ -274,19 +401,20 @@ export default function Home() {
 
             {tab === "gastos" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                {items.map(item => (
+                {visibles.map(item => (
                   <GastoCard key={item.id} item={item}
-                    onChange={updateItem} onProcesar={procesarItem} onEliminar={eliminarItem} />
+                    onChange={updateItem} onProcesar={procesarItem}
+                    onRegistrar={registrarItem} onEliminar={eliminarItem} />
                 ))}
               </div>
             )}
 
-            {tab === "resumen" && <TablaResumen items={items} />}
+            {tab === "resumen" && <TablaResumen items={visibles} />}
           </>
         )}
 
         {/* ═══ EMPTY STATE ═══ */}
-        {items.length === 0 && (
+        {visibles.length === 0 && (
           <div style={{
             display: "flex", flexDirection: "column", alignItems: "center",
             justifyContent: "center", paddingTop: 56, paddingBottom: 56, textAlign: "center", gap: 14,
@@ -298,14 +426,16 @@ export default function Home() {
               fontSize: "32px",
               boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
             }}>
-              🧾
+              {proyectoActual ? "🧾" : "📁"}
             </div>
             <div>
               <p className="font-display" style={{ fontSize: "17px", fontWeight: 700, color: "var(--text)", letterSpacing: "-0.02em", marginBottom: 5 }}>
-                Sin comprobantes
+                {proyectoActual ? "Sin comprobantes en este proyecto" : "Crea tu primer proyecto"}
               </p>
               <p style={{ fontSize: "13px", color: "var(--text2)", lineHeight: 1.65 }}>
-                Sube imágenes o PDFs de facturas, boletas,<br />recibos o tickets para comenzar.
+                {proyectoActual
+                  ? <>Sube imágenes o PDFs de facturas, boletas,<br />recibos o tickets para comenzar.</>
+                  : <>Cada proyecto agrupa una rendición por<br />centro de costos y caja.</>}
               </p>
             </div>
           </div>

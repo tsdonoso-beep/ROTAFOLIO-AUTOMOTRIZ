@@ -1,7 +1,7 @@
 "use client";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Proyecto } from "@/lib/types";
-import { newProyecto } from "@/lib/proyectos";
+import { buscarDuplicado, newProyecto } from "@/lib/proyectos";
 
 interface Props { onCrear: (p: Proyecto) => void; onCerrar: () => void }
 
@@ -10,12 +10,19 @@ export default function ProyectoModal({ onCrear, onCerrar }: Props) {
   const [centro, setCentro] = useState("");
   const [caja, setCaja] = useState("");
 
+  // Un proyecto se identifica por centro de costos + caja. Si ya existe uno
+  // con esa combinación, avisamos antes de crear para no duplicar rendiciones.
+  const duplicado = useMemo(
+    () => (centro.trim() && caja.trim() ? buscarDuplicado(centro, caja) : undefined),
+    [centro, caja]
+  );
+
   const crear = () => {
     if (!nombre.trim() || !centro.trim() || !caja.trim()) {
       alert("Completa todos los campos.");
       return;
     }
-    onCrear(newProyecto(nombre.trim(), centro.trim(), caja.trim()));
+    onCrear(newProyecto(nombre, centro, caja));
   };
 
   return (
@@ -85,12 +92,29 @@ export default function ProyectoModal({ onCrear, onCerrar }: Props) {
           </div>
         </div>
 
+        {duplicado && (
+          <div style={{
+            marginTop: 16, padding: "12px 14px",
+            background: "var(--warn-bg)",
+            border: "1px solid rgba(180,83,9,0.2)",
+            borderRadius: "9px",
+            display: "flex", gap: 9, alignItems: "flex-start",
+          }}>
+            <span style={{ fontSize: "14px", flexShrink: 0 }}>ℹ️</span>
+            <p style={{ fontSize: "12px", color: "var(--warn)", lineHeight: 1.55 }}>
+              Ya existe <strong>{duplicado.nombre}</strong> con este centro de costos
+              y caja. Al continuar se usará ese proyecto y los comprobantes se
+              acumularán ahí, en vez de crear uno duplicado.
+            </p>
+          </div>
+        )}
+
         <div style={{ display: "flex", gap: "10px", marginTop: "24px" }}>
           <button className="btn-ghost" onClick={onCerrar} style={{ flex: 1 }}>
             Cancelar
           </button>
-          <button className="btn-primary" onClick={crear} style={{ flex: 2 }}>
-            Crear Proyecto
+          <button className="btn-primary" onClick={crear} style={{ flex: 2, justifyContent: "center" }}>
+            {duplicado ? "Usar proyecto existente" : "Crear Proyecto"}
           </button>
         </div>
       </div>

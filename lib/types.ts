@@ -25,9 +25,12 @@ export interface GastoExtraido {
 
 export interface GastoItem {
   id: string;
+  // proyecto al que pertenece — fija la separación entre rendiciones
+  proyecto_id: string;
   // archivo
   nombre: string;
   tamanoKB: number;
+  /** Vacío tras recargar la página: la imagen no se guarda en el navegador. */
   base64: string;
   mimeType: string;
   // campos que llena el usuario
@@ -46,6 +49,23 @@ export interface GastoItem {
   procesado: boolean;
   procesando: boolean;
   error?: string;
+  // registro en la planilla (append-only)
+  registrado?: RegistroInfo;
+  registrando?: boolean;
+  error_registro?: string;
+}
+
+/** Sello inmutable de quién registró el gasto en la planilla y cuándo. */
+export interface RegistroInfo {
+  usuario_id: string;
+  usuario_nombre: string;
+  fecha: string; // ISO
+}
+
+export interface Usuario {
+  id: string;
+  nombre: string;
+  iniciales: string;
 }
 
 export interface Proyecto {
