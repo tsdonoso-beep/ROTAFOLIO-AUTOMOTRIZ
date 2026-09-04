@@ -2,27 +2,30 @@
 import { useMemo, useState } from "react";
 import { Proyecto } from "@/lib/types";
 import { buscarDuplicado, newProyecto } from "@/lib/proyectos";
+import { nombreSugerido } from "@/lib/centros-costos";
+import ComboCentroCosto from "./ComboCentroCosto";
 
 interface Props { onCrear: (p: Proyecto) => void; onCerrar: () => void }
 
 export default function ProyectoModal({ onCrear, onCerrar }: Props) {
-  const [nombre, setNombre] = useState("");
   const [centro, setCentro] = useState("");
   const [caja, setCaja] = useState("");
+  // Vacío = usar el nombre sugerido. Solo se llena si el usuario lo edita.
+  const [nombreManual, setNombreManual] = useState("");
 
-  // Un proyecto se identifica por centro de costos + caja. Si ya existe uno
-  // con esa combinación, avisamos antes de crear para no duplicar rendiciones.
+  const sugerido = useMemo(() => nombreSugerido(centro, caja), [centro, caja]);
+  const nombreFinal = nombreManual.trim() || sugerido;
+
   const duplicado = useMemo(
     () => (centro.trim() && caja.trim() ? buscarDuplicado(centro, caja) : undefined),
     [centro, caja]
   );
 
+  const listo = centro.trim() && caja.trim();
+
   const crear = () => {
-    if (!nombre.trim() || !centro.trim() || !caja.trim()) {
-      alert("Completa todos los campos.");
-      return;
-    }
-    onCrear(newProyecto(nombre, centro, caja));
+    if (!listo) return;
+    onCrear(newProyecto(nombreFinal, centro, caja));
   };
 
   return (
@@ -40,7 +43,7 @@ export default function ProyectoModal({ onCrear, onCerrar }: Props) {
       <div
         className="animate-fadein"
         style={{
-          width: "100%", maxWidth: "440px",
+          width: "100%", maxWidth: "460px",
           background: "#FFFFFF",
           border: "1px solid var(--border)",
           borderRadius: "16px",
@@ -48,7 +51,6 @@ export default function ProyectoModal({ onCrear, onCerrar }: Props) {
           boxShadow: "0 24px 64px rgba(0,0,0,0.15), 0 2px 8px rgba(0,0,0,0.08)",
         }}
       >
-        {/* Icon + title */}
         <div style={{ display: "flex", alignItems: "center", gap: "14px", marginBottom: "24px" }}>
           <div style={{
             width: 44, height: 44, borderRadius: "12px",
@@ -64,7 +66,7 @@ export default function ProyectoModal({ onCrear, onCerrar }: Props) {
               Nuevo Proyecto
             </h2>
             <p style={{ fontSize: "12px", color: "var(--text2)", marginTop: "2px" }}>
-              Define el centro de costos y caja
+              El centro de costos y la caja lo identifican
             </p>
           </div>
           <button
@@ -73,22 +75,34 @@ export default function ProyectoModal({ onCrear, onCerrar }: Props) {
           >×</button>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-          <div>
-            <label className="fg-label">Nombre del Proyecto</label>
-            <input className="fg-input" value={nombre} onChange={e => setNombre(e.target.value)}
-              placeholder="Ej: Taller Norte — Marzo" autoFocus />
-          </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
           <div>
             <label className="fg-label">Centro de Costos</label>
-            <input className="fg-input" value={centro} onChange={e => setCentro(e.target.value)}
-              placeholder="Ej: TALLER-01" />
+            <ComboCentroCosto value={centro} onChange={setCentro} />
           </div>
+
           <div>
             <label className="fg-label">N° Caja / Memo</label>
             <input className="fg-input" value={caja} onChange={e => setCaja(e.target.value)}
               placeholder="Ej: CAJA-2026-03"
               onKeyDown={e => e.key === "Enter" && crear()} />
+          </div>
+
+          {/* El nombre se arma solo; queda editable por si se quiere otro. */}
+          <div>
+            <label className="fg-label">Nombre del Proyecto (opcional)</label>
+            <input
+              className="fg-input"
+              value={nombreManual}
+              onChange={e => setNombreManual(e.target.value)}
+              placeholder={sugerido || "Se completa con el centro de costos y la caja"}
+              onKeyDown={e => e.key === "Enter" && crear()}
+            />
+            {!nombreManual.trim() && sugerido && (
+              <p style={{ marginTop: 6, fontSize: "11px", color: "var(--text3)", lineHeight: 1.45 }}>
+                Se guardará como <strong style={{ color: "var(--text2)" }}>{sugerido}</strong>
+              </p>
+            )}
           </div>
         </div>
 
@@ -113,7 +127,8 @@ export default function ProyectoModal({ onCrear, onCerrar }: Props) {
           <button className="btn-ghost" onClick={onCerrar} style={{ flex: 1 }}>
             Cancelar
           </button>
-          <button className="btn-primary" onClick={crear} style={{ flex: 2, justifyContent: "center" }}>
+          <button className="btn-primary" onClick={crear} disabled={!listo}
+            style={{ flex: 2, justifyContent: "center" }}>
             {duplicado ? "Usar proyecto existente" : "Crear Proyecto"}
           </button>
         </div>

@@ -85,20 +85,27 @@ export default function Home() {
       const { extraido } = await extraerComprobante(item.base64, item.mimeType, apiKey);
 
       let drive_url: string | undefined;
+      let error_drive: string | undefined;
       if (proyecto) {
         try {
           const ext = item.mimeType === "application/pdf" ? "pdf" : "jpg";
-          const fileName = `${extraido.proveedor || item.nombre}_${Date.now()}.${ext}`.replace(/\s+/g, "_");
+          const fecha = extraido.fecha_comprobante || new Date().toISOString().slice(0, 10);
+          const fileName = `${fecha}_${extraido.proveedor || item.nombre}_${extraido.numero_comprobante || item.id.slice(-4)}.${ext}`
+            .replace(/[\\/:*?"<>|]/g, "-").replace(/\s+/g, "_");
           const result = await subirADrive({
             base64: item.base64, mimeType: item.mimeType, fileName,
             centroCostos: proyecto.centro_costos, caja: proyecto.caja,
           });
           drive_url = result.url;
-        } catch { /* un fallo de Drive no debe perder la extracción */ }
+        } catch (e) {
+          // Un fallo de Drive no descarta la extracción, pero sí se avisa:
+          // sin enlace la fila del registro queda incompleta.
+          error_drive = (e as Error).message;
+        }
       }
 
       updateItem(id, {
-        procesado: true, procesando: false, extraido, drive_url,
+        procesado: true, procesando: false, extraido, drive_url, error_drive,
         error: undefined,
         empresa: item.empresa || extraido.proveedor,
         motivo:  item.motivo  || extraido.detalle,

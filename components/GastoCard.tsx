@@ -141,6 +141,22 @@ export default function GastoCard({ item, onChange, onProcesar, onRegistrar, onE
         </div>
       )}
 
+      {/* Fallo al subir la imagen a Drive */}
+      {item.error_drive && !item.drive_url && (
+        <div style={{
+          padding: "11px 14px",
+          background: "var(--warn-bg)",
+          borderBottom: "1px solid var(--border)",
+          display: "flex", alignItems: "flex-start", gap: "8px",
+        }}>
+          <span style={{ fontSize: "13px", lineHeight: 1.4, flexShrink: 0 }}>📎</span>
+          <p style={{ fontSize: "12px", color: "var(--warn)", lineHeight: 1.5, fontWeight: 500 }}>
+            La imagen no se subió a Drive: {item.error_drive} — la fila del
+            registro quedará sin enlace. Usa «Reintentar» para volver a subirla.
+          </p>
+        </div>
+      )}
+
       {/* Error de registro */}
       {item.error_registro && (
         <div style={{

@@ -2,10 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { google } from "googleapis";
 import { Readable } from "stream";
 
+/**
+ * La carpeta de destino vive en una unidad compartida. La API de Drive las
+ * ignora por completo salvo que se le pasen estos parámetros en CADA llamada;
+ * sin ellos responde "File not found" aunque la carpeta exista y la cuenta de
+ * servicio tenga permisos.
+ */
+const DRIVES = { supportsAllDrives: true, includeItemsFromAllDrives: true };
+
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { base64, mimeType, fileName, carpeta1, carpeta2 } = body as {
+    const { base64, mimeType, fileName, carpeta1, carpeta2 } = (await req.json()) as {
       base64: string;
       mimeType: string;
       fileName: string;
@@ -28,43 +35,36 @@ export async function POST(req: NextRequest) {
       credentials: { client_email: email, private_key: key },
       scopes: ["https://www.googleapis.com/auth/drive"],
     });
-
     const drive = google.drive({ version: "v3", auth });
 
-    // Obtiene o crea carpeta nivel 1 (centro de costos)
+    // Estructura: FOTO-GRAMA / <centro de costos> / <caja> / archivo
     const fId1 = await getOrCreateFolder(drive, carpeta1, rootId);
-    // Obtiene o crea carpeta nivel 2 (caja)
     const fId2 = await getOrCreateFolder(drive, carpeta2, fId1);
 
-    // Sube el archivo
-    const buffer = Buffer.from(base64, "base64");
-    const stream = Readable.from(buffer);
-
     const uploaded = await drive.files.create({
-      requestBody: {
-        name: fileName,
-        parents: [fId2],
-      },
-      media: { mimeType, body: stream },
+      requestBody: { name: fileName, parents: [fId2] },
+      media: { mimeType, body: Readable.from(Buffer.from(base64, "base64")) },
       fields: "id,webViewLink",
+      ...DRIVES,
     });
 
-    // Hacer el archivo visible (lector público)
-    await drive.permissions.create({
-      fileId: uploaded.data.id!,
-      requestBody: { role: "reader", type: "anyone" },
-    });
-
+    // No se comparte públicamente: al estar en la unidad compartida, el
+    // archivo hereda sus permisos y lo ve el equipo que ya tiene acceso.
     return NextResponse.json({
       id: uploaded.data.id,
       url: uploaded.data.webViewLink,
     });
   } catch (e) {
     console.error("Drive upload error:", e);
-    return NextResponse.json(
-      { error: (e as Error).message },
-      { status: 500 }
-    );
+    const msg = (e as Error).message;
+    const amigable = /File not found/i.test(msg)
+      ? "No se encontró la carpeta de Drive. Verifica GOOGLE_DRIVE_FOLDER_ID y que esté compartida con la cuenta de servicio."
+      : /permission|forbidden/i.test(msg)
+      ? "La cuenta de servicio no tiene permiso de escritura en la carpeta de Drive."
+      : /storage quota|quotaExceeded/i.test(msg)
+      ? "La unidad de Drive no tiene espacio disponible."
+      : msg;
+    return NextResponse.json({ error: amigable }, { status: 500 });
   }
 }
 
@@ -73,8 +73,12 @@ async function getOrCreateFolder(
   nombre: string,
   parentId: string
 ): Promise<string> {
-  const q = `mimeType='application/vnd.google-apps.folder' and name='${nombre.replace(/'/g, "\\'")}' and '${parentId}' in parents and trashed=false`;
-  const res = await drive.files.list({ q, fields: "files(id)", pageSize: 1 });
+  const limpio = nombre.replace(/'/g, "\\'");
+  const q = `mimeType='application/vnd.google-apps.folder' and name='${limpio}' and '${parentId}' in parents and trashed=false`;
+
+  const res = await drive.files.list({
+    q, fields: "files(id)", pageSize: 1, ...DRIVES,
+  });
   if (res.data.files?.length) return res.data.files[0].id!;
 
   const created = await drive.files.create({
@@ -84,6 +88,7 @@ async function getOrCreateFolder(
       parents: [parentId],
     },
     fields: "id",
+    ...DRIVES,
   });
   return created.data.id!;
 }

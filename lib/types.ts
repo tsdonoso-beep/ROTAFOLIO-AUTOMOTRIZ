@@ -45,6 +45,7 @@ export interface GastoItem {
   // campos extraídos por Gemini
   extraido?: GastoExtraido;
   drive_url?: string;
+  error_drive?: string;
   // estado de procesamiento
   procesado: boolean;
   procesando: boolean;
