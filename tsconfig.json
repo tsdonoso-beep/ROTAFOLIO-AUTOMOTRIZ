@@ -9,6 +9,9 @@
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",
+    // Permite importar con extensión .ts explícita. Lo necesita el runner de
+    // pruebas de Node, que resuelve como ESM y no adivina extensiones.
+    "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "react-jsx",
