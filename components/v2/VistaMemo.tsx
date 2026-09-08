@@ -10,9 +10,9 @@ import {
 } from "./Iconos";
 import { clienteNavegador } from "@/lib/supabase/cliente";
 import { consolidar } from "@/lib/dominio/memo";
-import { impedimentosParaPresentar, MEMO_EDITABLE } from "@/lib/dominio/estados";
-import { presentarRendicion } from "@/app/acciones/memos";
-import type { EstadoMemo as TEstadoMemo, Gasto, Parametros } from "@/lib/dominio/tipos";
+import { impedimentosParaPresentar, MEMO_EDITABLE, puedeEditarGasto } from "@/lib/dominio/estados";
+import { editarGasto, presentarRendicion, type DatosGasto } from "@/app/acciones/memos";
+import type { EstadoGasto, EstadoMemo as TEstadoMemo, Gasto, Parametros } from "@/lib/dominio/tipos";
 
 interface Props {
   memo: {
@@ -57,6 +57,12 @@ export default function VistaMemo({ memo, gastos, parametros, puedeCapturar, con
       if (error) setAviso({ tipo: "error", texto: error.message });
       router.refresh();
     });
+  };
+
+  const guardarEdicion = async (id: string, datos: DatosGasto) => {
+    const r = await editarGasto(id, datos);
+    if (r.ok) router.refresh();
+    return r;
   };
 
   const presentar = () => {
@@ -223,9 +229,11 @@ export default function VistaMemo({ memo, gastos, parametros, puedeCapturar, con
             <GastoFila
               key={g.id} gasto={g}
               umbralConfianza={parametros.umbral_confianza_alerta}
-              editable={editable}
+              editable={puedeCapturar && puedeEditarGasto(g.estado as EstadoGasto, memo.estado)}
+              parametros={parametros}
               onConfirmar={confirmarAlertas}
               onEliminar={eliminar}
+              onEditar={guardarEdicion}
             />
           ))}
         </div>

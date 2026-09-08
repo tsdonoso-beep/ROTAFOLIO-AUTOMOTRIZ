@@ -183,6 +183,13 @@ export const IconoSalir = (p: Props) => (
   </Svg>
 );
 
+export const IconoEditar = (p: Props) => (
+  <Svg {...p}>
+    <path d="M14.7 4.8 19.2 9.3 8 20.5H3.5V16z" />
+    <path d="M12.9 6.6 17.4 11.1" />
+  </Svg>
+);
+
 export const IconoBasura = (p: Props) => (
   <Svg {...p}>
     <path d="M4 6.5h16M9.5 6.5V4.8a1.3 1.3 0 0 1 1.3-1.3h2.4a1.3 1.3 0 0 1 1.3 1.3v1.7" />

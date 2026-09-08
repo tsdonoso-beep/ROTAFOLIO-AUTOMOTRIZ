@@ -4,9 +4,12 @@ import { ordenarAlertas } from "@/lib/dominio/validaciones";
 import { soles } from "./Encabezado";
 import {
   IconoAlerta, IconoBasura, IconoBloqueo, IconoCheck,
-  IconoChevron, IconoComentario, IconoEnlace, IconoIA,
+  IconoChevron, IconoComentario, IconoEditar, IconoEnlace, IconoIA,
 } from "./Iconos";
-import type { Alerta, Gasto } from "@/lib/dominio/tipos";
+import FormularioGasto from "./FormularioGasto";
+import type { Origen } from "@/lib/ocr/fusion";
+import type { Alerta, Gasto, Parametros, ResultadoExtraccion } from "@/lib/dominio/tipos";
+import type { DatosGasto } from "@/app/acciones/memos";
 
 const NOMBRE_COMPROBANTE: Record<string, string> = {
   "01": "Factura", "03": "Boleta", "07": "Nota de crédito",
@@ -32,15 +35,73 @@ interface Props {
   gasto: G;
   umbralConfianza: number;
   editable?: boolean;
+  parametros?: Parametros;
   onConfirmar?: (id: string) => void;
   onEliminar?: (id: string) => void;
+  onEditar?: (id: string, datos: DatosGasto) => Promise<{ ok: true } | { ok: false; error: string }>;
   revision?: { observado: boolean; motivo: string; onCambio: (obs: boolean, motivo: string) => void };
 }
 
 export default function GastoFila({
-  gasto: g, umbralConfianza, editable, onConfirmar, onEliminar, revision,
+  gasto: g, umbralConfianza, editable, parametros, onConfirmar, onEliminar, onEditar, revision,
 }: Props) {
   const [abierto, setAbierto] = useState(false);
+  const [editando, setEditando] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [errorEdicion, setErrorEdicion] = useState("");
+  const [borrador, setBorrador] = useState<ResultadoExtraccion | null>(null);
+  const [origenBorrador, setOrigenBorrador] = useState<Record<string, Origen>>({});
+
+  const iniciarEdicion = () => {
+    setBorrador({
+      proveedor_ruc: g.proveedor_ruc ?? "",
+      proveedor_nombre: g.proveedor_nombre ?? "",
+      tipo_comprobante: g.tipo_comprobante ?? "",
+      serie: g.serie ?? "",
+      numero: g.numero ?? "",
+      fecha_emision: g.fecha_emision ?? "",
+      moneda: (g.moneda as "PEN" | "USD") ?? "PEN",
+      subtotal: Number(g.subtotal ?? 0),
+      igv: Number(g.igv ?? 0),
+      total: Number(g.total ?? 0),
+      forma_pago: g.forma_pago ?? "",
+      detalle: g.detalle ?? "",
+      _confianza: (g.confianza_extraccion as Record<string, number>) ?? {},
+      _no_legibles: [],
+    });
+    // Se parte sin marca de origen: son los valores tal como estaban
+    // guardados, ninguno es "nuevo" todavía.
+    setOrigenBorrador({});
+    setErrorEdicion("");
+    setEditando(true);
+    setAbierto(true);
+  };
+
+  const cancelarEdicion = () => {
+    setEditando(false);
+    setBorrador(null);
+    setErrorEdicion("");
+  };
+
+  const guardarEdicion = async () => {
+    if (!borrador || !onEditar) return;
+    if (!(borrador.total > 0)) {
+      setErrorEdicion("El total debe ser mayor que cero.");
+      return;
+    }
+    setGuardando(true);
+    setErrorEdicion("");
+    const { _confianza, _no_legibles, ...datos } = borrador;
+    void _confianza; void _no_legibles;
+    const r = await onEditar(g.id, datos);
+    setGuardando(false);
+    if (r.ok) {
+      setEditando(false);
+      setBorrador(null);
+    } else {
+      setErrorEdicion(r.error);
+    }
+  };
   const alertas = ordenarAlertas((g.alertas ?? []) as Alerta[]);
   const bloqueante = alertas.some(a => a.severidad === "bloqueante");
   const sinConfirmar = alertas.length > 0 && !g.alertas_confirmadas && !bloqueante;
@@ -196,7 +257,40 @@ export default function GastoFila({
         </div>
       )}
 
-      {abierto && (
+      {abierto && editando && borrador && parametros && (
+        <div style={{
+          padding: "16px", borderTop: "1px solid var(--border)",
+          background: "var(--surface2)",
+        }}>
+          <FormularioGasto
+            valores={borrador} origen={origenBorrador} parametros={parametros}
+            onCambio={(v, o) => { setBorrador(v); setOrigenBorrador(o); }}
+          />
+
+          {errorEdicion && (
+            <p style={{
+              marginTop: 14, fontSize: 12.5, color: "var(--danger)", lineHeight: 1.5,
+              display: "flex", gap: 6, alignItems: "flex-start",
+            }}>
+              <IconoAlerta size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+              {errorEdicion}
+            </p>
+          )}
+
+          <div style={{ display: "flex", gap: 9, marginTop: 16 }}>
+            <button className="btn-ghost" onClick={cancelarEdicion} disabled={guardando}
+              style={{ fontSize: 12.5, padding: "9px 14px" }}>
+              Cancelar
+            </button>
+            <button className="btn-primary" onClick={guardarEdicion} disabled={guardando}
+              style={{ flex: 1, justifyContent: "center", fontSize: 12.5, padding: "9px 14px" }}>
+              {guardando ? "Guardando…" : <><IconoCheck size={15} />Guardar cambios</>}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {abierto && !editando && (
         <div style={{
           padding: "15px 16px", borderTop: "1px solid var(--border)",
           background: "var(--surface2)",
@@ -229,7 +323,7 @@ export default function GastoFila({
                 <IconoIA size={15} />
               </span>
               <p style={{ fontSize: 12, color: "var(--warn)", lineHeight: 1.55 }}>
-                La IA leyó con poca seguridad: <strong>{dudosos.join(", ")}</strong>.
+                No se leyó con seguridad: <strong>{dudosos.join(", ")}</strong>.
                 Verifica contra el papel antes de presentar.
               </p>
             </div>
@@ -242,6 +336,16 @@ export default function GastoFila({
                 <IconoEnlace size={15} />
                 Ver imagen
               </a>
+            )}
+            {editable && onEditar && (
+              <button
+                className="btn-ghost"
+                style={{ fontSize: 12.5, padding: "8px 13px" }}
+                onClick={iniciarEdicion}
+              >
+                <IconoEditar size={15} />
+                Editar
+              </button>
             )}
             {editable && onEliminar && (
               <button
