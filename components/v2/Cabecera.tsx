@@ -50,8 +50,18 @@ export default function Cabecera({ nombre, roles, onApiKey }: Props) {
         display: "flex", alignItems: "center", gap: 12,
         padding: "12px 20px",
       }}>
-        <Link href="/" style={{ display: "flex", flexShrink: 0 }}>
-          <Logo height={22} />
+        <Link href="/" style={{
+          display: "flex", alignItems: "center", gap: 10, flexShrink: 0, textDecoration: "none",
+        }}>
+          <Logo height={20} />
+          <span style={{
+            width: 1, height: 18, background: "var(--border2)", flexShrink: 0,
+          }} />
+          <span className="font-display hidden sm:inline" style={{
+            fontSize: 13, fontWeight: 800, color: "var(--text)", letterSpacing: "-0.01em",
+          }}>
+            INRO VIATICOS
+          </span>
         </Link>
 
         {/* Navegación — se oculta en móvil, donde va abajo */}

@@ -151,7 +151,7 @@ export default function Captura({ memoId, parametros, memo, rendidoPrevio, onLis
           style={{
             flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
             padding: "22px 16px", borderRadius: 12, cursor: ocupado ? "wait" : "pointer",
-            border: "1px solid rgba(4,95,108,0.25)", background: "rgba(4,95,108,0.06)",
+            border: "1px solid rgba(0,162,152,0.25)", background: "rgba(0,162,152,0.06)",
             color: "var(--accent)", fontFamily: "var(--font-sora), sans-serif",
             opacity: ocupado ? 0.5 : 1, transition: "opacity 0.2s",
           }}
@@ -177,7 +177,7 @@ export default function Captura({ memoId, parametros, memo, rendidoPrevio, onLis
       {ocupado && (
         <div style={{
           marginTop: 12, padding: "12px 14px", borderRadius: 10,
-          background: "rgba(4,95,108,0.06)", border: "1px solid rgba(4,95,108,0.18)",
+          background: "rgba(0,162,152,0.06)", border: "1px solid rgba(0,162,152,0.18)",
           display: "flex", alignItems: "center", gap: 10,
         }}>
           <span className="animate-spin" style={{

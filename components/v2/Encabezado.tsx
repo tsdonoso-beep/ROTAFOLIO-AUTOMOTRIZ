@@ -75,8 +75,8 @@ export function Vacio({ icono, titulo, texto }: {
 /** Colores del estado del memo, coherentes en todas las pantallas. */
 const COLOR_ESTADO: Record<string, { fondo: string; texto: string }> = {
   BORRADOR:      { fondo: "rgba(0,0,0,0.05)",      texto: "var(--text2)" },
-  ABIERTO:       { fondo: "rgba(4,95,108,0.09)",   texto: "var(--accent)" },
-  EN_RENDICION:  { fondo: "rgba(4,95,108,0.09)",   texto: "var(--accent)" },
+  ABIERTO:       { fondo: "rgba(0,162,152,0.09)",   texto: "var(--accent)" },
+  EN_RENDICION:  { fondo: "rgba(0,162,152,0.09)",   texto: "var(--accent)" },
   PRESENTADA:    { fondo: "var(--warn-bg)",        texto: "var(--warn)" },
   OBSERVADA:     { fondo: "var(--danger-bg)",      texto: "var(--danger)" },
   APROBADA:      { fondo: "var(--success-bg)",     texto: "var(--success)" },

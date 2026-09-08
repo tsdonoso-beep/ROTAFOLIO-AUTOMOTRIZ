@@ -1,4 +1,4 @@
-// Tipos del dominio — Rendición de Gastos Automotriz
+// Tipos del dominio — INRO VIATICOS (modelo v1, en desuso desde la v2 de memo/gasto)
 
 export type TipoComprobante =
   | "FACTURA"

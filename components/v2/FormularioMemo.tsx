@@ -85,7 +85,7 @@ export default function FormularioMemo({ centros, personas }: Props) {
                 padding: "7px 14px", borderRadius: 999, fontSize: 12.5, cursor: "pointer",
                 fontWeight: 600, fontFamily: "var(--font-sora), sans-serif",
                 border: `1px solid ${tipo === t.valor ? "var(--accent)" : "var(--border2)"}`,
-                background: tipo === t.valor ? "rgba(4,95,108,0.08)" : "#FFFFFF",
+                background: tipo === t.valor ? "rgba(0,162,152,0.08)" : "#FFFFFF",
                 color: tipo === t.valor ? "var(--accent)" : "var(--text2)",
               }}>
                 {t.etiqueta}
@@ -114,7 +114,7 @@ export default function FormularioMemo({ centros, personas }: Props) {
                   display: "flex", alignItems: "center", gap: 11, padding: "10px 13px",
                   borderRadius: 10, cursor: "pointer", textAlign: "left",
                   border: `1px solid ${activo ? "var(--accent)" : "var(--border2)"}`,
-                  background: activo ? "rgba(4,95,108,0.05)" : "#FFFFFF",
+                  background: activo ? "rgba(0,162,152,0.05)" : "#FFFFFF",
                 }}>
                   <span style={{
                     width: 20, height: 20, borderRadius: 5, flexShrink: 0,

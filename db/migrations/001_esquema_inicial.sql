@@ -1,4 +1,4 @@
--- Foto-Grama v2 — esquema inicial
+-- INRO VIATICOS v2 — esquema inicial (nombre de marca previo: Foto-Grama)
 -- Referencia: SPEC §5 (modelo de datos) y §10.2 (reglas de acceso a nivel de fila)
 --
 -- Principio: doble capa. Estas políticas son la segunda barrera; las rutas de

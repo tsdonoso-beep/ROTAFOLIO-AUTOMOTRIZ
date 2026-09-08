@@ -98,7 +98,7 @@ export default async function Inicio() {
                     {inicial?.clave === s.clave && (
                       <span style={{
                         marginLeft: 7, fontSize: 9, fontWeight: 700, padding: "1px 6px",
-                        borderRadius: 999, background: "rgba(4,95,108,0.1)",
+                        borderRadius: 999, background: "rgba(0,162,152,0.1)",
                         color: "var(--accent)", verticalAlign: "middle",
                       }}>
                         INICIO

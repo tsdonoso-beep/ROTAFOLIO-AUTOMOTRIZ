@@ -54,8 +54,8 @@ export default function ProyectoModal({ onCrear, onCerrar }: Props) {
         <div style={{ display: "flex", alignItems: "center", gap: "14px", marginBottom: "24px" }}>
           <div style={{
             width: 44, height: 44, borderRadius: "12px",
-            background: "rgba(4,95,108,0.08)",
-            border: "1px solid rgba(4,95,108,0.18)",
+            background: "rgba(0,162,152,0.08)",
+            border: "1px solid rgba(0,162,152,0.18)",
             display: "flex", alignItems: "center", justifyContent: "center",
             fontSize: "20px",
           }}>

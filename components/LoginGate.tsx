@@ -42,7 +42,7 @@ export default function LoginGate({ onEntrar }: { onEntrar: (u: Usuario) => void
           fontSize: "17px", fontWeight: 800, color: "var(--text)",
           letterSpacing: "-0.02em", textAlign: "center", marginBottom: 4,
         }}>
-          Rendición de Gastos
+          INRO VIATICOS
         </p>
         <p style={{
           fontSize: "13px", color: "var(--text2)", textAlign: "center",
@@ -68,7 +68,7 @@ export default function LoginGate({ onEntrar }: { onEntrar: (u: Usuario) => void
                   textAlign: "left",
                   transition: "all 0.15s",
                   border: `1px solid ${activo ? "var(--accent)" : "var(--border2)"}`,
-                  background: activo ? "rgba(4,95,108,0.06)" : "#FFFFFF",
+                  background: activo ? "rgba(0,162,152,0.06)" : "#FFFFFF",
                 }}
               >
                 <span style={{

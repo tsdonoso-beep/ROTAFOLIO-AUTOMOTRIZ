@@ -6,8 +6,8 @@ const sora = Sora({ subsets: ["latin"], variable: "--font-sora", weight: ["400",
 const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-dm", weight: ["400", "500", "600"] });
 
 export const metadata: Metadata = {
-  title: "Foto-Grama",
-  description: "Rendición de gastos con extracción automática por IA",
+  title: "INRO VIATICOS",
+  description: "Rendición de viáticos y gastos con extracción automática por IA — INROPRIN",
 };
 
 export const viewport: Viewport = {

@@ -1,4 +1,4 @@
-// Modelo de dominio — Foto-Grama v2
+// Modelo de dominio — INRO VIATICOS v2
 // Referencia: SPEC §5. Reemplaza el modelo proyecto/gasto del MVP por memo/gasto.
 
 export type Rol =

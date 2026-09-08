@@ -1,18 +1,18 @@
 @import "tailwindcss";
 
 :root {
-  /* Grama light palette */
+  /* Paleta INRO VIATICOS — identidad Roland Print / INROPRIN */
   --bg:           #ECF0F3;
   --surface:      #FFFFFF;
   --surface2:     #F4F7F9;
   --border:       rgba(0,0,0,0.08);
   --border2:      rgba(0,0,0,0.14);
 
-  /* Brand teal (from Grama logo) */
-  --accent:       #045f6c;
-  --accent-dark:  #1A3840;     /* CTA button — same shade as Grama's "Crear Nuevo" */
-  --accent-dim:   rgba(4,95,108,0.09);
-  --accent-glow:  rgba(4,95,108,0.18);
+  /* Teal del logo Roland Print (#00A298) para acentos e interacción */
+  --accent:       #00A298;
+  --accent-dark:  #1D1D1B;     /* CTA — mismo tinta del wordmark Roland Print */
+  --accent-dim:   rgba(0,162,152,0.10);
+  --accent-glow:  rgba(0,162,152,0.20);
 
   /* Text */
   --text:         #0F1923;

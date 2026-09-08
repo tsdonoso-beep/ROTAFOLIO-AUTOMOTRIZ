@@ -1,4 +1,9 @@
-# Foto-Grama — Dossier técnico y funcional
+# INRO VIATICOS — Dossier técnico y funcional
+
+> Nombre de marca anterior: **Foto-Grama**. El repositorio, el proyecto de Vercel
+> (`foto-grama.vercel.app`) y la carpeta raíz en Google Drive (`FOTO-GRAMA`)
+> conservan el nombre original de infraestructura; solo cambió el nombre visible
+> de la aplicación.
 
 **Aplicación de rendición de gastos con extracción automática de comprobantes**
 

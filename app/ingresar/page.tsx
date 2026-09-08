@@ -52,14 +52,21 @@ export default function Ingresar() {
         </div>
 
         <p className="font-display" style={{
-          fontSize: 17, fontWeight: 800, color: "var(--text)",
-          letterSpacing: "-0.02em", textAlign: "center", marginBottom: 4,
+          fontSize: 19, fontWeight: 800, color: "var(--text)",
+          letterSpacing: "-0.02em", textAlign: "center", marginBottom: 3,
         }}>
-          Rendición de Gastos
+          INRO VIATICOS
+        </p>
+        <p style={{
+          fontSize: 12.5, color: "var(--text3)", textAlign: "center",
+          fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase",
+          fontFamily: "var(--font-sora), sans-serif",
+        }}>
+          Rendición de viáticos y gastos
         </p>
         <p style={{
           fontSize: 13, color: "var(--text2)", textAlign: "center",
-          marginBottom: 26, lineHeight: 1.5,
+          marginTop: 14, marginBottom: 26, lineHeight: 1.5,
         }}>
           Ingresa con tu cuenta para continuar
         </p>

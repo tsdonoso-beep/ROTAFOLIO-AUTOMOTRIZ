@@ -124,13 +124,13 @@ export default function UploadZone({ onAdd }: Props) {
           borderRadius: "10px",
           cursor: "pointer",
           transition: "all 0.2s",
-          background: dragging ? "rgba(4,95,108,0.05)" : "var(--surface2)",
+          background: dragging ? "rgba(0,162,152,0.05)" : "var(--surface2)",
           border: `2px dashed ${dragging ? "var(--accent)" : "rgba(0,0,0,0.12)"}`,
         }}
       >
         <div style={{
           width: 48, height: 48,
-          background: dragging ? "rgba(4,95,108,0.1)" : "#FFFFFF",
+          background: dragging ? "rgba(0,162,152,0.1)" : "#FFFFFF",
           borderRadius: "12px",
           display: "flex", alignItems: "center", justifyContent: "center",
           fontSize: "20px",
@@ -161,8 +161,8 @@ export default function UploadZone({ onAdd }: Props) {
             display: "flex", flexDirection: "column", alignItems: "center", gap: "8px",
             padding: "24px 16px",
             borderRadius: "10px",
-            border: "1px solid rgba(4,95,108,0.2)",
-            background: "rgba(4,95,108,0.05)",
+            border: "1px solid rgba(0,162,152,0.2)",
+            background: "rgba(0,162,152,0.05)",
             color: "var(--accent)",
             cursor: "pointer",
             transition: "all 0.15s",

@@ -44,10 +44,10 @@ export default function GastoCard({ item, onChange, onProcesar, onRegistrar, onE
         {/* File icon */}
         <div style={{
           width: 36, height: 36, borderRadius: "9px",
-          background: isImg ? "rgba(4,95,108,0.08)" : "rgba(99,102,241,0.08)",
+          background: isImg ? "rgba(0,162,152,0.08)" : "rgba(99,102,241,0.08)",
           display: "flex", alignItems: "center", justifyContent: "center",
           fontSize: "16px", flexShrink: 0,
-          border: `1px solid ${isImg ? "rgba(4,95,108,0.15)" : "rgba(99,102,241,0.15)"}`,
+          border: `1px solid ${isImg ? "rgba(0,162,152,0.15)" : "rgba(99,102,241,0.15)"}`,
         }}>
           {isImg ? "🖼" : "📄"}
         </div>
@@ -87,8 +87,8 @@ export default function GastoCard({ item, onChange, onProcesar, onRegistrar, onE
             <a href={item.drive_url} target="_blank" rel="noreferrer"
               style={{
                 fontSize: "12px", color: "var(--accent)", padding: "4px 9px",
-                borderRadius: "7px", border: "1px solid rgba(4,95,108,0.2)",
-                background: "rgba(4,95,108,0.06)", textDecoration: "none", fontWeight: 600,
+                borderRadius: "7px", border: "1px solid rgba(0,162,152,0.2)",
+                background: "rgba(0,162,152,0.06)", textDecoration: "none", fontWeight: 600,
               }}>
               Drive ↗
             </a>
@@ -194,7 +194,7 @@ export default function GastoCard({ item, onChange, onProcesar, onRegistrar, onE
             <div style={{
               padding: "14px 16px",
               borderBottom: "1px solid var(--border)",
-              background: "rgba(4,95,108,0.03)",
+              background: "rgba(0,162,152,0.03)",
             }}>
               <p style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.09em", color: "var(--accent)", textTransform: "uppercase", marginBottom: "12px", fontFamily: "var(--font-sora), sans-serif" }}>
                 ✦ Datos extraídos por IA
