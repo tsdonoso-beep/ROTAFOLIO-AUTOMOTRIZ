@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { clienteServidor, solicitanteActual } from "@/lib/supabase/servidor";
 import { autoriza } from "@/lib/dominio/permisos";
 import { Encabezado } from "@/components/v2/Encabezado";
+import { IconoAdministrar, IconoMas } from "@/components/v2/Iconos";
 import { BandejaMemos, CAMPOS_MEMO, type FilaMemo } from "@/components/v2/BandejaMemos";
 
 export default async function Administrar() {
@@ -24,7 +25,8 @@ export default async function Administrar() {
         bajada="El memo se crea aquí, con su centro de costo y monto autorizado. El rendidor solo elige entre los que le asignaste."
         accion={
           <Link href="/administrar/nuevo" className="btn-primary" style={{ textDecoration: "none" }}>
-            + Nuevo memo
+            <IconoMas size={17} />
+            Nuevo memo
           </Link>
         }
       />
@@ -32,7 +34,7 @@ export default async function Administrar() {
         memos={(data ?? []) as unknown as FilaMemo[]}
         base="/administrar"
         vacio={{
-          icono: "🗂",
+          icono: <IconoAdministrar size={26} />,
           titulo: "Todavía no hay memos",
           texto: "Crea el primero indicando centro de costo, persona asignada y monto autorizado. Aparecerá en «Mis memos» de esa persona.",
         }}

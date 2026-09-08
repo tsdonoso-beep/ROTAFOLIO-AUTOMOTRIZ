@@ -3,6 +3,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { clienteNavegador } from "@/lib/supabase/cliente";
 import Logo from "@/components/Logo";
+import { Aviso } from "@/components/v2/Encabezado";
+import { IconoAlerta } from "@/components/v2/Iconos";
 
 export default function Ingresar() {
   const router = useRouter();
@@ -35,33 +37,35 @@ export default function Ingresar() {
   };
 
   return (
+    /*
+      Un halo del verde de marca detrás de la tarjeta: da profundidad a una
+      pantalla que, por definición, no tiene contenido que mostrar todavía.
+    */
     <div style={{
       minHeight: "100dvh", display: "flex",
       alignItems: "center", justifyContent: "center", padding: 20,
+      background:
+        "radial-gradient(700px 420px at 50% -8%, var(--accent-suave), transparent 70%), var(--fondo)",
     }}>
       <form onSubmit={entrar} className="animate-fadein" style={{
         width: "100%", maxWidth: 380,
         background: "#FFFFFF",
         border: "1px solid var(--border)",
-        borderRadius: 16,
-        padding: "32px 28px",
-        boxShadow: "0 8px 32px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)",
+        borderRadius: "var(--radio-l)",
+        padding: "34px 28px",
+        boxShadow: "var(--sombra3)",
       }}>
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 24 }}>
           <Logo height={26} />
         </div>
 
         <p className="font-display" style={{
-          fontSize: 19, fontWeight: 800, color: "var(--text)",
-          letterSpacing: "-0.02em", textAlign: "center", marginBottom: 3,
+          fontSize: 21, fontWeight: 800, color: "var(--text)",
+          letterSpacing: "-0.025em", textAlign: "center", marginBottom: 5,
         }}>
           INRO VIATICOS
         </p>
-        <p style={{
-          fontSize: 12.5, color: "var(--text3)", textAlign: "center",
-          fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase",
-          fontFamily: "var(--font-sora), sans-serif",
-        }}>
+        <p className="rotulo" style={{ textAlign: "center" }}>
           Rendición de viáticos y gastos
         </p>
         <p style={{
@@ -87,9 +91,9 @@ export default function Ingresar() {
         />
 
         {error && (
-          <p style={{ marginTop: 12, fontSize: 12, color: "var(--danger)", textAlign: "center" }}>
-            {error}
-          </p>
+          <div className="animate-fadein" style={{ marginTop: 14 }}>
+            <Aviso tono="error" icono={<IconoAlerta size={17} />}>{error}</Aviso>
+          </div>
         )}
 
         <button

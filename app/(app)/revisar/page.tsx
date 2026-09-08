@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { clienteServidor, solicitanteActual } from "@/lib/supabase/servidor";
 import { autoriza } from "@/lib/dominio/permisos";
 import { Encabezado } from "@/components/v2/Encabezado";
+import { IconoRevisar } from "@/components/v2/Iconos";
 import { BandejaMemos, CAMPOS_MEMO, type FilaMemo } from "@/components/v2/BandejaMemos";
 
 export default async function Revisar() {
@@ -29,7 +30,7 @@ export default async function Revisar() {
         memos={(data ?? []) as unknown as FilaMemo[]}
         base="/revisar"
         vacio={{
-          icono: "✅",
+          icono: <IconoRevisar size={26} />,
           titulo: "No hay nada por revisar",
           texto: "Cuando alguien presente una rendición aparecerá aquí con su consolidado y sus alertas.",
         }}

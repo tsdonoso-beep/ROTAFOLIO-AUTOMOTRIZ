@@ -3,6 +3,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Tarjeta } from "./Encabezado";
+import { IconoAtras, IconoCheck } from "./Iconos";
 import { crearMemo } from "@/app/acciones/memos";
 
 interface Props {
@@ -59,10 +60,11 @@ export default function FormularioMemo({ centros, personas }: Props) {
   return (
     <>
       <Link href="/administrar" style={{
-        fontSize: 12.5, color: "var(--text2)", textDecoration: "none",
-        display: "inline-block", marginBottom: 14,
+        display: "inline-flex", alignItems: "center", gap: 5,
+        fontSize: 13, color: "var(--text2)", textDecoration: "none", marginBottom: 16,
       }}>
-        ‹ Administrar memos
+        <IconoAtras size={15} />
+        Administrar memos
       </Link>
 
       <h1 className="font-display" style={{
@@ -123,7 +125,7 @@ export default function FormularioMemo({ centros, personas }: Props) {
                     color: "#FFFFFF", fontSize: 12,
                     display: "flex", alignItems: "center", justifyContent: "center",
                   }}>
-                    {activo && "✓"}
+                    {activo && <IconoCheck size={13} />}
                   </span>
                   <span style={{ flex: 1 }}>
                     <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)", display: "block" }}>

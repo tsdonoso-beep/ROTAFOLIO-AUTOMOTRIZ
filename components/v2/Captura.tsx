@@ -2,6 +2,8 @@
 import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { clienteNavegador } from "@/lib/supabase/cliente";
+import { Aviso } from "./Encabezado";
+import { IconoAlerta, IconoCamara, IconoGaleria } from "./Iconos";
 import { getApiKey } from "@/lib/apikey";
 import { validarGasto } from "@/lib/dominio/validaciones";
 import type { Alerta, Parametros, ResultadoExtraccion } from "@/lib/dominio/tipos";
@@ -33,7 +35,7 @@ export default function Captura({ memoId, parametros, memo, rendidoPrevio, onLis
 
     const clave = getApiKey();
     if (!clave) {
-      setError("Configura tu clave de IA con el botón 🔑 de arriba antes de capturar.");
+      setError("Configura tu clave de IA con el botón de la llave, arriba a la derecha, antes de capturar.");
       return;
     }
 
@@ -143,59 +145,93 @@ export default function Captura({ memoId, parametros, memo, rendidoPrevio, onLis
 
   const ocupado = paso !== "reposo";
 
+  /** Los tres pasos, para que la espera tenga forma y no sea un limbo. */
+  const PASOS: Paso[] = ["comprimiendo", "extrayendo", "guardando"];
+  const indicePaso = PASOS.indexOf(paso);
+
   return (
     <div>
+      {/*
+        La cámara pesa más que la galería: en campo es la acción real, y
+        quien está parado frente a un mostrador necesita acertarle sin
+        mirar. Ocupa el doble de ancho y lleva el color de marca.
+      */}
       <div style={{ display: "flex", gap: 10 }}>
         <button
           onClick={() => camara.current?.click()} disabled={ocupado}
           style={{
-            flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
-            padding: "22px 16px", borderRadius: 12, cursor: ocupado ? "wait" : "pointer",
-            border: "1px solid rgba(0,162,152,0.25)", background: "rgba(0,162,152,0.06)",
-            color: "var(--accent)", fontFamily: "var(--font-sora), sans-serif",
-            opacity: ocupado ? 0.5 : 1, transition: "opacity 0.2s",
+            flex: 2, display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center", gap: 9,
+            padding: "26px 18px", borderRadius: "var(--radio)",
+            cursor: ocupado ? "wait" : "pointer",
+            border: "1px solid var(--accent-borde)",
+            background: "var(--accent-suave)",
+            color: "var(--accent-texto)",
+            fontFamily: "var(--font-sora), sans-serif",
+            opacity: ocupado ? 0.45 : 1,
+            transition: "opacity var(--medio) var(--curva), transform var(--rapido) var(--curva)",
           }}
         >
-          <span style={{ fontSize: 26 }}>📷</span>
-          <span style={{ fontSize: 13, fontWeight: 700 }}>Tomar foto</span>
+          <IconoCamara size={30} />
+          <span style={{ fontSize: 14, fontWeight: 700 }}>Tomar foto</span>
         </button>
+
         <button
           onClick={() => galeria.current?.click()} disabled={ocupado}
           style={{
-            flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
-            padding: "22px 16px", borderRadius: 12, cursor: ocupado ? "wait" : "pointer",
-            border: "1px solid var(--border2)", background: "#FFFFFF",
+            flex: 1, display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center", gap: 9,
+            padding: "26px 14px", borderRadius: "var(--radio)",
+            cursor: ocupado ? "wait" : "pointer",
+            border: "1px solid var(--border2)", background: "var(--surface)",
             color: "var(--text2)", fontFamily: "var(--font-sora), sans-serif",
-            opacity: ocupado ? 0.5 : 1, transition: "opacity 0.2s",
+            opacity: ocupado ? 0.45 : 1,
+            transition: "opacity var(--medio) var(--curva), background var(--rapido) var(--curva)",
           }}
         >
-          <span style={{ fontSize: 26 }}>📁</span>
-          <span style={{ fontSize: 13, fontWeight: 700 }}>Galería o PDF</span>
+          <IconoGaleria size={26} />
+          <span style={{ fontSize: 12.5, fontWeight: 600, textAlign: "center" }}>
+            Galería<br />o PDF
+          </span>
         </button>
       </div>
 
+      {/* Progreso por etapas: se ve qué está pasando y cuánto falta. */}
       {ocupado && (
-        <div style={{
-          marginTop: 12, padding: "12px 14px", borderRadius: 10,
-          background: "rgba(0,162,152,0.06)", border: "1px solid rgba(0,162,152,0.18)",
-          display: "flex", alignItems: "center", gap: 10,
+        <div className="animate-fadein" style={{
+          marginTop: 13, padding: "14px 16px", borderRadius: "var(--radio-s)",
+          background: "var(--accent-suave)", border: "1px solid var(--accent-borde)",
         }}>
-          <span className="animate-spin" style={{
-            display: "inline-block", width: 14, height: 14, flexShrink: 0,
-            border: "2px solid var(--accent)", borderTopColor: "transparent", borderRadius: "50%",
-          }} />
-          <p style={{ fontSize: 13, color: "var(--accent)", fontWeight: 600 }}>{progreso}</p>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span className="animate-spin" style={{
+              display: "inline-block", width: 15, height: 15, flexShrink: 0,
+              border: "2px solid var(--accent)", borderTopColor: "transparent",
+              borderRadius: "50%",
+            }} />
+            <p style={{
+              fontSize: 13.5, color: "var(--accent-texto)", fontWeight: 600,
+              fontFamily: "var(--font-sora), sans-serif",
+            }}>
+              {progreso}
+            </p>
+          </div>
+
+          <div style={{ display: "flex", gap: 5, marginTop: 12 }}>
+            {PASOS.map((p, i) => (
+              <span key={p} style={{
+                flex: 1, height: 3, borderRadius: 999,
+                background: i <= indicePaso ? "var(--accent)" : "var(--accent-borde)",
+                opacity: i === indicePaso ? 1 : i < indicePaso ? 0.75 : 0.4,
+                transition: "background var(--medio) var(--curva), opacity var(--medio) var(--curva)",
+              }} />
+            ))}
+          </div>
         </div>
       )}
 
       {error && (
-        <div style={{
-          marginTop: 12, padding: "12px 14px", borderRadius: 10,
-          background: "var(--danger-bg)", border: "1px solid rgba(220,38,38,0.2)",
-          display: "flex", gap: 9, alignItems: "flex-start",
-        }}>
-          <span style={{ fontSize: 14, flexShrink: 0 }}>⚠️</span>
-          <p style={{ fontSize: 12.5, color: "var(--danger)", lineHeight: 1.5 }}>{error}</p>
+        <div className="animate-fadein" style={{ marginTop: 13 }}>
+          <Aviso tono="error" icono={<IconoAlerta size={17} />}>{error}</Aviso>
         </div>
       )}
 

@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { clearApiKey, getApiKey, maskApiKey, pareceKeyValida, setApiKey } from "@/lib/apikey";
 import { testConexion } from "@/lib/gemini";
+import { IconoAlerta, IconoCheck, IconoLlave } from "./v2/Iconos";
 
 export default function ApiKeyConfig({ onChange }: { onChange?: (k: string) => void }) {
   const [open, setOpen] = useState(false);
@@ -78,7 +79,7 @@ export default function ApiKeyConfig({ onChange }: { onChange?: (k: string) => v
           letterSpacing: "-0.01em",
         }}
       >
-        <span style={{ fontSize: "14px" }}>{saved ? "🔑" : "⚠"}</span>
+        {saved ? <IconoLlave size={15} /> : <IconoAlerta size={15} />}
         <span className="hidden sm:inline">{saved ? maskApiKey(saved) : "API Key"}</span>
       </button>
 
@@ -119,9 +120,15 @@ export default function ApiKeyConfig({ onChange }: { onChange?: (k: string) => v
           />
 
           {input.trim() && !pareceKeyValida(input) && (
-            <p style={{ marginTop: 8, fontSize: "11.5px", color: "var(--warn)", lineHeight: 1.5 }}>
-              ⚠ Las claves de Gemini empiezan con <strong>AIza</strong>. Esta parece
-              ser de otro tipo de credencial de Google y no funcionará.
+            <p style={{
+              marginTop: 8, fontSize: "11.5px", color: "var(--warn)", lineHeight: 1.5,
+              display: "flex", gap: 6, alignItems: "flex-start",
+            }}>
+              <span style={{ flexShrink: 0, marginTop: 1 }}><IconoAlerta size={14} /></span>
+              <span>
+                Las claves de Gemini empiezan con <strong>AIza</strong>. Esta parece
+                ser de otro tipo de credencial de Google y no funcionará.
+              </span>
             </p>
           )}
           <div style={{ display: "flex", gap: "8px", marginTop: "12px", flexWrap: "wrap" }}>
@@ -147,7 +154,8 @@ export default function ApiKeyConfig({ onChange }: { onChange?: (k: string) => v
           </div>
           {msg && (
             <p style={{ marginTop: "10px", fontSize: "12px", color: msg.ok ? "var(--accent)" : "var(--danger)", display: "flex", alignItems: "center", gap: "5px" }}>
-              {msg.ok ? "✓" : "✕"} {msg.texto}
+              {msg.ok ? <IconoCheck size={15} /> : <IconoAlerta size={15} />}
+              {msg.texto}
             </p>
           )}
         </div>

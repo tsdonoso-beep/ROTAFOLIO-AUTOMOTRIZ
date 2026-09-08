@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CENTROS_COSTOS, filtrarCentros, normalizar } from "@/lib/centros-costos";
+import { IconoCheck, IconoChevron } from "./v2/Iconos";
 
 interface Props {
   value: string;
@@ -78,7 +79,7 @@ export default function ComboCentroCosto({ value, onChange, placeholder }: Props
             color: "var(--text3)", fontSize: "11px", padding: 4, lineHeight: 1,
           }}
         >
-          {abierto ? "▲" : "▼"}
+          <IconoChevron size={16} abierto={abierto} />
         </button>
       </div>
 
@@ -125,7 +126,7 @@ export default function ComboCentroCosto({ value, onChange, placeholder }: Props
                   }}
                 >
                   <span style={{ flex: 1 }}>{c}</span>
-                  {elegida && <span style={{ color: "var(--accent)", fontSize: "13px" }}>✓</span>}
+                  {elegida && <span style={{ color: "var(--accent)", display: "flex" }}><IconoCheck size={15} /></span>}
                 </button>
               );
             })

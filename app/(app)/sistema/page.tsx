@@ -3,6 +3,7 @@ import { clienteServidor, solicitanteActual } from "@/lib/supabase/servidor";
 import { autoriza } from "@/lib/dominio/permisos";
 import { Encabezado, Tarjeta } from "@/components/v2/Encabezado";
 import { NOMBRE_ROL } from "@/lib/dominio/navegacion";
+import { IconoAdministrar } from "@/components/v2/Iconos";
 import type { Rol } from "@/lib/dominio/tipos";
 
 export default async function Sistema() {
@@ -87,7 +88,12 @@ export default async function Sistema() {
                   {c.codigo}
                 </span>
                 <span style={{ fontSize: 13, color: "var(--text)", flex: 1 }}>{c.nombre}</span>
-                <span style={{ fontSize: 11, color: "var(--text3)" }}>📁 {c.drive_folder}</span>
+                <span style={{
+                  fontSize: 11, color: "var(--text3)", display: "inline-flex",
+                  alignItems: "center", gap: 5,
+                }}>
+                  <IconoAdministrar size={13} />{c.drive_folder}
+                </span>
               </div>
             ))}
           </Tarjeta>

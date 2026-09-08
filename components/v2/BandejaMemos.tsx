@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { EstadoMemo, Tarjeta, Vacio, soles } from "./Encabezado";
+import { EstadoMemo, Medidor, Vacio, soles } from "./Encabezado";
 import { consolidar } from "@/lib/dominio/memo";
 import type { Alerta, ClaseGasto, EstadoGasto } from "@/lib/dominio/tipos";
 
@@ -17,19 +17,19 @@ export interface FilaMemo {
 }
 
 /**
- * Lista de memos compartida por las bandejas de revisión, contabilidad y
- * administración. Cambia el texto del vacío y la ruta, no la forma de leer
- * la información: así las tres pantallas se ven y se entienden igual.
+ * Lista compartida por las bandejas de revisión, contabilidad y
+ * administración. Cambia el destino y el texto del vacío, no la forma de
+ * leer la información: así las tres pantallas se entienden igual.
  */
 export function BandejaMemos({ memos, base, vacio }: {
   memos: FilaMemo[];
   base: string;
-  vacio: { icono: string; titulo: string; texto: string };
+  vacio: { icono: React.ReactNode; titulo: string; texto: string };
 }) {
   if (!memos.length) return <Vacio {...vacio} />;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+    <div className="stagger" style={{ display: "flex", flexDirection: "column", gap: 11 }}>
       {memos.map(m => {
         const c = consolidar(Number(m.monto_autorizado), m.gastos ?? []);
         const personas = (m.memo_asignados ?? [])
@@ -37,20 +37,23 @@ export function BandejaMemos({ memos, base, vacio }: {
         const excedido = c.rendido > c.autorizado;
 
         return (
-          <Link key={m.id} href={`${base}/${m.id}`} style={{ textDecoration: "none" }}>
-            <Tarjeta padding={15}>
-              <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-start" }}>
-                <div style={{ flex: 1, minWidth: 210 }}>
+          <Link key={m.id} href={`${base}/${m.id}`}
+            className="animate-fadein" style={{ textDecoration: "none" }}>
+            <div className="tarjeta tarjeta-int" style={{ padding: "16px 18px" }}>
+              <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-start" }}>
+                <div style={{ flex: 1, minWidth: 220 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
-                    <span style={{
-                      fontSize: 11.5, fontFamily: "monospace", color: "var(--text2)",
-                      background: "var(--surface2)", padding: "2px 7px", borderRadius: 5,
+                    <span className="mono" style={{
+                      fontSize: 11.5, color: "var(--text2)", background: "var(--surface2)",
+                      padding: "3px 8px", borderRadius: 6, border: "1px solid var(--border)",
                     }}>
                       {m.correlativo}
                     </span>
                     <EstadoMemo estado={m.estado} />
                     {c.bloqueantes > 0 && (
-                      <span className="badge badge-error">{c.bloqueantes} bloqueante{c.bloqueantes > 1 ? "s" : ""}</span>
+                      <span className="badge badge-error">
+                        {c.bloqueantes} bloqueante{c.bloqueantes > 1 ? "s" : ""}
+                      </span>
                     )}
                     {c.con_alertas > 0 && c.bloqueantes === 0 && (
                       <span className="badge badge-warn">{c.con_alertas} con alerta</span>
@@ -58,41 +61,49 @@ export function BandejaMemos({ memos, base, vacio }: {
                   </div>
 
                   <p className="font-display" style={{
-                    fontSize: 14, fontWeight: 700, color: "var(--text)", marginTop: 6,
+                    fontSize: 15, fontWeight: 700, color: "var(--text)",
+                    marginTop: 9, letterSpacing: "-0.02em", lineHeight: 1.3,
                   }}>
                     {m.destino || m.centros_costo?.nombre || "Sin destino"}
                   </p>
-                  <p style={{ fontSize: 11.5, color: "var(--text3)", marginTop: 2 }}>
+                  <p style={{ fontSize: 12, color: "var(--text3)", marginTop: 3, lineHeight: 1.5 }}>
                     {personas || "Sin asignar"}
-                    {m.centros_costo && ` · ${m.centros_costo.codigo}`}
+                    {m.centros_costo && <> · <span className="mono">{m.centros_costo.codigo}</span></>}
                     {m.fecha_salida && ` · ${m.fecha_salida}`}
                   </p>
                 </div>
 
-                <div style={{ textAlign: "right", minWidth: 130 }}>
-                  <p className="font-display" style={{
-                    fontSize: 16, fontWeight: 800, letterSpacing: "-0.02em",
-                    color: excedido ? "var(--danger)" : "var(--text)",
+                <div style={{ minWidth: 172 }}>
+                  <div style={{
+                    display: "flex", justifyContent: "space-between",
+                    alignItems: "baseline", marginBottom: 7,
                   }}>
-                    {soles(c.rendido)}
-                  </p>
-                  <p style={{ fontSize: 11, color: "var(--text3)", marginTop: 1 }}>
-                    de {soles(c.autorizado)}
-                  </p>
+                    <span className="cifra cifra-l" style={{
+                      color: excedido ? "var(--danger)" : "var(--text)",
+                    }}>
+                      {soles(c.rendido)}
+                    </span>
+                    <span style={{ fontSize: 11.5, color: "var(--text3)" }}>
+                      de {soles(c.autorizado)}
+                    </span>
+                  </div>
+
+                  <Medidor rendido={c.rendido} autorizado={c.autorizado} />
+
                   <p style={{
-                    fontSize: 11, marginTop: 3, fontWeight: 600,
+                    fontSize: 11.5, marginTop: 8, fontWeight: 600,
                     color: excedido ? "var(--danger)" : "var(--text2)",
                   }}>
                     {excedido
                       ? `Reembolsar ${soles(c.reembolso)}`
                       : c.devolucion > 0 ? `Devolver ${soles(c.devolucion)}` : "Sin saldo"}
-                  </p>
-                  <p style={{ fontSize: 10.5, color: "var(--text3)", marginTop: 3 }}>
-                    {c.cantidad_gastos} comprobante{c.cantidad_gastos === 1 ? "" : "s"}
+                    <span style={{ color: "var(--text3)", fontWeight: 400 }}>
+                      {" · "}{c.cantidad_gastos} comprobante{c.cantidad_gastos === 1 ? "" : "s"}
+                    </span>
                   </p>
                 </div>
               </div>
-            </Tarjeta>
+            </div>
           </Link>
         );
       })}

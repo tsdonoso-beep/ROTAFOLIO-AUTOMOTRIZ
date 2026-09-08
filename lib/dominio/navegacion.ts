@@ -11,7 +11,6 @@ export interface Seccion {
   clave: string;
   etiqueta: string;
   ruta: string;
-  icono: string;
   /** Acción que debe estar permitida para ver la sección. */
   requiere: Accion;
   resumen: string;
@@ -22,7 +21,6 @@ export const SECCIONES: Seccion[] = [
     clave: "memos",
     etiqueta: "Mis memos",
     ruta: "/memos",
-    icono: "📋",
     requiere: "ver_memos_propios",
     resumen: "Tus rendiciones abiertas y los comprobantes que llevas cargados",
   },
@@ -30,7 +28,6 @@ export const SECCIONES: Seccion[] = [
     clave: "administrar",
     etiqueta: "Administrar",
     ruta: "/administrar",
-    icono: "🗂",
     requiere: "crear_memo",
     resumen: "Crear memos, asignar personas y definir el monto autorizado",
   },
@@ -38,7 +35,6 @@ export const SECCIONES: Seccion[] = [
     clave: "revisar",
     etiqueta: "Revisar",
     ruta: "/revisar",
-    icono: "🔍",
     requiere: "aprobar_rendicion",
     resumen: "Rendiciones presentadas, con sus alertas y desviaciones",
   },
@@ -46,7 +42,6 @@ export const SECCIONES: Seccion[] = [
     clave: "contabilidad",
     etiqueta: "Contabilidad",
     ruta: "/contabilidad",
-    icono: "📒",
     requiere: "marcar_contabilizado",
     resumen: "Rendiciones aprobadas, exportación y marcado de contabilizado",
   },
@@ -54,7 +49,6 @@ export const SECCIONES: Seccion[] = [
     clave: "tablero",
     etiqueta: "Tablero",
     ruta: "/tablero",
-    icono: "📊",
     requiere: "autorizar_apertura_con_pendientes",
     resumen: "Pendientes de tu área y autorizaciones de excepción",
   },
@@ -62,7 +56,6 @@ export const SECCIONES: Seccion[] = [
     clave: "sistema",
     etiqueta: "Sistema",
     ruta: "/sistema",
-    icono: "⚙️",
     requiere: "editar_catalogos",
     resumen: "Usuarios, catálogos, parámetros y bitácora de eventos",
   },

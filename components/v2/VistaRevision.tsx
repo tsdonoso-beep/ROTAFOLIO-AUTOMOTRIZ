@@ -3,7 +3,8 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import GastoFila from "./GastoFila";
-import { EstadoMemo, Tarjeta, soles } from "./Encabezado";
+import { Aviso, Cifra, EstadoMemo, Medidor, Tarjeta, soles } from "./Encabezado";
+import { IconoAlerta, IconoAtras, IconoBloqueo, IconoCheck, IconoDescargar } from "./Iconos";
 import { consolidar } from "@/lib/dominio/memo";
 import { aprobarRendicion, marcarContabilizado, observarGastos } from "@/app/acciones/memos";
 import { descargarCsv, filasCsv } from "@/lib/export/csv";
@@ -92,10 +93,11 @@ export default function VistaRevision({ memo, gastos, parametros, modo }: Props)
   return (
     <>
       <Link href={base} style={{
-        fontSize: 12.5, color: "var(--text2)", textDecoration: "none",
-        display: "inline-block", marginBottom: 14,
+        display: "inline-flex", alignItems: "center", gap: 5,
+        fontSize: 13, color: "var(--text2)", textDecoration: "none", marginBottom: 16,
       }}>
-        ‹ {modo === "revisar" ? "Rendiciones por revisar" : "Contabilidad"}
+        <IconoAtras size={15} />
+        {modo === "revisar" ? "Rendiciones por revisar" : "Contabilidad"}
       </Link>
 
       {/* ── Panel superior ── */}
@@ -124,33 +126,41 @@ export default function VistaRevision({ memo, gastos, parametros, modo }: Props)
           {memo.aprobadoPor && ` · Aprobó: ${memo.aprobadoPor}`}
         </p>
 
+        {/*
+          El mismo panel hundido que ve el rendidor: quien revisa y quien
+          rindió leen la misma instrumentación, así no discuten cifras
+          presentadas de dos maneras distintas.
+        */}
         <div style={{
-          display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 10,
-          marginTop: 15, paddingTop: 15, borderTop: "1px solid var(--border)",
+          marginTop: 16, padding: "15px 16px 16px", borderRadius: "var(--radio-s)",
+          background: "var(--surface2)", border: "1px solid var(--border)",
         }}>
-          {[
-            { e: "Autorizado", v: soles(consolidado.autorizado), c: "var(--text)" },
-            { e: "Rendido", v: soles(consolidado.rendido), c: excedido ? "var(--danger)" : "var(--text)" },
-            {
-              e: excedido ? "A reembolsar" : "A devolver",
-              v: soles(excedido ? consolidado.reembolso : consolidado.devolucion),
-              c: excedido ? "var(--danger)" : "var(--accent)",
-            },
-            { e: "Con alertas", v: String(consolidado.con_alertas), c: consolidado.con_alertas ? "var(--warn)" : "var(--text)" },
-          ].map(k => (
-            <div key={k.e} style={{ textAlign: "center" }}>
-              <p className="font-display" style={{ fontSize: 15, fontWeight: 800, color: k.c, letterSpacing: "-0.02em" }}>
-                {k.v}
-              </p>
-              <p style={{
-                fontSize: 9, color: "var(--text3)", marginTop: 2, fontWeight: 700,
-                letterSpacing: "0.06em", textTransform: "uppercase",
-                fontFamily: "var(--font-sora), sans-serif",
-              }}>
-                {k.e}
-              </p>
-            </div>
-          ))}
+          <div style={{
+            display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(105px, 1fr))", gap: 12,
+          }}>
+            <Cifra rotulo="Autorizado" valor={soles(consolidado.autorizado)} tamano="m" />
+            <Cifra
+              rotulo="Rendido"
+              valor={soles(consolidado.rendido)}
+              tono={excedido ? "peligro" : "neutro"}
+              tamano="m"
+            />
+            <Cifra
+              rotulo={excedido ? "A reembolsar" : "A devolver"}
+              valor={soles(excedido ? consolidado.reembolso : consolidado.devolucion)}
+              tono={excedido ? "peligro" : "acento"}
+              tamano="m"
+            />
+            <Cifra
+              rotulo="Con alertas"
+              valor={String(consolidado.con_alertas)}
+              tono={consolidado.con_alertas ? "aviso" : "tenue"}
+              tamano="m"
+            />
+          </div>
+          <div style={{ marginTop: 13 }}>
+            <Medidor rendido={consolidado.rendido} autorizado={consolidado.autorizado} />
+          </div>
         </div>
       </Tarjeta>
 
@@ -190,11 +200,8 @@ export default function VistaRevision({ memo, gastos, parametros, modo }: Props)
       </div>
 
       {error && (
-        <div style={{
-          marginTop: 13, padding: "12px 14px", borderRadius: 10,
-          background: "var(--danger-bg)", border: "1px solid rgba(220,38,38,0.2)",
-        }}>
-          <p style={{ fontSize: 12.5, color: "var(--danger)", lineHeight: 1.5 }}>{error}</p>
+        <div className="animate-fadein" style={{ marginTop: 13 }}>
+          <Aviso tono="error" icono={<IconoAlerta size={17} />}>{error}</Aviso>
         </div>
       )}
 
@@ -203,19 +210,18 @@ export default function VistaRevision({ memo, gastos, parametros, modo }: Props)
         <div style={{ marginTop: 18, display: "flex", gap: 10, flexWrap: "wrap" }}>
           <button
             onClick={observar} disabled={pendiente || !conMotivo.length}
+            className="btn-peligro"
             style={{
-              flex: 1, minWidth: 180, padding: 12, borderRadius: 9, cursor: "pointer",
-              border: "1px solid rgba(220,38,38,0.3)", background: "var(--danger-bg)",
-              color: "var(--danger)", fontSize: 13.5, fontWeight: 700,
-              fontFamily: "var(--font-sora), sans-serif",
+              flex: 1, minWidth: 180, justifyContent: "center", padding: 12, fontSize: 13.5,
               opacity: conMotivo.length ? 1 : 0.5,
+              cursor: conMotivo.length ? "pointer" : "not-allowed",
             }}
           >
             Observar {conMotivo.length > 0 && `(${conMotivo.length})`}
           </button>
           <button className="btn-primary" onClick={aprobar} disabled={pendiente || marcados.length > 0}
             style={{ flex: 2, minWidth: 180, justifyContent: "center", padding: 12, fontSize: 13.5 }}>
-            {pendiente ? "Procesando…" : "Aprobar rendición"}
+            {pendiente ? "Procesando…" : <><IconoCheck size={17} />Aprobar rendición</>}
           </button>
         </div>
       )}
@@ -232,7 +238,8 @@ export default function VistaRevision({ memo, gastos, parametros, modo }: Props)
           <Tarjeta>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
               <button className="btn-ghost" onClick={exportar} style={{ padding: "11px 18px" }}>
-                ⬇ Exportar CSV
+                <IconoDescargar size={16} />
+                Exportar CSV
               </button>
               {memo.estado === "APROBADA" && (
                 <>
@@ -249,9 +256,11 @@ export default function VistaRevision({ memo, gastos, parametros, modo }: Props)
               )}
             </div>
             {memo.estado === "CONTABILIZADA" && (
-              <p style={{ marginTop: 11, fontSize: 12.5, color: "var(--success)", fontWeight: 600 }}>
-                🔒 Ya contabilizada. El expediente queda cerrado.
-              </p>
+              <div style={{ marginTop: 12 }}>
+                <Aviso tono="ok" icono={<IconoBloqueo size={17} />}>
+                  Ya contabilizada. El expediente queda cerrado y no admite cambios.
+                </Aviso>
+              </div>
             )}
           </Tarjeta>
         </div>

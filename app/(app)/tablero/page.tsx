@@ -3,6 +3,7 @@ import { clienteServidor, solicitanteActual } from "@/lib/supabase/servidor";
 import { autoriza } from "@/lib/dominio/permisos";
 import { Encabezado, Tarjeta, Vacio, soles } from "@/components/v2/Encabezado";
 import { consolidar } from "@/lib/dominio/memo";
+import { IconoTablero } from "@/components/v2/Iconos";
 import type { Alerta, ClaseGasto, EstadoGasto } from "@/lib/dominio/tipos";
 
 interface MemoTablero {
@@ -68,7 +69,7 @@ export default async function Tablero() {
 
       {!filas.length ? (
         <Vacio
-          icono="📊"
+          icono={<IconoTablero size={26} />}
           titulo="Nadie tiene memos abiertos"
           texto="Cuando se abran memos en tu área, aquí verás el consolidado por persona y los días de atraso."
         />

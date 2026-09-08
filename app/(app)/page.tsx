@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { clienteServidor, solicitanteActual } from "@/lib/supabase/servidor";
 import { seccionesDe, seccionInicial, NOMBRE_ROL } from "@/lib/dominio/navegacion";
-import { Encabezado, Tarjeta, soles } from "@/components/v2/Encabezado";
+import { Cifra, Encabezado, Tarjeta, soles } from "@/components/v2/Encabezado";
+import { ICONOS_SECCION, IconoChevron } from "@/components/v2/Iconos";
 
 export default async function Inicio() {
   const solicitante = await solicitanteActual();
@@ -42,8 +43,8 @@ export default async function Inicio() {
       />
 
       <div className="stagger" style={{
-        display: "grid", gap: 10, marginBottom: 24,
-        gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+        display: "grid", gap: 10, marginBottom: 26,
+        gridTemplateColumns: "repeat(auto-fit, minmax(148px, 1fr))",
       }}>
         {[
           { etiqueta: "Memos abiertos", valor: String(abiertos), acento: abiertos > 0 },
@@ -51,25 +52,13 @@ export default async function Inicio() {
           { etiqueta: "Por contabilizar", valor: String(cuenta("APROBADA")), acento: cuenta("APROBADA") > 0 },
           { etiqueta: "Monto sin rendir", valor: montoAbierto > 0 ? soles(montoAbierto) : "—", acento: false },
         ].map(k => (
-          <div key={k.etiqueta} className="animate-fadein" style={{
-            background: "#FFFFFF", border: "1px solid var(--border)",
-            borderRadius: 12, padding: "16px 14px", textAlign: "center",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
-          }}>
-            <p className="font-display" style={{
-              fontSize: 20, fontWeight: 800, letterSpacing: "-0.03em",
-              color: k.acento ? "var(--accent)" : "var(--text)",
-            }}>
-              {k.valor}
-            </p>
-            <p style={{
-              fontSize: 9.5, color: "var(--text3)", marginTop: 3, fontWeight: 700,
-              letterSpacing: "0.06em", textTransform: "uppercase",
-              fontFamily: "var(--font-sora), sans-serif",
-            }}>
-              {k.etiqueta}
-            </p>
-          </div>
+          <Tarjeta key={k.etiqueta} padding={15} className="animate-fadein">
+            <Cifra
+              rotulo={k.etiqueta}
+              valor={k.valor}
+              tono={k.acento ? "acento" : k.valor === "—" ? "tenue" : "neutro"}
+            />
+          </Tarjeta>
         ))}
       </div>
 
@@ -77,42 +66,53 @@ export default async function Inicio() {
         display: "grid", gap: 12,
         gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
       }}>
-        {secciones.map(s => (
-          <Link key={s.clave} href={s.ruta} style={{ textDecoration: "none" }}>
-            <Tarjeta>
-              <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-                <div style={{
-                  width: 40, height: 40, borderRadius: 10, flexShrink: 0,
-                  background: "var(--surface2)", border: "1px solid var(--border)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 18,
-                }}>
-                  {s.icono}
-                </div>
-                <div>
-                  <p className="font-display" style={{
-                    fontSize: 14, fontWeight: 700, color: "var(--text)",
-                    letterSpacing: "-0.01em",
+        {secciones.map(seccion => {
+          const Icono = ICONOS_SECCION[seccion.clave];
+          const esInicio = inicial?.clave === seccion.clave;
+          return (
+            <Link key={seccion.clave} href={seccion.ruta} style={{ textDecoration: "none" }}>
+              <Tarjeta className="tarjeta-int">
+                <div style={{ display: "flex", alignItems: "center", gap: 13 }}>
+                  <div style={{
+                    width: 42, height: 42, borderRadius: 11, flexShrink: 0,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    background: esInicio ? "var(--accent-suave)" : "var(--surface2)",
+                    border: `1px solid ${esInicio ? "var(--accent-borde)" : "var(--border)"}`,
+                    color: esInicio ? "var(--accent-texto)" : "var(--text2)",
                   }}>
-                    {s.etiqueta}
-                    {inicial?.clave === s.clave && (
-                      <span style={{
-                        marginLeft: 7, fontSize: 9, fontWeight: 700, padding: "1px 6px",
-                        borderRadius: 999, background: "rgba(0,162,152,0.1)",
-                        color: "var(--accent)", verticalAlign: "middle",
-                      }}>
-                        INICIO
-                      </span>
-                    )}
-                  </p>
-                  <p style={{ fontSize: 12, color: "var(--text2)", marginTop: 3, lineHeight: 1.5 }}>
-                    {s.resumen}
-                  </p>
+                    {Icono ? <Icono size={20} /> : null}
+                  </div>
+
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p className="font-display" style={{
+                      fontSize: 14.5, fontWeight: 700, color: "var(--text)",
+                      letterSpacing: "-0.01em", display: "flex",
+                      alignItems: "center", gap: 7, flexWrap: "wrap",
+                    }}>
+                      {seccion.etiqueta}
+                      {esInicio && (
+                        <span style={{
+                          fontSize: 9, fontWeight: 700, padding: "2px 6px",
+                          borderRadius: 999, background: "var(--accent-suave)",
+                          color: "var(--accent-texto)", letterSpacing: "0.06em",
+                        }}>
+                          INICIO
+                        </span>
+                      )}
+                    </p>
+                    <p style={{ fontSize: 12.5, color: "var(--text2)", marginTop: 3, lineHeight: 1.5 }}>
+                      {seccion.resumen}
+                    </p>
+                  </div>
+
+                  <span style={{ color: "var(--text3)", flexShrink: 0, display: "flex" }}>
+                    <IconoChevron size={17} direccion="derecha" />
+                  </span>
                 </div>
-              </div>
-            </Tarjeta>
-          </Link>
-        ))}
+              </Tarjeta>
+            </Link>
+          );
+        })}
       </div>
     </>
   );

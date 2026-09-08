@@ -2,6 +2,10 @@
 import { useState } from "react";
 import { ordenarAlertas } from "@/lib/dominio/validaciones";
 import { soles } from "./Encabezado";
+import {
+  IconoAlerta, IconoBasura, IconoBloqueo, IconoCheck,
+  IconoChevron, IconoComentario, IconoEnlace, IconoIA,
+} from "./Iconos";
 import type { Alerta, Gasto } from "@/lib/dominio/tipos";
 
 const NOMBRE_COMPROBANTE: Record<string, string> = {
@@ -9,11 +13,11 @@ const NOMBRE_COMPROBANTE: Record<string, string> = {
   "08": "Nota de débito", "12": "Ticket",
 };
 
-const COLOR_SEVERIDAD: Record<string, { fondo: string; texto: string; icono: string }> = {
-  bloqueante: { fondo: "var(--danger-bg)",  texto: "var(--danger)", icono: "⛔" },
-  alta:       { fondo: "var(--warn-bg)",    texto: "var(--warn)",   icono: "⚠️" },
-  media:      { fondo: "var(--warn-bg)",    texto: "var(--warn)",   icono: "⚠️" },
-  baja:       { fondo: "rgba(0,0,0,0.04)",  texto: "var(--text2)",  icono: "ℹ️" },
+const SEVERIDAD: Record<string, { bg: string; bd: string; fg: string }> = {
+  bloqueante: { bg: "var(--danger-bg)", bd: "var(--danger-borde)", fg: "var(--danger)" },
+  alta:       { bg: "var(--warn-bg)",   bd: "var(--warn-borde)",   fg: "var(--warn)" },
+  media:      { bg: "var(--warn-bg)",   bd: "var(--warn-borde)",   fg: "var(--warn)" },
+  baja:       { bg: "var(--surface2)",  bd: "var(--border)",       fg: "var(--text2)" },
 };
 
 type G = Pick<Gasto,
@@ -27,11 +31,9 @@ type G = Pick<Gasto,
 interface Props {
   gasto: G;
   umbralConfianza: number;
-  /** Permite confirmar alertas y quitar el gasto. */
   editable?: boolean;
   onConfirmar?: (id: string) => void;
   onEliminar?: (id: string) => void;
-  /** Modo revisión: casilla para observar con motivo. */
   revision?: { observado: boolean; motivo: string; onCambio: (obs: boolean, motivo: string) => void };
 }
 
@@ -42,73 +44,120 @@ export default function GastoFila({
   const alertas = ordenarAlertas((g.alertas ?? []) as Alerta[]);
   const bloqueante = alertas.some(a => a.severidad === "bloqueante");
   const sinConfirmar = alertas.length > 0 && !g.alertas_confirmadas && !bloqueante;
+  const observado = g.estado === "OBSERVADO";
 
   const dudosos = Object.entries(g.confianza_extraccion ?? {})
     .filter(([, v]) => v < umbralConfianza)
     .map(([k]) => k);
 
-  const borde = bloqueante ? "rgba(220,38,38,0.35)"
-    : g.estado === "OBSERVADO" ? "rgba(220,38,38,0.35)"
-    : sinConfirmar ? "rgba(180,83,9,0.3)"
-    : "var(--border)";
+  /**
+   * Una franja de color a la izquierda: el estado del comprobante se
+   * percibe recorriendo la lista, sin leer cada tarjeta.
+   */
+  const franja = bloqueante || observado ? "var(--danger)"
+    : sinConfirmar ? "var(--warn)"
+    : "transparent";
 
   return (
-    <div style={{
-      background: "#FFFFFF", border: `1px solid ${borde}`, borderRadius: 11,
-      overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+    <div className="tarjeta animate-fadein" style={{
+      overflow: "hidden", position: "relative",
+      borderColor: bloqueante || observado ? "var(--danger-borde)"
+        : sinConfirmar ? "var(--warn-borde)" : "var(--border)",
     }}>
-      <div
+      {franja !== "transparent" && (
+        <span style={{
+          position: "absolute", left: 0, top: 0, bottom: 0, width: 3,
+          background: franja,
+        }} />
+      )}
+
+      <button
         onClick={() => setAbierto(v => !v)}
-        style={{ padding: "12px 14px", cursor: "pointer", display: "flex", gap: 11, alignItems: "flex-start" }}
+        aria-expanded={abierto}
+        style={{
+          width: "100%", padding: "14px 16px", cursor: "pointer",
+          display: "flex", gap: 12, alignItems: "flex-start",
+          background: "transparent", border: "none", textAlign: "left",
+          fontFamily: "inherit",
+        }}
       >
         {revision && (
-          <input
-            type="checkbox" checked={revision.observado}
-            onClick={e => e.stopPropagation()}
-            onChange={e => revision.onCambio(e.target.checked, revision.motivo)}
-            style={{ marginTop: 3, width: 16, height: 16, accentColor: "var(--danger)", flexShrink: 0 }}
-          />
+          <span
+            role="checkbox"
+            aria-checked={revision.observado}
+            tabIndex={0}
+            onClick={e => { e.stopPropagation(); revision.onCambio(!revision.observado, revision.motivo); }}
+            onKeyDown={e => {
+              if (e.key === " " || e.key === "Enter") {
+                e.preventDefault(); e.stopPropagation();
+                revision.onCambio(!revision.observado, revision.motivo);
+              }
+            }}
+            style={{
+              width: 19, height: 19, borderRadius: 6, marginTop: 2, flexShrink: 0,
+              border: `1.5px solid ${revision.observado ? "var(--danger)" : "var(--border2)"}`,
+              background: revision.observado ? "var(--danger)" : "var(--surface)",
+              color: "#FFFFFF", display: "flex", alignItems: "center", justifyContent: "center",
+              transition: "all var(--rapido) var(--curva)",
+            }}
+          >
+            {revision.observado && <IconoCheck size={12} />}
+          </span>
         )}
 
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text)", fontFamily: "var(--font-sora), sans-serif" }}>
+            <span className="font-display" style={{
+              fontSize: 14, fontWeight: 700, color: "var(--text)", letterSpacing: "-0.015em",
+            }}>
               {g.proveedor_nombre || "Proveedor no leído"}
             </span>
-            {bloqueante && <span className="badge badge-error">Duplicado</span>}
-            {g.estado === "OBSERVADO" && <span className="badge badge-error">Observado</span>}
-            {sinConfirmar && <span className="badge badge-warn">{alertas.length} alerta{alertas.length > 1 ? "s" : ""}</span>}
-            {g.alertas_confirmadas && alertas.length > 0 && (
-              <span className="badge badge-ok">Confirmado</span>
+            {bloqueante && (
+              <span className="badge badge-error">
+                <IconoBloqueo size={11} style={{ marginLeft: -1 }} />Duplicado
+              </span>
+            )}
+            {observado && <span className="badge badge-error">Observado</span>}
+            {sinConfirmar && (
+              <span className="badge badge-warn">
+                {alertas.length} alerta{alertas.length > 1 ? "s" : ""}
+              </span>
+            )}
+            {g.alertas_confirmadas && alertas.length > 0 && !observado && (
+              <span className="badge badge-ok">
+                <IconoCheck size={11} style={{ marginLeft: -1 }} />Confirmado
+              </span>
             )}
           </div>
 
-          <p style={{ fontSize: 11.5, color: "var(--text3)", marginTop: 3 }}>
+          <p style={{ fontSize: 12, color: "var(--text3)", marginTop: 4, lineHeight: 1.5 }}>
             {NOMBRE_COMPROBANTE[g.tipo_comprobante ?? ""] ?? g.tipo_comprobante ?? "—"}
-            {g.serie && ` ${g.serie}-${g.numero}`}
-            {g.proveedor_ruc && ` · RUC ${g.proveedor_ruc}`}
+            {g.serie && <> <span className="mono">{g.serie}-{g.numero}</span></>}
+            {g.proveedor_ruc && <> · RUC <span className="mono">{g.proveedor_ruc}</span></>}
             {g.fecha_emision && ` · ${g.fecha_emision}`}
           </p>
         </div>
 
-        <div style={{ textAlign: "right", flexShrink: 0 }}>
-          <p className="font-display" style={{ fontSize: 15, fontWeight: 800, color: "var(--text)", letterSpacing: "-0.02em" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+          <p className="cifra cifra-m" style={{ color: "var(--text)" }}>
             {soles(Number(g.total ?? 0))}
           </p>
-          <p style={{ fontSize: 10.5, color: "var(--text3)", marginTop: 1 }}>
-            {abierto ? "▲ menos" : "▼ detalle"}
-          </p>
+          <span style={{ color: "var(--text3)", display: "flex" }}>
+            <IconoChevron size={17} abierto={abierto} />
+          </span>
         </div>
-      </div>
+      </button>
 
-      {/* Observación del revisor: se muestra siempre, esté abierto o no */}
+      {/* Observación: se ve siempre, esté abierta o no la tarjeta */}
       {g.observacion && (
         <div style={{
-          padding: "10px 14px", background: "var(--danger-bg)",
-          borderTop: "1px solid var(--border)", display: "flex", gap: 8,
+          padding: "11px 16px", background: "var(--danger-bg)",
+          borderTop: "1px solid var(--danger-borde)", display: "flex", gap: 9,
         }}>
-          <span style={{ fontSize: 13, flexShrink: 0 }}>💬</span>
-          <p style={{ fontSize: 12, color: "var(--danger)", lineHeight: 1.5 }}>
+          <span style={{ color: "var(--danger)", flexShrink: 0, marginTop: 1 }}>
+            <IconoComentario size={15} />
+          </span>
+          <p style={{ fontSize: 12.5, color: "var(--danger)", lineHeight: 1.55 }}>
             <strong>Observado:</strong> {g.observacion}
           </p>
         </div>
@@ -117,23 +166,29 @@ export default function GastoFila({
       {alertas.length > 0 && (
         <div style={{ borderTop: "1px solid var(--border)" }}>
           {alertas.map((a, i) => {
-            const c = COLOR_SEVERIDAD[a.severidad] ?? COLOR_SEVERIDAD.baja;
+            const s = SEVERIDAD[a.severidad] ?? SEVERIDAD.baja;
             return (
               <div key={i} style={{
-                padding: "9px 14px", background: c.fondo,
-                display: "flex", gap: 8, alignItems: "flex-start",
-                borderTop: i > 0 ? "1px solid rgba(0,0,0,0.04)" : "none",
+                padding: "10px 16px", background: s.bg,
+                display: "flex", gap: 9, alignItems: "flex-start",
+                borderTop: i > 0 ? `1px solid ${s.bd}` : "none",
               }}>
-                <span style={{ fontSize: 12, flexShrink: 0 }}>{c.icono}</span>
-                <p style={{ fontSize: 11.5, color: c.texto, lineHeight: 1.5 }}>{a.mensaje}</p>
+                <span style={{ color: s.fg, flexShrink: 0, marginTop: 1 }}>
+                  {a.severidad === "bloqueante" ? <IconoBloqueo size={14} /> : <IconoAlerta size={14} />}
+                </span>
+                <p style={{ fontSize: 12.5, color: s.fg, lineHeight: 1.55 }}>{a.mensaje}</p>
               </div>
             );
           })}
 
           {sinConfirmar && editable && onConfirmar && (
-            <div style={{ padding: "10px 14px", background: "var(--surface2)", borderTop: "1px solid var(--border)" }}>
-              <button className="btn-ghost" style={{ fontSize: 12, padding: "7px 13px" }}
+            <div style={{
+              padding: "12px 16px", background: "var(--surface2)",
+              borderTop: "1px solid var(--border)",
+            }}>
+              <button className="btn-ghost" style={{ fontSize: 12.5, padding: "8px 14px" }}
                 onClick={() => onConfirmar(g.id)}>
+                <IconoCheck size={15} />
                 Revisé y confirmo estos datos
               </button>
             </div>
@@ -142,43 +197,59 @@ export default function GastoFila({
       )}
 
       {abierto && (
-        <div style={{ padding: "13px 14px", borderTop: "1px solid var(--border)", background: "var(--surface2)" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 11 }}>
-            <Dato etiqueta="Subtotal" valor={soles(Number(g.subtotal ?? 0))} dudoso={dudosos.includes("subtotal")} />
-            <Dato etiqueta="IGV" valor={soles(Number(g.igv ?? 0))} dudoso={dudosos.includes("igv")} />
-            <Dato etiqueta="Total" valor={soles(Number(g.total ?? 0))} dudoso={dudosos.includes("total")} acento />
-            <Dato etiqueta="Forma de pago" valor={g.forma_pago || "—"} />
+        <div style={{
+          padding: "15px 16px", borderTop: "1px solid var(--border)",
+          background: "var(--surface2)",
+        }}>
+          <div style={{
+            display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 14,
+          }}>
+            <Dato rotulo="Subtotal" valor={soles(Number(g.subtotal ?? 0))} dudoso={dudosos.includes("subtotal")} />
+            <Dato rotulo="IGV" valor={soles(Number(g.igv ?? 0))} dudoso={dudosos.includes("igv")} />
+            <Dato rotulo="Total" valor={soles(Number(g.total ?? 0))} dudoso={dudosos.includes("total")} acento />
+            <Dato rotulo="Forma de pago" valor={g.forma_pago || "—"} />
           </div>
+
           {g.detalle && (
-            <div style={{ marginTop: 11 }}>
-              <p style={{ fontSize: 9.5, color: "var(--text3)", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", fontFamily: "var(--font-sora), sans-serif" }}>
-                Detalle
+            <div style={{ marginTop: 14 }}>
+              <p className="rotulo">Detalle</p>
+              <p style={{ fontSize: 13, color: "var(--text)", marginTop: 4, lineHeight: 1.55 }}>
+                {g.detalle}
               </p>
-              <p style={{ fontSize: 12.5, color: "var(--text)", marginTop: 3, lineHeight: 1.5 }}>{g.detalle}</p>
             </div>
           )}
+
           {dudosos.length > 0 && (
-            <p style={{ marginTop: 11, fontSize: 11, color: "var(--warn)", lineHeight: 1.5 }}>
-              La IA marcó como dudosos: <strong>{dudosos.join(", ")}</strong>. Verifica contra el papel.
-            </p>
+            <div style={{
+              marginTop: 14, padding: "11px 13px", borderRadius: "var(--radio-s)",
+              background: "var(--warn-bg)", border: "1px solid var(--warn-borde)",
+              display: "flex", gap: 9, alignItems: "flex-start",
+            }}>
+              <span style={{ color: "var(--warn)", flexShrink: 0, marginTop: 1 }}>
+                <IconoIA size={15} />
+              </span>
+              <p style={{ fontSize: 12, color: "var(--warn)", lineHeight: 1.55 }}>
+                La IA leyó con poca seguridad: <strong>{dudosos.join(", ")}</strong>.
+                Verifica contra el papel antes de presentar.
+              </p>
+            </div>
           )}
 
-          <div style={{ display: "flex", gap: 8, marginTop: 13, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 9, marginTop: 15, flexWrap: "wrap" }}>
             {g.drive_url && (
               <a href={g.drive_url} target="_blank" rel="noreferrer" className="btn-ghost"
-                style={{ fontSize: 12, padding: "7px 12px", textDecoration: "none" }}>
-                Ver imagen ↗
+                style={{ fontSize: 12.5, padding: "8px 13px", textDecoration: "none" }}>
+                <IconoEnlace size={15} />
+                Ver imagen
               </a>
             )}
             {editable && onEliminar && (
               <button
+                className="btn-peligro"
+                style={{ fontSize: 12.5, padding: "8px 13px" }}
                 onClick={() => { if (confirm("¿Quitar este comprobante de la rendición?")) onEliminar(g.id); }}
-                style={{
-                  fontSize: 12, padding: "7px 12px", borderRadius: 9, cursor: "pointer",
-                  border: "1px solid rgba(220,38,38,0.2)", background: "var(--danger-bg)",
-                  color: "var(--danger)", fontFamily: "var(--font-dm), sans-serif",
-                }}
               >
+                <IconoBasura size={15} />
                 Quitar
               </button>
             )}
@@ -186,10 +257,14 @@ export default function GastoFila({
         </div>
       )}
 
-      {/* Campo de motivo, solo cuando el revisor marca la casilla */}
       {revision?.observado && (
-        <div style={{ padding: "11px 14px", borderTop: "1px solid var(--border)", background: "var(--danger-bg)" }}>
-          <label className="fg-label" style={{ color: "var(--danger)" }}>Motivo de la observación</label>
+        <div style={{
+          padding: "13px 16px", borderTop: "1px solid var(--danger-borde)",
+          background: "var(--danger-bg)",
+        }}>
+          <label className="fg-label" style={{ color: "var(--danger)" }}>
+            Motivo de la observación
+          </label>
           <input
             className="fg-input" value={revision.motivo}
             placeholder="Ej: el monto no coincide con el comprobante físico"
@@ -201,21 +276,19 @@ export default function GastoFila({
   );
 }
 
-function Dato({ etiqueta, valor, dudoso, acento }: {
-  etiqueta: string; valor: string; dudoso?: boolean; acento?: boolean;
+function Dato({ rotulo, valor, dudoso, acento }: {
+  rotulo: string; valor: string; dudoso?: boolean; acento?: boolean;
 }) {
   return (
     <div>
-      <p style={{
-        fontSize: 9.5, color: "var(--text3)", fontWeight: 700, letterSpacing: "0.06em",
-        textTransform: "uppercase", fontFamily: "var(--font-sora), sans-serif",
-      }}>
-        {etiqueta}{dudoso && <span style={{ color: "var(--warn)" }}> ⚠</span>}
+      <p className="rotulo" style={{ color: dudoso ? "var(--warn)" : "var(--text3)" }}>
+        {rotulo}
+        {dudoso && <IconoAlerta size={12} style={{ marginLeft: 4, verticalAlign: "-1px" }} />}
       </p>
-      <p style={{
-        fontSize: 13, marginTop: 2, fontWeight: acento ? 800 : 600,
-        color: dudoso ? "var(--warn)" : acento ? "var(--accent)" : "var(--text)",
-        fontFamily: "var(--font-sora), sans-serif",
+      <p className="cifra" style={{
+        fontSize: 14, marginTop: 3,
+        fontWeight: acento ? 800 : 700,
+        color: dudoso ? "var(--warn)" : acento ? "var(--accent-texto)" : "var(--text)",
       }}>
         {valor}
       </p>

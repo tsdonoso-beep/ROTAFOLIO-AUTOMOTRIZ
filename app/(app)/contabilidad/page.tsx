@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { clienteServidor, solicitanteActual } from "@/lib/supabase/servidor";
 import { autoriza } from "@/lib/dominio/permisos";
 import { Encabezado } from "@/components/v2/Encabezado";
+import { IconoContabilidad } from "@/components/v2/Iconos";
 import { BandejaMemos, CAMPOS_MEMO, type FilaMemo } from "@/components/v2/BandejaMemos";
 
 export default async function Contabilidad() {
@@ -33,7 +34,7 @@ export default async function Contabilidad() {
         memos={memos}
         base="/contabilidad"
         vacio={{
-          icono: "📒",
+          icono: <IconoContabilidad size={26} />,
           titulo: "Sin rendiciones aprobadas",
           texto: "Aquí llegan las rendiciones una vez que el revisor de costos las aprueba, con el expediente completo.",
         }}

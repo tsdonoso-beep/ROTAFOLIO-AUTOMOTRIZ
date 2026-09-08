@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { clienteServidor, solicitanteActual } from "@/lib/supabase/servidor";
-import { Encabezado, EstadoMemo, Tarjeta, Vacio, soles } from "@/components/v2/Encabezado";
+import { Encabezado, EstadoMemo, Medidor, Vacio, soles, Atraso } from "@/components/v2/Encabezado";
+import { IconoBandeja, IconoMemos } from "@/components/v2/Iconos";
 import { consolidar } from "@/lib/dominio/memo";
 import type { EstadoGasto, ClaseGasto, Alerta } from "@/lib/dominio/tipos";
 
@@ -12,8 +13,6 @@ export default async function MisMemos() {
 
   const sb = await clienteServidor();
 
-  // Solo los memos asignados a esta persona. Las políticas de fila ya lo
-  // garantizan; el filtro explícito evita traer de más a quien ve todo.
   const { data: asignaciones } = await sb
     .from("memo_asignados")
     .select("memo_id")
@@ -35,7 +34,7 @@ export default async function MisMemos() {
         .order("creado_en", { ascending: false })
     : { data: [] };
 
-  // Comprobantes todavía sin memo (§2.3): se capturan y se asignan después.
+  // Comprobantes todavía sin memo: se capturan y se asignan después.
   const { count: sinAsignar } = await sb
     .from("gastos")
     .select("id", { count: "exact", head: true })
@@ -46,124 +45,124 @@ export default async function MisMemos() {
     <>
       <Encabezado
         titulo="Mis memos"
-        bajada="Las rendiciones que te asignaron. Selecciona una para cargar comprobantes."
+        bajada="Las rendiciones que te asignaron. Entra en una para cargar comprobantes."
       />
 
       {(sinAsignar ?? 0) > 0 && (
-        <Link href="/memos/sin-asignar" style={{ textDecoration: "none", display: "block", marginBottom: 12 }}>
-          <div style={{
-            background: "var(--warn-bg)", border: "1px solid rgba(180,83,9,0.2)",
-            borderRadius: 12, padding: "13px 16px",
-            display: "flex", alignItems: "center", gap: 10,
+        <Link href="/memos/sin-asignar" style={{ textDecoration: "none", display: "block", marginBottom: 14 }}>
+          <div className="tarjeta tarjeta-int" style={{
+            background: "var(--warn-bg)", borderColor: "var(--warn-borde)",
+            padding: "14px 17px", display: "flex", alignItems: "center", gap: 12,
           }}>
-            <span style={{ fontSize: 16 }}>📥</span>
+            <span style={{ color: "var(--warn)", display: "flex" }}>
+              <IconoBandeja size={22} />
+            </span>
             <div style={{ flex: 1 }}>
-              <p style={{ fontSize: 13, fontWeight: 700, color: "var(--warn)", fontFamily: "var(--font-sora), sans-serif" }}>
+              <p className="font-display" style={{
+                fontSize: 13.5, fontWeight: 700, color: "var(--warn)", letterSpacing: "-0.01em",
+              }}>
                 {sinAsignar} comprobante{sinAsignar === 1 ? "" : "s"} sin asignar
               </p>
-              <p style={{ fontSize: 11.5, color: "var(--text2)", marginTop: 2 }}>
+              <p style={{ fontSize: 12, color: "var(--text2)", marginTop: 2 }}>
                 Muévelos a un memo para poder presentarlos
               </p>
             </div>
-            <span style={{ color: "var(--warn)", fontSize: 15 }}>›</span>
           </div>
         </Link>
       )}
 
       {!memos?.length ? (
         <Vacio
-          icono="📋"
+          icono={<IconoMemos size={26} />}
           titulo="Todavía no tienes memos"
           texto="Los memos los abre Control de Gestión y aparecen aquí en cuanto te asignan uno. No necesitas crearlos tú."
         />
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div className="stagger" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {memos.map(m => {
             const gastos = (m.gastos ?? []) as Array<{
               estado: EstadoGasto; clase: ClaseGasto; total: number | null; alertas: Alerta[];
             }>;
             const c = consolidar(Number(m.monto_autorizado), gastos);
-            const consumo = c.autorizado > 0
-              ? Math.min(100, (c.rendido / c.autorizado) * 100)
-              : 0;
             const excedido = c.rendido > c.autorizado;
             const cc = m.centros_costo as unknown as { codigo: string; nombre: string } | null;
 
-            const dias = m.fecha_retorno_prev
+            const dias = m.fecha_retorno_prev && ["ABIERTO", "EN_RENDICION"].includes(m.estado)
               ? Math.floor((Date.now() - new Date(m.fecha_retorno_prev).getTime()) / 86_400_000)
-              : null;
+              : 0;
 
             return (
-              <Link key={m.id} href={`/memos/${m.id}`} style={{ textDecoration: "none" }}>
-                <Tarjeta>
-                  <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
-                    <div style={{ flex: 1, minWidth: 200 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                        <span style={{
-                          fontSize: 12, fontFamily: "monospace", color: "var(--text2)",
-                          background: "var(--surface2)", padding: "2px 7px", borderRadius: 5,
-                        }}>
-                          {m.correlativo}
-                        </span>
-                        <EstadoMemo estado={m.estado} />
-                        {c.bloqueantes > 0 && (
-                          <span className="badge badge-error">{c.bloqueantes} bloqueante{c.bloqueantes > 1 ? "s" : ""}</span>
-                        )}
-                        {c.con_alertas > 0 && c.bloqueantes === 0 && (
-                          <span className="badge badge-warn">{c.con_alertas} con alerta</span>
-                        )}
-                      </div>
-
-                      <p className="font-display" style={{
-                        fontSize: 15, fontWeight: 700, color: "var(--text)",
-                        marginTop: 7, letterSpacing: "-0.01em",
+              <Link key={m.id} href={`/memos/${m.id}`}
+                className="animate-fadein" style={{ textDecoration: "none" }}>
+                <div className="tarjeta tarjeta-int" style={{ padding: 0, overflow: "hidden" }}>
+                  <div style={{ padding: "17px 19px 15px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <span className="mono" style={{
+                        fontSize: 11.5, color: "var(--text2)", background: "var(--surface2)",
+                        padding: "3px 8px", borderRadius: 6, border: "1px solid var(--border)",
                       }}>
-                        {m.destino || cc?.nombre || "Sin destino"}
-                      </p>
-                      <p style={{ fontSize: 11.5, color: "var(--text3)", marginTop: 2 }}>
-                        {cc?.nombre}
-                        {m.fecha_salida && ` · ${m.fecha_salida}`}
-                        {m.fecha_retorno_prev && ` a ${m.fecha_retorno_prev}`}
-                      </p>
-
-                      {dias !== null && dias > 0 && ["ABIERTO", "EN_RENDICION"].includes(m.estado) && (
-                        <p style={{ fontSize: 11.5, color: "var(--danger)", marginTop: 5, fontWeight: 600 }}>
-                          ⚠ Retorno hace {dias} día{dias === 1 ? "" : "s"} · pendiente de rendir
-                        </p>
+                        {m.correlativo}
+                      </span>
+                      <EstadoMemo estado={m.estado} />
+                      {c.bloqueantes > 0 && (
+                        <span className="badge badge-error">
+                          {c.bloqueantes} bloqueante{c.bloqueantes > 1 ? "s" : ""}
+                        </span>
                       )}
+                      {c.con_alertas > 0 && c.bloqueantes === 0 && (
+                        <span className="badge badge-warn">{c.con_alertas} con alerta</span>
+                      )}
+                      <Atraso dias={dias} />
                     </div>
 
-                    <div style={{ minWidth: 170 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 5 }}>
-                        <span style={{ color: "var(--text3)" }}>Rendido</span>
-                        <span style={{
-                          fontWeight: 700, fontFamily: "var(--font-sora), sans-serif",
+                    <p className="font-display" style={{
+                      fontSize: 16.5, fontWeight: 700, color: "var(--text)",
+                      marginTop: 10, letterSpacing: "-0.02em", lineHeight: 1.25,
+                    }}>
+                      {m.destino || cc?.nombre || "Sin destino"}
+                    </p>
+                    <p style={{ fontSize: 12, color: "var(--text3)", marginTop: 3 }}>
+                      {cc && <span className="mono">{cc.codigo}</span>}
+                      {cc && ` · ${cc.nombre}`}
+                    </p>
+                  </div>
+
+                  <div style={{
+                    background: "var(--surface2)", borderTop: "1px solid var(--border)",
+                    padding: "14px 19px 16px",
+                  }}>
+                    <div style={{
+                      display: "flex", justifyContent: "space-between",
+                      alignItems: "baseline", marginBottom: 9, gap: 12,
+                    }}>
+                      <span>
+                        <span className="cifra cifra-l" style={{
                           color: excedido ? "var(--danger)" : "var(--text)",
                         }}>
                           {soles(c.rendido)}
                         </span>
-                      </div>
-                      <div style={{
-                        height: 6, borderRadius: 999, background: "var(--surface2)",
-                        overflow: "hidden", border: "1px solid var(--border)",
-                      }}>
-                        <div style={{
-                          width: `${consumo}%`, height: "100%",
-                          background: excedido ? "var(--danger)" : "var(--accent)",
-                          transition: "width 0.3s",
-                        }} />
-                      </div>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginTop: 5 }}>
-                        <span style={{ color: "var(--text3)" }}>
+                        <span style={{ fontSize: 12.5, color: "var(--text3)", marginLeft: 6 }}>
                           de {soles(c.autorizado)}
                         </span>
-                        <span style={{ color: excedido ? "var(--danger)" : "var(--text2)", fontWeight: 600 }}>
-                          {excedido ? `excede ${soles(c.reembolso)}` : `saldo ${soles(c.saldo)}`}
-                        </span>
-                      </div>
+                      </span>
+                      <span className="cifra" style={{
+                        fontSize: 12.5,
+                        color: excedido ? "var(--danger)" : "var(--accent-texto)",
+                      }}>
+                        {excedido ? `+${soles(c.reembolso)}` : `${soles(c.saldo)} libre`}
+                      </span>
                     </div>
+
+                    <Medidor rendido={c.rendido} autorizado={c.autorizado} />
+
+                    <p style={{ fontSize: 11.5, color: "var(--text3)", marginTop: 9 }}>
+                      {c.cantidad_gastos === 0
+                        ? "Sin comprobantes todavía"
+                        : `${c.cantidad_gastos} comprobante${c.cantidad_gastos === 1 ? "" : "s"}`}
+                      {m.fecha_retorno_prev && ` · retorno ${m.fecha_retorno_prev}`}
+                    </p>
                   </div>
-                </Tarjeta>
+                </div>
               </Link>
             );
           })}

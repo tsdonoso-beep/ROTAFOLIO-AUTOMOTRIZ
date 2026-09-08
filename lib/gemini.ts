@@ -72,7 +72,7 @@ export async function extraerComprobante(
   signal?: AbortSignal
 ): Promise<{ extraido: GastoExtraido; raw: string; modelo: string }> {
   if (!apiKey?.trim()) {
-    throw new Error("Falta la API Key de Gemini. Configúrala con el botón 🔑.");
+    throw new Error("Falta la clave de Gemini. Configúrala con el botón de la llave, arriba a la derecha.");
   }
 
   const modelo = await descubrirModelo(apiKey);
