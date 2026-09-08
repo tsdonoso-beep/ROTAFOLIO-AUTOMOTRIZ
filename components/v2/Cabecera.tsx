@@ -50,15 +50,22 @@ export default function Cabecera({ nombre, roles, onApiKey }: Props) {
         display: "flex", alignItems: "center", gap: 12,
         padding: "12px 20px",
       }}>
+        {/*
+          Jerarquía deliberada: el logo de Roland Print es la marca ancla y
+          lleva el peso visual (color, tamaño). "INRO VIATICOS" es el nombre
+          del módulo dentro de esa marca, así que va más pequeño, en el color
+          de acento y con trazado de etiqueta — no compite con el logo.
+        */}
         <Link href="/" style={{
-          display: "flex", alignItems: "center", gap: 10, flexShrink: 0, textDecoration: "none",
+          display: "flex", alignItems: "center", gap: 11, flexShrink: 0, textDecoration: "none",
         }}>
-          <Logo height={20} />
+          <Logo height={27} />
           <span style={{
-            width: 1, height: 18, background: "var(--border2)", flexShrink: 0,
+            width: 1, height: 22, background: "var(--border2)", flexShrink: 0,
           }} />
           <span className="font-display hidden sm:inline" style={{
-            fontSize: 13, fontWeight: 800, color: "var(--text)", letterSpacing: "-0.01em",
+            fontSize: 11.5, fontWeight: 700, color: "var(--accent)",
+            letterSpacing: "0.04em",
           }}>
             INRO VIATICOS
           </span>
@@ -87,7 +94,14 @@ export default function Cabecera({ nombre, roles, onApiKey }: Props) {
         </nav>
 
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
-          {onApiKey && <ApiKeyConfig onChange={onApiKey} />}
+          {/*
+            ApiKeyConfig se guarda sola en localStorage (lib/apikey.ts) y
+            Captura.tsx la relee al vuelo con getApiKey(): no depende de este
+            callback para funcionar. Antes estaba condicionada a `onApiKey`,
+            que nadie pasaba desde el layout — el botón nunca se pintaba y no
+            había forma de guardar la clave. Se renderiza siempre.
+          */}
+          <ApiKeyConfig onChange={onApiKey} />
 
           <div ref={ref} style={{ position: "relative" }}>
             <button
