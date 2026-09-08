@@ -24,9 +24,16 @@ interface Props {
   gastos: Gasto[];
   parametros: Parametros;
   puedeCapturar: boolean;
+  /** Datos que la captura necesita para archivar la foto en Drive. */
+  contexto: {
+    empresaAbrev: string;
+    empresaRuc: string | null;
+    centroCostoFolder: string;
+    correlativo: string;
+  };
 }
 
-export default function VistaMemo({ memo, gastos, parametros, puedeCapturar }: Props) {
+export default function VistaMemo({ memo, gastos, parametros, puedeCapturar, contexto }: Props) {
   const router = useRouter();
   const [pendiente, iniciar] = useTransition();
   const [aviso, setAviso] = useState<{ tipo: "error" | "ok"; texto: string } | null>(null);
@@ -176,6 +183,7 @@ export default function VistaMemo({ memo, gastos, parametros, puedeCapturar }: P
               fecha_salida: memo.fecha_salida,
               fecha_retorno_prev: memo.fecha_retorno_prev,
             }}
+            contexto={contexto}
             rendidoPrevio={c.rendido}
             onListo={() => setAviso({ tipo: "ok", texto: "Comprobante agregado." })}
           />
