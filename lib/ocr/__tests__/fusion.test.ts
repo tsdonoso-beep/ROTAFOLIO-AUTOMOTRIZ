@@ -1,8 +1,8 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
-  camposPendientes, completarImportes, estaCompleto,
-  fusionar, importesCuadran, vacio,
+  camposPendientes, completarImportes, estaCompleto, fusionar,
+  importesCuadran, sinSustentoFormal, sustentoFaltante, vacio,
 } from "../fusion.ts";
 import type { ResultadoExtraccion } from "../../dominio/tipos.ts";
 
@@ -183,16 +183,37 @@ describe("importesCuadran", () => {
 //  Completitud
 // ════════════════════════════════════════════════════════════════
 
-describe("camposPendientes", () => {
-  test("un comprobante vacío debe todos los obligatorios", () => {
-    const p = camposPendientes(vacio());
-    for (const campo of ["proveedor_ruc", "proveedor_nombre", "serie", "numero", "fecha_emision", "total"]) {
-      assert.ok(p.includes(campo), `falta ${campo}`);
-    }
+describe("qué bloquea y qué solo advierte", () => {
+  test("lo único obligatorio es el monto", () => {
+    // Un Yape o una transferencia llegan sin RUC, sin serie y sin número.
+    // Son plata que salió de la caja y tienen que poder rendirse.
+    const yape = { ...vacio(), total: 45, fecha_emision: "2026-09-08" };
+    assert.deepEqual(camposPendientes(yape), []);
+    assert.ok(estaCompleto(yape), "con monto ya se puede archivar");
   });
 
-  test("un comprobante completo no debe nada", () => {
-    const lleno = {
+  test("sin monto no hay gasto que registrar", () => {
+    const p = camposPendientes(vacio());
+    assert.deepEqual(p, ["total"]);
+  });
+
+  test("un total en cero cuenta como pendiente", () => {
+    assert.ok(camposPendientes({ ...vacio(), total: 0 }).includes("total"));
+  });
+
+  test("los datos de sustento se advierten, no se exigen", () => {
+    const yape = { ...vacio(), total: 45 };
+    // No bloquean…
+    assert.deepEqual(camposPendientes(yape), []);
+    // …pero se sabe cuáles faltan.
+    for (const campo of ["proveedor_ruc", "serie", "numero", "fecha_emision"]) {
+      assert.ok(sustentoFaltante(yape).includes(campo), `falta ${campo}`);
+    }
+    assert.ok(sinSustentoFormal(yape));
+  });
+
+  test("una factura completa sí tiene sustento formal", () => {
+    const factura = {
       ...vacio(),
       proveedor_ruc: "20100128056",
       proveedor_nombre: "FOR ELECTRIC S.A.C.",
@@ -201,17 +222,31 @@ describe("camposPendientes", () => {
       fecha_emision: "2026-05-14",
       total: 300,
     };
-    assert.deepEqual(camposPendientes(lleno), []);
-    assert.ok(estaCompleto(lleno));
+    assert.deepEqual(camposPendientes(factura), []);
+    assert.deepEqual(sustentoFaltante(factura), []);
+    assert.ok(!sinSustentoFormal(factura));
   });
 
-  test("un total en cero cuenta como pendiente", () => {
-    const r = { ...vacio(), total: 0 };
-    assert.ok(camposPendientes(r).includes("total"));
+  test("con RUC pero sin numeración tampoco hay sustento", () => {
+    const parcial = { ...vacio(), total: 80, proveedor_ruc: "20100128056" };
+    assert.ok(sinSustentoFormal(parcial), "falta serie y número");
   });
 
-  test("espacios en blanco no llenan un campo", () => {
-    const r = { ...vacio(), serie: "   " };
-    assert.ok(camposPendientes(r).includes("serie"));
+  test("espacios en blanco no llenan un campo de sustento", () => {
+    const r = { ...vacio(), total: 10, serie: "   ", numero: "1", proveedor_ruc: "20100128056" };
+    assert.ok(sustentoFaltante(r).includes("serie"));
+  });
+});
+
+describe("constancia de pago (Yape, Plin, transferencia)", () => {
+  test("no discrimina IGV: es el monto y nada más", () => {
+    const r = completarImportes(
+      { total: 45, subtotal: 0, igv: 0 },
+      { igvPorcentaje: 18, tipoComprobante: "00" }
+    );
+    assert.equal(r.total, 45);
+    assert.equal(r.subtotal, 45);
+    assert.equal(r.igv, 0);
+    assert.ok(importesCuadran(r));
   });
 });

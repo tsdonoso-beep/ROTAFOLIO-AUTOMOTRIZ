@@ -9,6 +9,7 @@
 // La regla es simple: gana la fuente con más confianza en ese campo, y lo
 // manual gana siempre, porque es la persona que tiene el papel en la mano.
 
+import { SIN_CREDITO_FISCAL } from "../dominio/tipos.ts";
 import type { ResultadoExtraccion } from "../dominio/tipos.ts";
 
 export type Origen = "ocr" | "ia" | "manual" | "derivado";
@@ -20,14 +21,27 @@ export const NOMBRE_ORIGEN: Record<Origen, string> = {
   derivado: "Calculado",
 };
 
-/** Campos sin los cuales un comprobante no se puede sustentar. */
-export const CAMPOS_OBLIGATORIOS = [
+/**
+ * Lo único sin lo cual un gasto no significa nada: cuánto se pagó.
+ *
+ * Un Yape, un Plin o una transferencia llegan sin RUC, sin serie y sin
+ * número —muchas veces son solo una captura de pantalla con un monto— y
+ * son plata que salió de la caja igual. Exigirles los datos de una factura
+ * dejaría el gasto sin registrar, que es peor que registrarlo incompleto.
+ */
+export const CAMPOS_OBLIGATORIOS = ["total"] as const;
+
+/**
+ * Los datos que dan sustento tributario. No bloquean la carga, pero su
+ * ausencia se convierte en una alerta que viaja a quien revisa: sin ellos
+ * el gasto no otorga crédito fiscal.
+ */
+export const CAMPOS_SUSTENTO = [
   "proveedor_ruc",
   "proveedor_nombre",
   "serie",
   "numero",
   "fecha_emision",
-  "total",
 ] as const;
 
 export interface Fusion {
@@ -134,8 +148,8 @@ export function completarImportes(
   const { igvPorcentaje, tipoComprobante, editado } = opciones;
   const r2 = (n: number) => Math.round(n * 100) / 100;
 
-  // Boleta y ticket no discriminan IGV.
-  const sinCreditoFiscal = tipoComprobante === "03" || tipoComprobante === "12";
+  // Boleta, ticket y constancia de pago no discriminan IGV.
+  const sinCreditoFiscal = SIN_CREDITO_FISCAL.includes(tipoComprobante);
 
   const total = actual.total;
   if (!total || total <= 0) return actual;
@@ -184,6 +198,19 @@ export function camposPendientes(r: ResultadoExtraccion): string[] {
 
 export function estaCompleto(r: ResultadoExtraccion): boolean {
   return camposPendientes(r).length === 0;
+}
+
+/** Campos de sustento que faltan. No impiden guardar; se advierten. */
+export function sustentoFaltante(r: ResultadoExtraccion): string[] {
+  return CAMPOS_SUSTENTO.filter(campo => !String(r[campo] ?? "").trim());
+}
+
+/**
+ * Un gasto sin RUC ni numeración no tiene sustento tributario, por más
+ * que tenga monto y fecha. Es el caso del Yape o la transferencia.
+ */
+export function sinSustentoFormal(r: ResultadoExtraccion): boolean {
+  return !r.proveedor_ruc.trim() || !r.serie.trim() || !r.numero.trim();
 }
 
 /** Un resultado vacío, punto de partida de la carga manual. */

@@ -12,7 +12,7 @@ import { getApiKey } from "@/lib/apikey";
 import { leerImagen, esLegiblePorOcr, cerrarMotor } from "@/lib/ocr/motor";
 import { parsearComprobante } from "@/lib/ocr/parser";
 import {
-  camposPendientes, fusionar, vacio, type Origen,
+  camposPendientes, fusionar, sustentoFaltante, vacio, type Origen,
 } from "@/lib/ocr/fusion";
 import { validarGasto } from "@/lib/dominio/validaciones";
 import type { Alerta, Parametros, ResultadoExtraccion } from "@/lib/dominio/tipos";
@@ -185,9 +185,8 @@ export default function Captura({
 
   // ── Confirmación: recién aquí se guarda y se archiva la foto ──
   const confirmar = useCallback(async () => {
-    const faltan = camposPendientes(valores);
-    if (faltan.length) {
-      setError(`Falta completar: ${faltan.map(c => NOMBRE_CAMPO[c] ?? c).join(", ")}.`);
+    if (camposPendientes(valores).length) {
+      setError("Falta el monto: es lo único sin lo que el gasto no se puede registrar.");
       return;
     }
 
@@ -315,7 +314,9 @@ export default function Captura({
 
   if (fase === "revision" || fase === "guardando") {
     const guardando = fase === "guardando";
-    const faltan = camposPendientes(valores);
+    // Solo el monto impide guardar. Lo demás se advierte y sigue.
+    const faltaMonto = camposPendientes(valores).length > 0;
+    const sinSustento = sustentoFaltante(valores);
 
     return (
       <div className="animate-fadein">
@@ -386,7 +387,8 @@ export default function Captura({
                 <p style={{
                   fontSize: 12.5, color: "var(--text2)", lineHeight: 1.55, marginBottom: 12,
                 }}>
-                  Confirmas que esta es la foto correcta y que el gasto es de{" "}
+                  {imagen ? "Confirmas que esta es la foto correcta y que el" : "Confirmas que el"}
+                  {" "}gasto es de{" "}
                   <strong className="cifra" style={{ color: "var(--text)" }}>
                     {soles(valores.total)}
                   </strong>.
@@ -396,11 +398,11 @@ export default function Captura({
 
               <button
                 className="btn-primary" onClick={confirmar}
-                disabled={guardando || faltan.length > 0}
+                disabled={guardando || faltaMonto}
                 style={{
                   width: "100%", justifyContent: "center", padding: 14, fontSize: 14,
-                  opacity: faltan.length > 0 ? 0.5 : 1,
-                  cursor: faltan.length > 0 ? "not-allowed" : "pointer",
+                  opacity: faltaMonto ? 0.5 : 1,
+                  cursor: faltaMonto ? "not-allowed" : "pointer",
                 }}
               >
                 {guardando ? (progreso || "Guardando…") : (
@@ -408,12 +410,21 @@ export default function Captura({
                 )}
               </button>
 
-              {faltan.length > 0 && (
+              {faltaMonto ? (
                 <p style={{
                   fontSize: 11.5, color: "var(--text3)", marginTop: 9,
                   textAlign: "center", lineHeight: 1.45,
                 }}>
-                  Falta {faltan.map(c => NOMBRE_CAMPO[c] ?? c).join(", ")}.
+                  Escribe el monto para poder guardar.
+                </p>
+              ) : sinSustento.length > 0 && (
+                /* Se puede guardar: esto informa, no frena. */
+                <p style={{
+                  fontSize: 11.5, color: "var(--text3)", marginTop: 9,
+                  textAlign: "center", lineHeight: 1.45,
+                }}>
+                  Se guardará sin {sinSustento.map(c => NOMBRE_CAMPO[c] ?? c).join(", ")}.
+                  Quedará marcado como gasto sin sustento formal.
                 </p>
               )}
             </div>

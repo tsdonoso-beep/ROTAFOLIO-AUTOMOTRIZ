@@ -35,14 +35,25 @@ export type TipoMemo = "VIATICOS" | "PASAJES" | "CAJA_CHICA" | "OTRO";
 export type ClaseGasto = "COMPROBANTE" | "DECLARACION_JURADA" | "MOVILIDAD";
 export type CategoriaGasto = "ALIMENTACION" | "MOVILIDAD" | "HOSPEDAJE" | "OTRO";
 
-/** Códigos SUNAT de tipo de comprobante. */
+/**
+ * Códigos SUNAT de tipo de comprobante (catálogo 01).
+ *
+ * El "00 - OTROS" es el que recibe lo que no es un comprobante de pago:
+ * la constancia de un Yape, un Plin o una transferencia. SUNAT no los
+ * reconoce como sustento y no dan crédito fiscal, pero son pagos reales
+ * que la caja hizo y tienen que poder rendirse.
+ */
 export const TIPO_COMPROBANTE_SUNAT = {
+  "00": "OTROS",
   "01": "FACTURA",
   "03": "BOLETA",
   "07": "NOTA_CREDITO",
   "08": "NOTA_DEBITO",
   "12": "TICKET",
 } as const;
+
+/** Tipos que no otorgan crédito fiscal: el IGV no se discrimina. */
+export const SIN_CREDITO_FISCAL: string[] = ["00", "03", "12"];
 
 export type CodigoComprobante = keyof typeof TIPO_COMPROBANTE_SUNAT;
 
@@ -182,6 +193,7 @@ export type CodigoAlerta =
   | "TOPE_MOVILIDAD"
   | "BOLETA_SIN_RUS"
   | "SIN_PLACA"
+  | "SIN_SUSTENTO_FORMAL"
   | "CONFIANZA_BAJA"
   | "SUNAT_NO_VALIDO";
 

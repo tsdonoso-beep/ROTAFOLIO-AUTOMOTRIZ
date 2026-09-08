@@ -110,6 +110,29 @@ export function validarGasto(g: GastoAValidar, ctx: ContextoValidacion): Alerta[
     });
   }
 
+  // ── Sustento tributario ───────────────────────────────────────
+  //
+  // Un Yape, un Plin o una transferencia llegan sin RUC y sin numeración.
+  // Son gastos válidos y deben poder rendirse, pero no otorgan crédito
+  // fiscal: la alerta no bloquea, avisa. Quien revisa y Contabilidad
+  // necesitan verlo antes de aprobar, no descubrirlo en el cierre.
+  if (g.clase === "COMPROBANTE") {
+    const faltantes: string[] = [];
+    if (!g.proveedor_ruc) faltantes.push("RUC del proveedor");
+    if (!g.tipo_comprobante || g.tipo_comprobante === "00") faltantes.push("tipo de comprobante");
+
+    if (faltantes.length) {
+      alertas.push({
+        codigo: "SIN_SUSTENTO_FORMAL",
+        severidad: "media",
+        campo: "proveedor_ruc",
+        mensaje:
+          `Sin ${faltantes.join(" ni ")}: el gasto se registra, pero no ` +
+          `otorga crédito fiscal y necesita sustento adicional.`,
+      });
+    }
+  }
+
   // ── RUC ───────────────────────────────────────────────────────
   if (g.clase === "COMPROBANTE" && g.proveedor_ruc) {
     if (!rucValido(g.proveedor_ruc)) {
@@ -225,7 +248,7 @@ export function validarGasto(g: GastoAValidar, ctx: ContextoValidacion): Alerta[
     alertas.push({
       codigo: "CONFIANZA_BAJA",
       severidad: "media",
-      mensaje: `La IA no leyó con seguridad: ${bajos.join(", ")}. Revisa y confirma.`,
+      mensaje: `No se leyó con seguridad: ${bajos.join(", ")}. Revisa y confirma.`,
     });
   }
 

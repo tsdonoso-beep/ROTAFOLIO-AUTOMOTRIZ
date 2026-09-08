@@ -2,15 +2,21 @@
 import { useCallback } from "react";
 import { completarImportes, importesCuadran, NOMBRE_ORIGEN, type Origen } from "@/lib/ocr/fusion";
 import { rucValido } from "@/lib/dominio/validaciones";
+import { sinSustentoFormal } from "@/lib/ocr/fusion";
 import { soles } from "./Encabezado";
 import { IconoAlerta, IconoCheck } from "./Iconos";
 import type { Parametros, ResultadoExtraccion } from "@/lib/dominio/tipos";
 
-/** Los cinco tipos que emite SUNAT y que la caja recibe en la práctica. */
+/**
+ * Lo que la caja recibe en la práctica. "Constancia de pago" es el código
+ * 00 del catálogo de SUNAT —otros— y cubre el Yape, el Plin y la
+ * transferencia: pagos reales que no son comprobantes de pago.
+ */
 const TIPOS = [
   { codigo: "01", nombre: "Factura" },
   { codigo: "03", nombre: "Boleta" },
   { codigo: "12", nombre: "Ticket" },
+  { codigo: "00", nombre: "Constancia de pago" },
   { codigo: "07", nombre: "Nota de crédito" },
   { codigo: "08", nombre: "Nota de débito" },
 ];
@@ -93,12 +99,13 @@ export default function FormularioGasto({ valores, origen, onCambio, parametros 
   const cuadran = importesCuadran({
     subtotal: valores.subtotal, igv: valores.igv, total: valores.total,
   });
+  const sinSustento = sinSustentoFormal(valores);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
 
       {/* ── Documento ── */}
-      <Grupo titulo="Documento">
+      <Grupo titulo="Documento" opcional>
         <Campo etiqueta="Tipo" origen={origen.tipo_comprobante} confianza={valores._confianza.tipo_comprobante}>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {TIPOS.map(t => {
@@ -149,7 +156,7 @@ export default function FormularioGasto({ valores, origen, onCambio, parametros 
       </Grupo>
 
       {/* ── Proveedor ── */}
-      <Grupo titulo="Proveedor">
+      <Grupo titulo="Proveedor" opcional>
         <Campo
           etiqueta="RUC" origen={origen.proveedor_ruc} confianza={valores._confianza.proveedor_ruc}
           error={rucMalo ? "El dígito verificador no cuadra. Revisa el número." : undefined}
@@ -169,11 +176,36 @@ export default function FormularioGasto({ valores, origen, onCambio, parametros 
             onChange={e => fijar({ proveedor_nombre: e.target.value }, ["proveedor_nombre"])}
           />
         </Campo>
+
+        {/*
+          Sin RUC ni numeración el gasto se registra igual —es el caso del
+          Yape o la transferencia—, pero deja de dar crédito fiscal. Se dice
+          aquí, mientras se puede corregir, y no recién al cerrar el mes.
+        */}
+        {sinSustento && valores.total > 0 && (
+          <div style={{
+            padding: "10px 12px", borderRadius: "var(--radio-s)",
+            background: "var(--warn-bg)", border: "1px solid rgba(180,83,9,0.2)",
+            display: "flex", gap: 8, alignItems: "flex-start",
+          }}>
+            <span style={{ color: "var(--warn)", flexShrink: 0, marginTop: 1 }}>
+              <IconoAlerta size={15} />
+            </span>
+            <p style={{ fontSize: 11.5, color: "var(--warn)", lineHeight: 1.5 }}>
+              Sin RUC ni numeración este gasto <strong>no otorga crédito
+              fiscal</strong>. Igual se archiva: quedará marcado para que
+              Contabilidad lo trate aparte.
+            </p>
+          </div>
+        )}
       </Grupo>
 
       {/* ── Importes ── */}
       <Grupo titulo="Importes">
-        <Campo etiqueta={`Total (${valores.moneda === "USD" ? "US$" : "S/"})`} origen={origen.total} confianza={valores._confianza.total}>
+        <Campo
+          etiqueta={`Total (${valores.moneda === "USD" ? "US$" : "S/"})`}
+          origen={origen.total} confianza={valores._confianza.total} obligatorio
+        >
           <input
             className="fg-input cifra" value={valores.total || ""}
             placeholder="0.00" inputMode="decimal" type="number" step="0.01"
@@ -181,7 +213,7 @@ export default function FormularioGasto({ valores, origen, onCambio, parametros 
             style={{ fontSize: 20, fontWeight: 800, padding: "12px 14px" }}
           />
           <p style={{ fontSize: 11, color: "var(--text3)", marginTop: 5, lineHeight: 1.45 }}>
-            Con el total basta: la base y el IGV se calculan solos.
+            Es lo único imprescindible. La base y el IGV se calculan solos.
           </p>
         </Campo>
 
@@ -301,11 +333,12 @@ function Grupo({ titulo, opcional, children }: {
  * que distingue un dato leído de uno que la persona está afirmando, y eso
  * es exactamente lo que se le pide confirmar.
  */
-function Campo({ etiqueta, origen, confianza, error, children }: {
+function Campo({ etiqueta, origen, confianza, error, obligatorio, children }: {
   etiqueta: string;
   origen?: Origen;
   confianza?: number;
   error?: string;
+  obligatorio?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -314,7 +347,12 @@ function Campo({ etiqueta, origen, confianza, error, children }: {
         display: "flex", alignItems: "center", gap: 7,
         marginBottom: 5, flexWrap: "wrap",
       }}>
-        <label className="fg-label" style={{ marginBottom: 0 }}>{etiqueta}</label>
+        <label className="fg-label" style={{ marginBottom: 0 }}>
+          {etiqueta}
+          {obligatorio && (
+            <span style={{ color: "var(--accent-texto)", marginLeft: 3 }} aria-hidden="true">*</span>
+          )}
+        </label>
         {origen && <MarcaOrigen origen={origen} confianza={confianza} />}
       </div>
       {children}

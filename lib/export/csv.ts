@@ -39,7 +39,7 @@ export const CABECERAS = [
 ] as const;
 
 const NOMBRE_COMPROBANTE: Record<string, string> = {
-  "01": "FACTURA", "03": "BOLETA", "07": "NOTA_CREDITO",
+  "00": "OTROS", "01": "FACTURA", "03": "BOLETA", "07": "NOTA_CREDITO",
   "08": "NOTA_DEBITO", "12": "TICKET",
 };
 

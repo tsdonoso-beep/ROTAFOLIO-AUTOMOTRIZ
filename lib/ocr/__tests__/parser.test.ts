@@ -248,6 +248,28 @@ describe("bordes del formato", () => {
     assert.equal(r.serie, "FE01");
   });
 
+  test("fecha con el mes escrito, como la imprime Yape", () => {
+    const r = parsearComprobante("¡Yapeaste!\nS/ 45.00\n08 set. 2026 - 02:14 p.m.");
+    assert.equal(r.fecha_emision, "2026-09-08");
+  });
+
+  test("fecha escrita larga, con preposiciones", () => {
+    const r = parsearComprobante("PAGO\n8 de setiembre de 2026\nTOTAL 45.00");
+    assert.equal(r.fecha_emision, "2026-09-08");
+  });
+
+  test("un mes inexistente no produce fecha", () => {
+    const r = parsearComprobante("14 xyz 2026\nTOTAL 45.00");
+    assert.equal(r.fecha_emision, "");
+  });
+
+  test("una constancia de Yape se reconoce como otros (00)", () => {
+    const r = parsearComprobante("Yape\n¡Yapeaste!\nS/ 45.00\nMARIA LUZ QUISPE H.");
+    assert.equal(r.tipo_comprobante, "00");
+    assert.equal(r.total, 45);
+    assert.equal(r.proveedor_ruc, "", "un Yape no trae RUC y no se inventa");
+  });
+
   test("formato aaaa-mm-dd", () => {
     const r = parsearComprobante("EMISION 2026-05-14\nTOTAL 30.00");
     assert.equal(r.fecha_emision, "2026-05-14");

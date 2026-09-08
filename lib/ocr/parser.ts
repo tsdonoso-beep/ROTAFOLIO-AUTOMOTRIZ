@@ -250,6 +250,12 @@ function buscarSerieNumero(
 //  Fecha
 // ════════════════════════════════════════════════════════════════
 
+/** Meses abreviados y completos, como los imprime una app de pagos. */
+const MESES: Record<string, number> = {
+  ENE: 1, FEB: 2, MAR: 3, ABR: 4, MAY: 5, JUN: 6,
+  JUL: 7, AGO: 8, SET: 9, SEP: 9, OCT: 10, NOV: 11, DIC: 12,
+};
+
 function buscarFecha(texto: string): string | null {
   const candidatas: string[] = [];
 
@@ -262,6 +268,15 @@ function buscarFecha(texto: string): string | null {
   // aaaa-mm-dd, que es como lo imprimen varios sistemas de facturación.
   for (const m of texto.matchAll(/\b(\d{4})[/\-.](\d{1,2})[/\-.](\d{1,2})\b/g)) {
     const iso = aIso(Number(m[3]), Number(m[2]), Number(m[1]));
+    if (iso) candidatas.push(iso);
+  }
+
+  // "08 set. 2026" y "8 de setiembre de 2026": Yape, Plin y varias apps de
+  // pago escriben el mes con letras, nunca en dígitos.
+  for (const m of texto.matchAll(/\b(\d{1,2})\s*(?:DE\s+)?([A-Z]{3})[A-Z]*\.?\s*(?:DE\s+)?(\d{4})\b/g)) {
+    const mes = MESES[m[2]];
+    if (!mes) continue;
+    const iso = aIso(Number(m[1]), mes, Number(m[3]));
     if (iso) candidatas.push(iso);
   }
 
@@ -431,6 +446,12 @@ function buscarTipo(
   if (/\bFACTURA\b/.test(texto)) return { valor: "01", confianza: CONFIANZA.tipo_literal };
   if (/\bBOLETA\b/.test(texto)) return { valor: "03", confianza: CONFIANZA.tipo_literal };
   if (/\bTICKET\b/.test(texto)) return { valor: "12", confianza: CONFIANZA.tipo_literal };
+
+  // Una captura de Yape o Plin no es un comprobante de pago: va a "otros".
+  // No lleva RUC ni numeración, y el monto suele ser lo único legible.
+  if (/\bYAPE\b|\bPLIN\b|\bTRANSFERENCIA\b|\bCONSTANCIA\b/.test(texto)) {
+    return { valor: "00", confianza: CONFIANZA.tipo_literal };
+  }
 
   // Sin la palabra impresa, el prefijo de la serie lo delata.
   const inicial = serie.charAt(0);
