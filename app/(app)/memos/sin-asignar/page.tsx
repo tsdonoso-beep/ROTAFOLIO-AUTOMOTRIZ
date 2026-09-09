@@ -49,6 +49,12 @@ export default async function SinAsignar() {
     sb.from("parametros").select("clave, valor"),
   ]);
 
+  // Para rendir como caja chica hace falta decir a qué centro de costo va:
+  // el gasto ya ocurrió y nadie lo imputó por adelantado.
+  const { data: centros } = await sb
+    .from("centros_costo").select("id, codigo, nombre")
+    .eq("activo", true).order("codigo");
+
   const disponibles = ((memos ?? []) as Array<Record<string, unknown>>)
     .filter(m => MEMO_EDITABLE.includes(m.estado as EstadoMemo))
     .map(m => {
@@ -82,20 +88,21 @@ export default async function SinAsignar() {
 
       <Encabezado
         titulo="Sin asignar"
-        bajada="Comprobantes que la fecha no alcanzó para ubicar. Elige a qué memo va cada uno."
+        bajada="Comprobantes sueltos. Cada uno puede mudarse a un memo de viáticos, o varios juntos pueden rendirse como caja chica."
       />
 
       {!gastos?.length ? (
         <Vacio
           icono={<IconoBandeja size={26} />}
           titulo="No hay nada pendiente de ubicar"
-          texto="Cuando captures un comprobante cuya fecha no caiga en ninguno de tus memos —o caiga en varios— aparecerá aquí para que decidas."
+          texto="Acá llegan los comprobantes que la fecha no alcanzó para ubicar, y los que capturas sin memo para rendirlos como caja chica."
         />
       ) : (
         <BandejaSinAsignar
           gastos={gastos as unknown as Gasto[]}
           memos={disponibles}
           parametros={leerParametros(filasParam)}
+          centros={centros ?? []}
         />
       )}
     </>

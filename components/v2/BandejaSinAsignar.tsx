@@ -1,11 +1,13 @@
 "use client";
-import { useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { clienteNavegador } from "@/lib/supabase/cliente";
 import { Aviso, Tarjeta, soles } from "./Encabezado";
 import { IconoAlerta, IconoCheck, IconoEnlace } from "./Iconos";
 import { asignarPorFecha, explicar, memoDe } from "@/lib/dominio/asignacion";
+import { impedimentosParaRendirCaja, periodoDeCaja, resumirCaja } from "@/lib/dominio/cajachica";
 import { validarGasto } from "@/lib/dominio/validaciones";
+import { rendirCajaChica } from "@/app/acciones/memos";
 import type { Alerta, EstadoMemo, Gasto, Parametros } from "@/lib/dominio/tipos";
 
 interface MemoDestino {
@@ -25,6 +27,7 @@ interface Props {
   gastos: Gasto[];
   memos: MemoDestino[];
   parametros: Parametros;
+  centros: Array<{ id: string; codigo: string; nombre: string }>;
 }
 
 const NOMBRE_COMPROBANTE: Record<string, string> = {
@@ -32,9 +35,25 @@ const NOMBRE_COMPROBANTE: Record<string, string> = {
   "07": "Nota de crédito", "08": "Nota de débito", "12": "Ticket",
 };
 
-export default function BandejaSinAsignar({ gastos, memos, parametros }: Props) {
+export default function BandejaSinAsignar({ gastos, memos, parametros, centros }: Props) {
   const router = useRouter();
   const [aviso, setAviso] = useState<{ tono: "ok" | "error"; texto: string } | null>(null);
+
+  // Selección para rendir como caja chica: el otro destino posible de un
+  // comprobante suelto, además de mudarlo a un memo de viáticos.
+  const [elegidos, setElegidos] = useState<Set<string>>(new Set());
+  const seleccionados = useMemo(
+    () => gastos.filter(g => elegidos.has(g.id)),
+    [gastos, elegidos]
+  );
+
+  const alternar = (id: string) => {
+    setElegidos(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+  };
 
   return (
     <>
@@ -53,20 +72,160 @@ export default function BandejaSinAsignar({ gastos, memos, parametros }: Props) 
         {gastos.map(g => (
           <Fila
             key={g.id} gasto={g} memos={memos} parametros={parametros}
-            onResultado={(tono, texto) => { setAviso({ tono, texto }); router.refresh(); }}
+            enCaja={elegidos.has(g.id)} onAlternarCaja={() => alternar(g.id)}
+            onResultado={(tono, texto) => {
+              setAviso({ tono, texto });
+              setElegidos(prev => { const n = new Set(prev); n.delete(g.id); return n; });
+              router.refresh();
+            }}
           />
         ))}
       </div>
+
+      <PanelCajaChica
+        gastos={seleccionados} centros={centros}
+        onResultado={(tono, texto) => {
+          setAviso({ tono, texto });
+          if (tono === "ok") setElegidos(new Set());
+          router.refresh();
+        }}
+      />
     </>
   );
 }
 
 // ════════════════════════════════════════════════════════════════
 
-function Fila({ gasto: g, memos, parametros, onResultado }: {
+/**
+ * Rendir varios sueltos de una vez, como caja chica.
+ *
+ * Es el proceso invertido que describió Finanzas: acá no hubo memo previo
+ * ni monto autorizado, así que todo lo que se junta es un reembolso. El
+ * memo se crea recién al presentar.
+ */
+function PanelCajaChica({ gastos, centros, onResultado }: {
+  gastos: Gasto[];
+  centros: Array<{ id: string; codigo: string; nombre: string }>;
+  onResultado: (tono: "ok" | "error", texto: string) => void;
+}) {
+  const [pendiente, iniciar] = useTransition();
+  const [centro, setCentro] = useState("");
+  const [descripcion, setDescripcion] = useState("");
+
+  const resumen = resumirCaja(gastos as never);
+  const impedimentos = impedimentosParaRendirCaja(gastos as never);
+
+  if (!gastos.length) return null;
+
+  const rendir = () => {
+    iniciar(async () => {
+      const r = await rendirCajaChica({
+        centroCostoId: centro,
+        gastoIds: gastos.map(g => g.id),
+        descripcion,
+      });
+      onResultado(r.ok ? "ok" : "error",
+        r.ok ? `Caja chica presentada por ${soles(resumen.aReembolsar)}. Pasó a revisión.` : r.error);
+    });
+  };
+
+  return (
+    <div style={{
+      position: "sticky", bottom: 12, marginTop: 16, zIndex: 20,
+    }}>
+      <Tarjeta style={{ borderColor: "var(--accent-borde)", boxShadow: "var(--sombra3)" }}>
+        <div style={{
+          display: "flex", justifyContent: "space-between",
+          alignItems: "baseline", gap: 12, flexWrap: "wrap", marginBottom: 13,
+        }}>
+          <p className="rotulo" style={{ marginBottom: 0 }}>Rendir como caja chica</p>
+          <p>
+            <span className="cifra cifra-m" style={{ color: "var(--accent-texto)" }}>
+              {soles(resumen.aReembolsar)}
+            </span>
+            <span style={{ fontSize: 11.5, color: "var(--text3)", marginLeft: 6 }}>
+              a reembolsarte
+            </span>
+          </p>
+        </div>
+
+        <p style={{ fontSize: 11.5, color: "var(--text2)", lineHeight: 1.5, marginBottom: 13 }}>
+          {resumen.cantidad} comprobante{resumen.cantidad === 1 ? "" : "s"}
+          {resumen.desde && ` · ${periodoDeCaja(resumen).replace("Caja chica ", "")}`}
+          . Acá no hubo adelanto, así que el total se te reembolsa.
+        </p>
+
+        <div style={{ display: "grid", gap: 9, gridTemplateColumns: "1fr 1fr" }}>
+          <div>
+            <label className="fg-label" htmlFor="cc-caja">Centro de costo</label>
+            <select
+              id="cc-caja" className="fg-input" value={centro}
+              onChange={e => setCentro(e.target.value)}
+              style={{ fontFamily: "var(--font-dm), sans-serif" }}
+            >
+              <option value="">Elige…</option>
+              {centros.map(c => (
+                <option key={c.id} value={c.id}>{c.codigo} · {c.nombre}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="fg-label" htmlFor="desc-caja">Concepto (opcional)</label>
+            <input
+              id="desc-caja" className="fg-input" value={descripcion}
+              onChange={e => setDescripcion(e.target.value)}
+              placeholder={periodoDeCaja(resumen)}
+            />
+          </div>
+        </div>
+
+        {impedimentos.length > 0 && (
+          <div style={{ marginTop: 12 }}>
+            <Aviso tono="aviso" icono={<IconoAlerta size={16} />}>
+              {impedimentos.map((i, k) => (
+                <span key={k} style={{ display: "block", lineHeight: 1.6 }}>
+                  · {i.motivo}{i.cantidad > 0 && ` (${i.cantidad})`}
+                </span>
+              ))}
+            </Aviso>
+          </div>
+        )}
+
+        <button
+          className="btn-primary" onClick={rendir}
+          disabled={pendiente || !centro || impedimentos.length > 0}
+          style={{
+            width: "100%", justifyContent: "center", marginTop: 13, padding: 12,
+            opacity: !centro || impedimentos.length ? 0.5 : 1,
+          }}
+        >
+          {pendiente ? "Presentando…" : (
+            <><IconoCheck size={17} />Presentar caja chica · {soles(resumen.aReembolsar)}</>
+          )}
+        </button>
+
+        {!centro && (
+          <p style={{
+            fontSize: 11.5, color: "var(--text3)", marginTop: 8,
+            textAlign: "center", lineHeight: 1.45,
+          }}>
+            Elige el centro de costo al que corresponde el gasto.
+          </p>
+        )}
+      </Tarjeta>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════
+
+function Fila({ gasto: g, memos, parametros, enCaja, onAlternarCaja, onResultado }: {
   gasto: Gasto;
   memos: MemoDestino[];
   parametros: Parametros;
+  /** Marcado para entrar en una rendición de caja chica. */
+  enCaja: boolean;
+  onAlternarCaja: () => void;
   onResultado: (tono: "ok" | "error", texto: string) => void;
 }) {
   // Se recalcula al abrir la bandeja, no se guarda: entre la captura y este
@@ -152,6 +311,25 @@ function Fila({ gasto: g, memos, parametros, onResultado }: {
     <Tarjeta padding={0} className="animate-fadein" style={{ overflow: "hidden" }}>
       <div style={{ padding: "15px 17px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
+          <span
+            role="checkbox" aria-checked={enCaja} tabIndex={0}
+            aria-label="Incluir en la caja chica"
+            onClick={onAlternarCaja}
+            onKeyDown={e => {
+              if (e.key === " " || e.key === "Enter") { e.preventDefault(); onAlternarCaja(); }
+            }}
+            style={{
+              width: 19, height: 19, borderRadius: 6, marginTop: 2, flexShrink: 0,
+              cursor: "pointer",
+              border: `1.5px solid ${enCaja ? "var(--accent)" : "var(--border2)"}`,
+              background: enCaja ? "var(--accent)" : "var(--surface)",
+              color: "#FFFFFF", display: "flex", alignItems: "center", justifyContent: "center",
+              transition: "all var(--rapido) var(--curva)",
+            }}
+          >
+            {enCaja && <IconoCheck size={12} />}
+          </span>
+
           <div style={{ flex: 1, minWidth: 0 }}>
             <p className="font-display" style={{
               fontSize: 14, fontWeight: 700, color: "var(--text)", letterSpacing: "-0.015em",

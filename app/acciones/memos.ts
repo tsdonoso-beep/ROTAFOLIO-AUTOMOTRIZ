@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { clienteServidor, solicitanteActual } from "@/lib/supabase/servidor";
 import { autoriza } from "@/lib/dominio/permisos";
 import { GASTO_CUENTA_EN_TOTAL, impedimentosParaPresentar, puedeEditarGasto, transicionMemoValida } from "@/lib/dominio/estados";
+import { elegibleParaCaja, impedimentosParaRendirCaja, periodoDeCaja, resumirCaja } from "@/lib/dominio/cajachica";
 import { leerParametros } from "@/lib/dominio/parametros";
 import { validarGasto } from "@/lib/dominio/validaciones";
 import type { AccionEvento, EstadoGasto, EstadoMemo, Parametros } from "@/lib/dominio/tipos";
@@ -156,14 +157,15 @@ export async function presentarRendicion(memoId: string): Promise<Resultado> {
     };
   }
 
-  const { error } = await sb
-    .from("memos")
-    .update({ estado: "PRESENTADA", presentado_en: new Date().toISOString(), observacion_actual: null })
-    .eq("id", memoId);
+  // Va por una función de la base y no por un update directo. Las políticas
+  // de fila solo dejan escribir memos a ADMIN_MEMOS y ADMIN_SISTEMA, así que
+  // un rendidor veía su update filtrado a cero filas —sin error— y la app le
+  // decía que había presentado mientras el memo se quedaba donde estaba.
+  //
+  // Tampoco se resuelve dándole UPDATE sobre memos: RLS no distingue
+  // columnas y con eso podría subirse su propio monto autorizado.
+  const { error } = await sb.rpc("presentar_memo", { p_memo: memoId });
   if (error) return { ok: false, error: error.message };
-
-  await sb.from("gastos").update({ estado: "PRESENTADO" })
-    .eq("memo_id", memoId).in("estado", ["VALIDADO", "CON_ALERTA", "EXTRAIDO"]);
 
   await registrarEvento(sb, "MEMO", memoId, "PRESENTAR", solicitante.usuarioId,
     { estado: memo.estado }, { estado: "PRESENTADA" });
@@ -459,4 +461,103 @@ export async function editarGasto(gastoId: string, datos: DatosGasto): Promise<R
   revalidatePath("/memos");
   if (gasto.memo_id) revalidatePath(`/memos/${gasto.memo_id}`);
   return { ok: true };
+}
+
+// ════════════════════════════════════════════════════════════════
+// Caja chica: el memo se crea al final (RENDIDOR sobre lo propio)
+// ════════════════════════════════════════════════════════════════
+//
+// "El proceso es invertido: no hay memo al inicio, hay memo al final. Yo
+// presento lo que gasté, lo revisa mi jefe, aprueba, genera un memo y se va
+// a pago." Los gastos ya existen sueltos —la bandeja sin asignar—; esta
+// acción los junta, crea el memo con lo que efectivamente se gastó y lo
+// deja presentado.
+//
+// El monto autorizado va en cero, y no es un vacío que se llena después:
+// es la verdad del caso. Nadie entregó plata por adelantado, así que todo
+// lo rendido es un reembolso. El consolidado ya lo calcula así, y por eso
+// aparece correctamente en la liquidación como saldo a favor de la persona.
+
+export async function rendirCajaChica(datos: {
+  centroCostoId: string;
+  gastoIds: string[];
+  descripcion: string;
+}): Promise<Resultado> {
+  const solicitante = await solicitanteActual();
+  if (!solicitante) return { ok: false, error: "Sesión no válida." };
+
+  const permiso = autoriza(solicitante, "presentar_rendicion", {
+    propietarioId: solicitante.usuarioId,
+  });
+  if (!permiso.ok) return { ok: false, error: permiso.motivo };
+
+  if (!datos.gastoIds.length) {
+    return { ok: false, error: "No seleccionaste ningún comprobante." };
+  }
+
+  const sb = await clienteServidor();
+
+  // Se releen de la base en vez de confiar en lo que mandó el navegador:
+  // el importe del memo sale de acá y no puede depender del cliente.
+  const { data: gastos } = await sb
+    .from("gastos")
+    .select("id, estado, total, memo_id, usuario_id, alertas, alertas_confirmadas, fecha_emision")
+    .in("id", datos.gastoIds);
+
+  if (!gastos?.length) return { ok: false, error: "No se encontraron esos comprobantes." };
+
+  const ajeno = gastos.find(g => g.usuario_id !== solicitante.usuarioId);
+  if (ajeno) return { ok: false, error: "Solo puedes rendir comprobantes tuyos." };
+
+  const noElegible = gastos.find(
+    g => !elegibleParaCaja({ memo_id: g.memo_id, estado: g.estado as EstadoGasto })
+  );
+  if (noElegible) {
+    return {
+      ok: false,
+      error: "Alguno de los comprobantes ya pertenece a un memo o ya fue presentado.",
+    };
+  }
+
+  const impedimentos = impedimentosParaRendirCaja(gastos as never);
+  if (impedimentos.length) {
+    return {
+      ok: false,
+      error: impedimentos
+        .map(i => `${i.motivo}${i.cantidad ? ` (${i.cantidad})` : ""}`)
+        .join(" "),
+    };
+  }
+
+  const resumen = resumirCaja(gastos as never);
+
+  // Crear el memo, asignárselo y colgarle los gastos son cinco escrituras
+  // que solo sirven juntas: van en una función de la base para que no quede
+  // un memo a medio armar si algo falla, y porque un rendidor no tiene
+  // permiso de escritura directa sobre memos.
+  const { data: memoId, error: errCrear } = await sb.rpc("crear_caja_chica", {
+    p_centro: datos.centroCostoId,
+    p_gastos: datos.gastoIds,
+    p_descripcion: datos.descripcion.trim() || periodoDeCaja(resumen),
+  });
+  if (errCrear) return { ok: false, error: errCrear.message };
+
+  await registrarEvento(sb, "MEMO", memoId as string, "CREAR", solicitante.usuarioId, null, {
+    tipo: "CAJA_CHICA",
+    comprobantes: datos.gastoIds.length,
+    total: resumen.aReembolsar,
+  });
+
+  // Recién ahora se presenta. El memo existió el tiempo justo de armarse, y
+  // la bitácora conserva los dos pasos por separado.
+  const { error: errPres } = await sb.rpc("presentar_memo", { p_memo: memoId });
+  if (errPres) return { ok: false, error: errPres.message };
+
+  await registrarEvento(sb, "MEMO", memoId as string, "PRESENTAR", solicitante.usuarioId,
+    { estado: "EN_RENDICION" }, { estado: "PRESENTADA" });
+
+  revalidatePath("/memos");
+  revalidatePath("/memos/sin-asignar");
+  revalidatePath("/revisar");
+  return { ok: true, id: memoId as string };
 }
