@@ -46,6 +46,13 @@ export const SECCIONES: Seccion[] = [
     resumen: "Rendiciones aprobadas, exportación y marcado de contabilizado",
   },
   {
+    clave: "liquidaciones",
+    etiqueta: "Liquidaciones",
+    ruta: "/liquidaciones",
+    requiere: "exportar",
+    resumen: "Saldos por persona a lo largo de todos sus memos, para pasar a pago",
+  },
+  {
     clave: "tablero",
     etiqueta: "Tablero",
     ruta: "/tablero",

@@ -110,10 +110,20 @@ export function aCsv(filas: string[][]): string {
     .join("\r\n");
 }
 
+/** Un número con signo y decimales opcionales, nada más. */
+const NUMERO = /^-?\d+(\.\d+)?$/;
+
 function escapar(valor: string): string {
   const v = valor ?? "";
-  // Un valor que empieza por = + - @ lo interpreta Excel como fórmula.
-  const seguro = /^[=+\-@]/.test(v) ? `'${v}` : v;
+
+  // Un valor que empieza por = + - @ lo interpreta Excel como fórmula, y se
+  // neutraliza con un apóstrofo. Pero un importe negativo también empieza
+  // por "-", y neutralizarlo lo convierte en texto: la columna deja de
+  // sumarse, que en un documento que va a pago es peor que el riesgo que se
+  // quería evitar. Los números se dejan pasar tal cual; "-40.00" no puede
+  // ser una fórmula.
+  const seguro = !NUMERO.test(v) && /^[=+\-@]/.test(v) ? `'${v}` : v;
+
   return /[";\r\n]/.test(seguro) ? `"${seguro.replace(/"/g, '""')}"` : seguro;
 }
 

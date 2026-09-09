@@ -226,11 +226,20 @@ export const IconoIA = (p: Props) => (
 
 // ── Mapa por clave, para la navegación ──────────────────────────
 
+/** Balanza: el enfrentamiento entre lo entregado y lo rendido. */
+export const IconoLiquidacion = (p: Props) => (
+  <Svg {...p}>
+    <path d="M12 4.2v15.6M7.5 19.8h9" />
+    <path d="M4 8.2h16M8 8.2 4.8 14.4h6.4zM16 8.2l-3.2 6.2h6.4z" />
+  </Svg>
+);
+
 export const ICONOS_SECCION: Record<string, (p: Props) => React.ReactElement> = {
   memos: IconoMemos,
   administrar: IconoAdministrar,
   revisar: IconoRevisar,
   contabilidad: IconoContabilidad,
+  liquidaciones: IconoLiquidacion,
   tablero: IconoTablero,
   sistema: IconoSistema,
 };
