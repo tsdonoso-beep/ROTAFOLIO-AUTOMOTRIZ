@@ -8,7 +8,7 @@ import { IconoAlerta } from "@/components/v2/Iconos";
 
 export default function Ingresar() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [identificador, setIdentificador] = useState("");
   const [clave, setClave] = useState("");
   const [error, setError] = useState("");
   const [cargando, setCargando] = useState(false);
@@ -19,15 +19,30 @@ export default function Ingresar() {
     setError("");
 
     const sb = clienteNavegador();
+
+    // Se entra con documento o con correo, indistintamente. Buena parte del
+    // personal no tiene cuenta de correo, así que el documento es el camino
+    // principal: el servidor traduce lo tecleado al correo con el que la
+    // cuenta existe realmente, que para esas personas es uno sintético.
+    const { data: correo, error: errRpc } = await sb.rpc("correo_de_acceso", {
+      identificador: identificador.trim(),
+    });
+
+    if (errRpc || typeof correo !== "string") {
+      setError("No se pudo verificar tus datos. Revisa tu conexión e inténtalo de nuevo.");
+      setCargando(false);
+      return;
+    }
+
     const { error: err } = await sb.auth.signInWithPassword({
-      email: email.trim().toLowerCase(),
+      email: correo,
       password: clave,
     });
 
     if (err) {
-      // No se distingue "usuario inexistente" de "clave incorrecta": decirlo
-      // permitiría averiguar qué correos están dados de alta.
-      setError("Correo o contraseña incorrectos.");
+      // No se distingue "no existe" de "clave incorrecta": decirlo permitiría
+      // averiguar qué documentos están dados de alta probando números.
+      setError("Documento, correo o contraseña incorrectos.");
       setCargando(false);
       return;
     }
@@ -75,13 +90,19 @@ export default function Ingresar() {
           Ingresa con tu cuenta para continuar
         </p>
 
-        <label className="fg-label">Correo</label>
+        <label className="fg-label">DNI o correo</label>
         <input
-          className="fg-input" type="email" autoComplete="username"
-          value={email} onChange={e => setEmail(e.target.value)}
-          placeholder="tu.correo@empresa.com" required autoFocus
-          style={{ marginBottom: 14 }}
+          className="fg-input" type="text" autoComplete="username"
+          inputMode={identificador.includes("@") ? "email" : "numeric"}
+          value={identificador} onChange={e => setIdentificador(e.target.value)}
+          placeholder="12345678" required autoFocus
+          style={{ marginBottom: 4 }}
         />
+        <p style={{
+          fontSize: 11, color: "var(--text3)", lineHeight: 1.45, marginBottom: 14,
+        }}>
+          Si no tienes correo de la empresa, entra con tu número de documento.
+        </p>
 
         <label className="fg-label">Contraseña</label>
         <input
@@ -97,7 +118,7 @@ export default function Ingresar() {
         )}
 
         <button
-          type="submit" className="btn-primary" disabled={cargando || !email || !clave}
+          type="submit" className="btn-primary" disabled={cargando || !identificador || !clave}
           style={{ width: "100%", justifyContent: "center", marginTop: 20, padding: 12 }}
         >
           {cargando ? "Entrando…" : "Entrar"}

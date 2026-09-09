@@ -14,7 +14,7 @@ export default async function Sistema() {
   const sb = await clienteServidor();
 
   const [usuarios, centros, parametros, eventos] = await Promise.all([
-    sb.from("usuarios").select("id, nombre, email, activo, roles_usuario(rol)").order("nombre"),
+    sb.from("usuarios").select("id, nombre, dni, dni_provisional, email, activo, roles_usuario(rol)").order("nombre"),
     sb.from("centros_costo").select("codigo, nombre, activo, drive_folder").order("codigo"),
     sb.from("parametros").select("clave, valor, descripcion").order("clave"),
     sb.from("eventos").select("accion, entidad, ocurrido_en").order("ocurrido_en", { ascending: false }).limit(10),
@@ -31,6 +31,17 @@ export default async function Sistema() {
         {/* ── Usuarios ── */}
         <section>
           <Titulo texto="Usuarios y roles" />
+          <div style={{
+            marginBottom: 8, padding: "10px 13px", borderRadius: 9,
+            background: "var(--warn-bg)", border: "1px solid rgba(180,83,9,0.2)",
+          }}>
+            <p style={{ fontSize: 11.5, color: "var(--warn)", lineHeight: 1.5 }}>
+              Los documentos marcados como <strong>provisionales</strong> son de
+              relleno: sirven para probar el ingreso sin correo, pero hay que
+              reemplazarlos por la lista real de RRHH antes de usar la app en
+              serio. Mientras tanto no se puede cruzar con planilla.
+            </p>
+          </div>
           <Tarjeta padding={0}>
             {(usuarios.data ?? []).map((u, i, arr) => (
               <div key={u.id} style={{
@@ -43,7 +54,20 @@ export default async function Sistema() {
                     {u.nombre}
                     {!u.activo && <span style={{ marginLeft: 7, fontSize: 11, color: "var(--text3)" }}>(inactivo)</span>}
                   </p>
-                  <p style={{ fontSize: 11.5, color: "var(--text3)", marginTop: 1 }}>{u.email}</p>
+                  <p style={{
+                    fontSize: 11.5, color: "var(--text3)", marginTop: 2,
+                    display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap",
+                  }}>
+                    <span className="mono">{u.dni}</span>
+                    {u.dni_provisional && (
+                      <span className="badge badge-warn" style={{ fontSize: 9 }}>
+                        provisional
+                      </span>
+                    )}
+                    {u.email
+                      ? <span>· {u.email}</span>
+                      : <span style={{ fontStyle: "italic" }}>· sin correo</span>}
+                  </p>
                 </div>
                 <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                   {((u.roles_usuario ?? []) as Array<{ rol: Rol }>).map(r => (

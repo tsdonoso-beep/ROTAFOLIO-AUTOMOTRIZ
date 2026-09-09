@@ -64,7 +64,12 @@ export type CodigoComprobante = keyof typeof TIPO_COMPROBANTE_SUNAT;
 export interface Usuario {
   id: string;
   auth_id: string | null;
-  email: string;
+  /** Documento de identidad: el identificador con el que la persona entra. */
+  dni: string;
+  /** true mientras sea un documento de relleno, sin el dato real de RRHH. */
+  dni_provisional: boolean;
+  /** Nulo para quien no tiene cuenta de correo, que es buena parte del campo. */
+  email: string | null;
   nombre: string;
   activo: boolean;
   area_id: string | null;

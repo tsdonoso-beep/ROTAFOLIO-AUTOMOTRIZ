@@ -8,7 +8,7 @@ import { crearMemo } from "@/app/acciones/memos";
 
 interface Props {
   centros: Array<{ id: string; codigo: string; nombre: string }>;
-  personas: Array<{ id: string; nombre: string; email: string }>;
+  personas: Array<{ id: string; nombre: string; dni: string; email: string | null }>;
 }
 
 const TIPOS = [
@@ -131,7 +131,10 @@ export default function FormularioMemo({ centros, personas }: Props) {
                     <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)", display: "block" }}>
                       {p.nombre}
                     </span>
-                    <span style={{ fontSize: 11, color: "var(--text3)" }}>{p.email}</span>
+                    <span style={{ fontSize: 11, color: "var(--text3)" }}>
+                      <span className="mono">{p.dni}</span>
+                      {p.email && ` · ${p.email}`}
+                    </span>
                   </span>
                 </button>
               );
