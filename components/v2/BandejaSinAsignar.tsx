@@ -18,6 +18,7 @@ interface MemoDestino {
   monto_autorizado: number;
   rendido: number;
   centroCostoFolder: string;
+  empresaRuc: string | null;
 }
 
 interface Props {
@@ -88,6 +89,7 @@ function Fila({ gasto: g, memos, parametros, onResultado }: {
       {
         clase: g.clase,
         proveedor_ruc: g.proveedor_ruc,
+        adquiriente_ruc: g.adquiriente_ruc,
         tipo_comprobante: g.tipo_comprobante,
         fecha_emision: g.fecha_emision,
         subtotal: g.subtotal, igv: g.igv, total: g.total,
@@ -95,6 +97,7 @@ function Fila({ gasto: g, memos, parametros, onResultado }: {
       },
       {
         parametros,
+        rucEmpresa: destino.empresaRuc,
         memo: {
           monto_autorizado: destino.monto_autorizado,
           fecha_salida: destino.fecha_salida,

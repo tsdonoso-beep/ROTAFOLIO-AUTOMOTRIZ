@@ -149,6 +149,8 @@ export interface Gasto {
 
   proveedor_ruc: string | null;
   proveedor_nombre: string | null;
+  /** A nombre de quién se emitió. Debe ser el RUC de la empresa. */
+  adquiriente_ruc: string | null;
   tipo_comprobante: string | null;
   serie: string | null;
   numero: string | null;
@@ -199,6 +201,8 @@ export type CodigoAlerta =
   | "BOLETA_SIN_RUS"
   | "SIN_PLACA"
   | "SIN_SUSTENTO_FORMAL"
+  | "COMPROBANTE_AJENO"
+  | "TICKET_SIN_RUC"
   | "CONFIANZA_BAJA"
   | "SUNAT_NO_VALIDO";
 
@@ -233,6 +237,15 @@ export interface ValidacionSunat {
 export interface ResultadoExtraccion {
   proveedor_ruc: string;
   proveedor_nombre: string;
+  /**
+   * RUC a nombre de quien se emitió el comprobante.
+   *
+   * Administración lo revisa a mano en cada factura: "algunos dicen que
+   * pidieron factura, pero cuando reviso el físico está a nombre del
+   * trabajador". Una factura que no está a nombre de la empresa no sirve
+   * como sustento ni da crédito fiscal.
+   */
+  adquiriente_ruc: string;
   tipo_comprobante: string;
   serie: string;
   numero: string;

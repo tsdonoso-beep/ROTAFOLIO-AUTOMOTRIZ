@@ -188,7 +188,7 @@ function traducir(status: number, cuerpo: string): ErrorExtraccion {
 // ════════════════════════════════════════════════════════════════
 
 const CAMPOS_TEXTO = [
-  "proveedor_ruc", "proveedor_nombre", "tipo_comprobante",
+  "proveedor_ruc", "proveedor_nombre", "adquiriente_ruc", "tipo_comprobante",
   "serie", "numero", "fecha_emision", "forma_pago", "detalle",
 ] as const;
 

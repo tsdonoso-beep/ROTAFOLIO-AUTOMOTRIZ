@@ -63,10 +63,13 @@ export function parsearComprobante(
   const confianza: Record<string, number> = {};
   const noLegibles: string[] = [];
 
-  // ── RUC del proveedor ──
-  const ruc = buscarRuc(texto, opciones.rucPropio ?? null);
+  // ── RUC del proveedor y de a quién se emitió ──
+  const rucs = buscarRucs(texto, opciones.rucPropio ?? null);
+  const ruc = rucs.proveedor;
   if (ruc) confianza.proveedor_ruc = ruc.confianza;
   else noLegibles.push("proveedor_ruc");
+
+  if (rucs.adquiriente) confianza.adquiriente_ruc = rucs.adquiriente.confianza;
 
   // ── Serie y número ──
   const doc = buscarSerieNumero(texto);
@@ -116,6 +119,7 @@ export function parsearComprobante(
   return {
     proveedor_ruc: ruc?.valor ?? "",
     proveedor_nombre: nombre ?? "",
+    adquiriente_ruc: rucs.adquiriente?.valor ?? "",
     tipo_comprobante: tipo?.valor ?? "",
     serie: doc?.serie ?? "",
     numero: doc?.numero ?? "",
@@ -168,10 +172,21 @@ function repararDigitos(token: string): string {
 //  RUC
 // ════════════════════════════════════════════════════════════════
 
-function buscarRuc(
-  texto: string,
-  rucPropio: string | null
-): { valor: string; confianza: number } | null {
+interface RucsDelComprobante {
+  proveedor: { valor: string; confianza: number } | null;
+  /** A nombre de quién se emitió, si el documento lo declara. */
+  adquiriente: { valor: string; confianza: number } | null;
+}
+
+/**
+ * Separa el RUC del emisor del RUC de quien recibe el comprobante.
+ *
+ * Una factura peruana lleva los dos: el del emisor arriba, con el logo, y
+ * el del cliente abajo tras "SEÑOR(ES)". Distinguirlos importa porque una
+ * factura emitida a nombre del trabajador y no de la empresa no sirve como
+ * sustento, y hoy eso se descubre revisando el papel a mano.
+ */
+function buscarRucs(texto: string, rucPropio: string | null): RucsDelComprobante {
   const candidatos: Array<{ valor: string; confianza: number; pos: number }> = [];
 
   // Primero los que ya son once dígitos limpios.
@@ -193,17 +208,33 @@ function buscarRuc(
     }
   }
 
-  if (!candidatos.length) return null;
+  if (!candidatos.length) return { proveedor: null, adquiriente: null };
 
-  // El RUC propio aparece como destinatario, no como emisor: se descarta.
-  const ajenos = rucPropio
-    ? candidatos.filter(c => c.valor !== rucPropio.trim())
-    : candidatos;
-  if (!ajenos.length) return null;
+  // El emisor imprime su RUC en la cabecera, así que el orden de aparición
+  // es la mejor pista que hay.
+  candidatos.sort((a, b) => a.pos - b.pos);
 
-  // El emisor imprime su RUC en la cabecera, así que el primero gana.
-  ajenos.sort((a, b) => a.pos - b.pos);
-  return { valor: ajenos[0].valor, confianza: ajenos[0].confianza };
+  // Sin repetidos: un RUC suele aparecer más de una vez en el mismo papel.
+  const unicos: typeof candidatos = [];
+  for (const c of candidatos) {
+    if (!unicos.some(u => u.valor === c.valor)) unicos.push(c);
+  }
+
+  const propio = rucPropio?.trim() || null;
+  const proveedor = unicos.find(c => c.valor !== propio) ?? null;
+
+  // El adquiriente es el nuestro si aparece; si no, el siguiente RUC
+  // distinto del proveedor —que es justamente el caso a detectar: una
+  // factura emitida a un tercero.
+  const adquiriente =
+    (propio ? unicos.find(c => c.valor === propio) : undefined)
+    ?? unicos.find(c => c.valor !== proveedor?.valor)
+    ?? null;
+
+  return {
+    proveedor: proveedor && { valor: proveedor.valor, confianza: proveedor.confianza },
+    adquiriente: adquiriente && { valor: adquiriente.valor, confianza: adquiriente.confianza },
+  };
 }
 
 // ════════════════════════════════════════════════════════════════

@@ -41,6 +41,7 @@ export default async function SinAsignar() {
             id, correlativo, destino, estado, monto_autorizado,
             fecha_salida, fecha_retorno_prev,
             centros_costo ( codigo, drive_folder ),
+            empresas ( ruc ),
             gastos ( estado, clase, total, alertas )
           `)
           .in("id", ids)
@@ -65,6 +66,7 @@ export default async function SinAsignar() {
         monto_autorizado: Number(m.monto_autorizado),
         rendido: consolidar(Number(m.monto_autorizado), g).rendido,
         centroCostoFolder: cc?.drive_folder || cc?.codigo || "SIN-CENTRO",
+        empresaRuc: (m.empresas as { ruc: string } | null)?.ruc ?? null,
       };
     });
 

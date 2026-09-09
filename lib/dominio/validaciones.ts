@@ -10,6 +10,8 @@ export interface GastoAValidar {
   clase: ClaseGasto;
   categoria?: string | null;
   proveedor_ruc?: string | null;
+  /** A nombre de quién se emitió, si se pudo leer. */
+  adquiriente_ruc?: string | null;
   tipo_comprobante?: string | null;
   fecha_emision?: string | null;
   subtotal?: number | null;
@@ -21,6 +23,8 @@ export interface GastoAValidar {
 
 export interface ContextoValidacion {
   parametros: Parametros;
+  /** RUC de la empresa que paga. Sin él no se puede comprobar a nombre de quién está emitido. */
+  rucEmpresa?: string | null;
   memo?: {
     monto_autorizado: number;
     fecha_salida: string | null;
@@ -129,6 +133,56 @@ export function validarGasto(g: GastoAValidar, ctx: ContextoValidacion): Alerta[
         mensaje:
           `Sin ${faltantes.join(" ni ")}: el gasto se registra, pero no ` +
           `otorga crédito fiscal y necesita sustento adicional.`,
+      });
+    }
+  }
+
+  // ── A nombre de quién está emitido ────────────────────────────
+  //
+  // Lo que Administración revisa hoy comprobante por comprobante contra el
+  // papel físico: "algunos dicen que pidieron factura, pero cuando reviso
+  // está a nombre del trabajador". Una factura emitida a otro RUC no sirve
+  // como sustento de la empresa ni da derecho a crédito fiscal.
+  //
+  // Solo se avisa cuando se leyó un RUC distinto del nuestro. Si no se pudo
+  // leer el adquiriente no se dice nada: una alerta por cada comprobante mal
+  // fotografiado enseñaría a ignorarlas, y la confianza de lectura ya marca
+  // esos casos por su lado.
+  if (g.clase === "COMPROBANTE" && ctx.rucEmpresa && g.adquiriente_ruc) {
+    const propio = ctx.rucEmpresa.trim();
+    const emitidoA = g.adquiriente_ruc.trim();
+
+    if (emitidoA !== propio) {
+      alertas.push({
+        codigo: "COMPROBANTE_AJENO",
+        severidad: "alta",
+        campo: "adquiriente_ruc",
+        mensaje:
+          `El comprobante está emitido a ${emitidoA}, no a la empresa ` +
+          `(${propio}). Así no sustenta el gasto ni da crédito fiscal: ` +
+          `hay que pedir que lo reemitan.`,
+      });
+    }
+  }
+
+  // ── Ticket ────────────────────────────────────────────────────
+  //
+  // Un ticket de máquina registradora solo sustenta el gasto si identifica
+  // al adquiriente con su RUC. Sin eso es un papel sin valor tributario, y
+  // es lo que llega de lavanderías y negocios chicos.
+  if (g.clase === "COMPROBANTE" && g.tipo_comprobante === "12") {
+    const identificaEmpresa = !!ctx.rucEmpresa
+      && !!g.adquiriente_ruc
+      && g.adquiriente_ruc.trim() === ctx.rucEmpresa.trim();
+
+    if (!identificaEmpresa) {
+      alertas.push({
+        codigo: "TICKET_SIN_RUC",
+        severidad: "alta",
+        campo: "tipo_comprobante",
+        mensaje:
+          "Es un ticket que no identifica el RUC de la empresa. No sustenta " +
+          "el gasto: pide factura o boleta, o adjunta declaración jurada.",
       });
     }
   }

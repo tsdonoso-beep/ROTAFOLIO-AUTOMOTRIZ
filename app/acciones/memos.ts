@@ -306,6 +306,7 @@ export async function marcarContabilizado(memoId: string, asiento: string): Prom
 export interface DatosGasto {
   proveedor_ruc: string;
   proveedor_nombre: string;
+  adquiriente_ruc: string;
   tipo_comprobante: string;
   serie: string;
   numero: string;
@@ -332,9 +333,9 @@ export async function editarGasto(gastoId: string, datos: DatosGasto): Promise<R
     .from("gastos")
     .select(`
       id, estado, usuario_id, memo_id, proveedor_ruc, proveedor_nombre,
-      tipo_comprobante, serie, numero, fecha_emision, moneda, subtotal,
-      igv, total, forma_pago, detalle, confianza_extraccion,
-      memos ( estado, monto_autorizado, fecha_salida, fecha_retorno_prev )
+      adquiriente_ruc, tipo_comprobante, serie, numero, fecha_emision, moneda,
+      subtotal, igv, total, forma_pago, detalle, confianza_extraccion,
+      memos ( estado, monto_autorizado, fecha_salida, fecha_retorno_prev, empresas ( ruc ) )
     `)
     .eq("id", gastoId)
     .single();
@@ -348,6 +349,7 @@ export async function editarGasto(gastoId: string, datos: DatosGasto): Promise<R
   const memo = gasto.memos as unknown as {
     estado: EstadoMemo; monto_autorizado: number;
     fecha_salida: string | null; fecha_retorno_prev: string | null;
+    empresas: { ruc: string } | null;
   } | null;
 
   // El mismo candado que ya declaraba lib/dominio/estados.ts y que la
@@ -392,6 +394,7 @@ export async function editarGasto(gastoId: string, datos: DatosGasto): Promise<R
     {
       clase: "COMPROBANTE",
       proveedor_ruc: datos.proveedor_ruc,
+      adquiriente_ruc: datos.adquiriente_ruc,
       tipo_comprobante: datos.tipo_comprobante,
       fecha_emision: datos.fecha_emision,
       subtotal: datos.subtotal, igv: datos.igv, total: datos.total,
@@ -403,6 +406,7 @@ export async function editarGasto(gastoId: string, datos: DatosGasto): Promise<R
     },
     {
       parametros,
+      rucEmpresa: (memo?.empresas as unknown as { ruc: string } | null)?.ruc ?? null,
       memo: memo ? {
         monto_autorizado: Number(memo.monto_autorizado),
         fecha_salida: memo.fecha_salida,
@@ -419,6 +423,7 @@ export async function editarGasto(gastoId: string, datos: DatosGasto): Promise<R
   const { error } = await sb.from("gastos").update({
     proveedor_ruc: datos.proveedor_ruc || null,
     proveedor_nombre: datos.proveedor_nombre || null,
+    adquiriente_ruc: datos.adquiriente_ruc || null,
     tipo_comprobante: datos.tipo_comprobante || null,
     serie: datos.serie || null,
     numero: datos.numero || null,

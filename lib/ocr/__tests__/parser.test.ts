@@ -123,6 +123,58 @@ TOTAL S/ 120.00
 VISA
 `;
 
+describe("a nombre de quién se emitió", () => {
+  test("distingue el RUC del emisor del RUC del cliente", () => {
+    const r = parsearComprobante(FACTURA, { rucPropio: RUC_PROPIO });
+    assert.equal(r.proveedor_ruc, RUC_PROVEEDOR, "el emisor va arriba");
+    assert.equal(r.adquiriente_ruc, RUC_PROPIO, "el cliente somos nosotros");
+  });
+
+  test("una factura emitida a un tercero se detecta", () => {
+    // El caso que Administración descubre revisando el papel: el trabajador
+    // pidió factura y salió a nombre de otro. Nuestro RUC no aparece.
+    const ajena = `
+FOR ELECTRIC S.A.C.
+RUC: ${RUC_PROVEEDOR}
+FACTURA ELECTRONICA
+F001-00002591
+SEÑOR(ES): JUAN PEREZ SERVICIOS E.I.R.L.
+RUC: 20612077224
+IMPORTE TOTAL S/ 300.00
+`;
+    const r = parsearComprobante(ajena, { rucPropio: RUC_PROPIO });
+    assert.equal(r.proveedor_ruc, RUC_PROVEEDOR);
+    assert.equal(r.adquiriente_ruc, "20612077224", "se lee el tercero, no se calla");
+    assert.notEqual(r.adquiriente_ruc, RUC_PROPIO);
+  });
+
+  test("una boleta con un solo RUC no inventa adquiriente", () => {
+    const r = parsearComprobante(BOLETA_SUCIA, { rucPropio: RUC_PROPIO });
+    assert.equal(r.adquiriente_ruc, "", "no hay a quién atribuirle");
+  });
+
+  test("el mismo RUC repetido no se toma como dos partes", () => {
+    // El RUC del emisor suele aparecer varias veces en el mismo papel.
+    const repetido = `
+FOR ELECTRIC S.A.C.
+RUC: ${RUC_PROVEEDOR}
+FACTURA
+F001-00000123
+Consultas al RUC ${RUC_PROVEEDOR}
+TOTAL S/ 50.00
+`;
+    const r = parsearComprobante(repetido, { rucPropio: RUC_PROPIO });
+    assert.equal(r.proveedor_ruc, RUC_PROVEEDOR);
+    assert.equal(r.adquiriente_ruc, "", "aparecer dos veces no lo vuelve el cliente");
+  });
+
+  test("sin saber nuestro RUC, el segundo es el adquiriente", () => {
+    const r = parsearComprobante(FACTURA);
+    assert.equal(r.proveedor_ruc, RUC_PROVEEDOR);
+    assert.equal(r.adquiriente_ruc, RUC_PROPIO);
+  });
+});
+
 describe("boleta con OCR sucio", () => {
   const r = parsearComprobante(BOLETA_SUCIA, { rucPropio: RUC_PROPIO });
 

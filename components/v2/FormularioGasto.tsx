@@ -178,6 +178,26 @@ export default function FormularioGasto({ valores, origen, onCambio, parametros 
         </Campo>
 
         {/*
+          A nombre de quién se emitió. Es lo que hoy se revisa contra el
+          papel físico y aparece tarde: una factura al nombre del trabajador
+          no sustenta el gasto de la empresa.
+        */}
+        <Campo
+          etiqueta="Emitido a (RUC)"
+          origen={origen.adquiriente_ruc} confianza={valores._confianza.adquiriente_ruc}
+        >
+          <input
+            className="fg-input mono" value={valores.adquiriente_ruc}
+            placeholder="RUC de la empresa" inputMode="numeric" maxLength={11}
+            onChange={e => fijar({ adquiriente_ruc: e.target.value.replace(/\D/g, "") }, ["adquiriente_ruc"])}
+          />
+          <p style={{ fontSize: 11, color: "var(--text3)", marginTop: 5, lineHeight: 1.45 }}>
+            Debe ser el RUC de INROPRIN. Si la factura salió a nombre tuyo,
+            no sirve como sustento.
+          </p>
+        </Campo>
+
+        {/*
           Sin RUC ni numeración el gasto se registra igual —es el caso del
           Yape o la transferencia—, pero deja de dar crédito fiscal. Se dice
           aquí, mientras se puede corregir, y no recién al cerrar el mes.

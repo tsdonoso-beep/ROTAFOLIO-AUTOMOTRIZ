@@ -214,3 +214,84 @@ describe("Distribución entre proyectos", () => {
     assert.ok(!distribucionValida([{ porcentaje: 100 }, { porcentaje: 0 }]).ok);
   });
 });
+
+// ════════════════════════════════════════════════════════════════
+describe("A nombre de quién está emitido", () => {
+  const NUESTRO = "20512201611";   // INDUSTRIAS ROLAND PRINT S.A.C.
+  const OTRO    = "20612077224";   // otro contribuyente cualquiera
+  const ctx = { ...ctxBase, rucEmpresa: NUESTRO };
+
+  it("una factura a nombre de la empresa no alerta", () => {
+    const g = { ...base, tipo_comprobante: "01", adquiriente_ruc: NUESTRO };
+    assert.ok(!codigos(g, ctx).includes("COMPROBANTE_AJENO"));
+  });
+
+  it("una factura emitida a otro RUC sí alerta", () => {
+    // El caso que Administración descubre revisando el papel: el trabajador
+    // pidió factura y salió a nombre de otro.
+    const g = { ...base, tipo_comprobante: "01", adquiriente_ruc: OTRO };
+    assert.ok(codigos(g, ctx).includes("COMPROBANTE_AJENO"));
+  });
+
+  it("el mensaje dice a qué RUC salió y qué hacer", () => {
+    const g = { ...base, tipo_comprobante: "01", adquiriente_ruc: OTRO };
+    const a = validarGasto(g, ctx).find(x => x.codigo === "COMPROBANTE_AJENO");
+    assert.match(a!.mensaje, new RegExp(OTRO));
+    assert.match(a!.mensaje, /reemitan/);
+  });
+
+  it("no alerta si no se pudo leer a nombre de quién", () => {
+    // Una alerta por cada comprobante mal fotografiado enseñaría a
+    // ignorarlas: la confianza de lectura ya marca esos casos.
+    const g = { ...base, tipo_comprobante: "01", adquiriente_ruc: "" };
+    assert.ok(!codigos(g, ctx).includes("COMPROBANTE_AJENO"));
+  });
+
+  it("sin saber el RUC de la empresa no se puede comprobar nada", () => {
+    const g = { ...base, tipo_comprobante: "01", adquiriente_ruc: OTRO };
+    assert.ok(!codigos(g, ctxBase).includes("COMPROBANTE_AJENO"));
+  });
+
+  it("ignora espacios alrededor", () => {
+    const g = { ...base, tipo_comprobante: "01", adquiriente_ruc: `  ${NUESTRO} ` };
+    assert.ok(!codigos(g, ctx).includes("COMPROBANTE_AJENO"));
+  });
+});
+
+// ════════════════════════════════════════════════════════════════
+describe("Ticket", () => {
+  const NUESTRO = "20512201611";
+  const ctx = { ...ctxBase, rucEmpresa: NUESTRO };
+
+  it("un ticket sin RUC de la empresa no sustenta el gasto", () => {
+    // "las lavanderías casi no dan factura, te dan ticket" — y ese ticket
+    // no sirve como sustento.
+    const g = { ...base, tipo_comprobante: "12" };
+    assert.ok(codigos(g, ctx).includes("TICKET_SIN_RUC"));
+  });
+
+  it("un ticket que sí identifica a la empresa pasa", () => {
+    const g = { ...base, tipo_comprobante: "12", adquiriente_ruc: NUESTRO };
+    assert.ok(!codigos(g, ctx).includes("TICKET_SIN_RUC"));
+  });
+
+  it("una factura o una boleta no disparan la alerta de ticket", () => {
+    for (const tipo of ["01", "03"]) {
+      const g = { ...base, tipo_comprobante: tipo };
+      assert.ok(!codigos(g, ctx).includes("TICKET_SIN_RUC"), `tipo ${tipo}`);
+    }
+  });
+
+  it("el aviso propone la salida, no solo el problema", () => {
+    const g = { ...base, tipo_comprobante: "12" };
+    const a = validarGasto(g, ctx).find(x => x.codigo === "TICKET_SIN_RUC");
+    assert.match(a!.mensaje, /factura o boleta|declaración jurada/);
+  });
+
+  it("ninguna de las dos bloquea: el gasto se registra igual", () => {
+    const g = { ...base, tipo_comprobante: "12", adquiriente_ruc: "20612077224" };
+    const alertas = validarGasto(g, ctx);
+    assert.ok(alertas.length >= 2, "debe avisar por las dos cosas");
+    assert.ok(!hayBloqueantes(alertas), "pero sin impedir el registro");
+  });
+});

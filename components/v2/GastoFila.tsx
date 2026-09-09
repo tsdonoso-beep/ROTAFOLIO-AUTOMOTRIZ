@@ -24,7 +24,7 @@ const SEVERIDAD: Record<string, { bg: string; bd: string; fg: string }> = {
 };
 
 type G = Pick<Gasto,
-  | "id" | "estado" | "clase" | "proveedor_ruc" | "proveedor_nombre"
+  | "id" | "estado" | "clase" | "proveedor_ruc" | "proveedor_nombre" | "adquiriente_ruc"
   | "tipo_comprobante" | "serie" | "numero" | "fecha_emision"
   | "subtotal" | "igv" | "total" | "moneda" | "detalle" | "forma_pago"
   | "alertas" | "alertas_confirmadas" | "confianza_extraccion"
@@ -56,6 +56,7 @@ export default function GastoFila({
     setBorrador({
       proveedor_ruc: g.proveedor_ruc ?? "",
       proveedor_nombre: g.proveedor_nombre ?? "",
+      adquiriente_ruc: g.adquiriente_ruc ?? "",
       tipo_comprobante: g.tipo_comprobante ?? "",
       serie: g.serie ?? "",
       numero: g.numero ?? "",

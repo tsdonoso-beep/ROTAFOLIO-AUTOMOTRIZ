@@ -1,9 +1,51 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { aCsv } from "../csv.ts";
+import { aCsv, CABECERAS, filasCsv } from "../csv.ts";
 import { filasLiquidacion, nombreArchivoLiquidacion } from "../liquidacion.ts";
 import { liquidar, type MemoLiquidable } from "../../dominio/liquidacion.ts";
 import type { EstadoMemo } from "../../dominio/tipos.ts";
+
+describe("estructura del archivo de Contabilidad", () => {
+  const ctx = {
+    correlativo: "M-1", empresa: "INROPRIN", centroCodigo: "CC-1",
+    centroNombre: "Proyecto", destino: "Piura", rendidor: "Justo",
+    aprobadoPor: "Alonzo",
+  };
+
+  const gasto = {
+    id: "g1", client_id: "c1", memo_id: "m1", proyecto_id: null, usuario_id: "u1",
+    estado: "APROBADO", clase: "COMPROBANTE", categoria: null,
+    proveedor_ruc: "20100128056", proveedor_nombre: "FOR ELECTRIC",
+    adquiriente_ruc: "20601030013", tipo_comprobante: "01",
+    serie: "F001", numero: "00002591", fecha_emision: "2026-05-14",
+    moneda: "PEN", tipo_cambio: null, subtotal: 254.24, igv: 45.76, total: 300,
+    forma_pago: "EFECTIVO", detalle: "Cable", dj_motivo: null, dj_lugar: null,
+    mov_origen: null, mov_destino: null, confianza_extraccion: null,
+    alertas: [], alertas_confirmadas: false, validacion_sunat: null,
+    hash_imagen: null, observacion: null, storage_key: null,
+    drive_url: null, drive_error: null, capturado_en: null,
+    sincronizado_en: null, registrado_en: null, creado_en: "2026-05-14",
+  } as unknown as Parameters<typeof filasCsv>[1][number];
+
+  test("cada fila trae exactamente tantas columnas como cabeceras", () => {
+    // Un desfase acá corre todas las columnas del archivo que recibe
+    // Contabilidad, y no se nota hasta que alguien concilia a mano.
+    const filas = filasCsv(ctx, [gasto, gasto]);
+    for (const [i, fila] of filas.entries()) {
+      assert.equal(fila.length, CABECERAS.length, `la fila ${i} está desalineada`);
+    }
+  });
+
+  test("el RUC a nombre de quién se emitió llega a Contabilidad", () => {
+    const texto = aCsv(filasCsv(ctx, [gasto]));
+    assert.match(texto, /RUC Adquiriente/);
+    assert.match(texto, /20601030013/);
+  });
+
+  test("la primera fila son las cabeceras", () => {
+    assert.deepEqual(filasCsv(ctx, [])[0], [...CABECERAS]);
+  });
+});
 
 describe("escapado del CSV", () => {
   test("un importe negativo sigue siendo un número", () => {

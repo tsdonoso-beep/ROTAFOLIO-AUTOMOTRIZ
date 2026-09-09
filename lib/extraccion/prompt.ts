@@ -25,6 +25,7 @@ Devuelve SOLO un JSON con esta estructura exacta:
 {
   "proveedor_ruc": "11 dígitos del RUC del emisor",
   "proveedor_nombre": "razón social del emisor",
+  "adquiriente_ruc": "11 dígitos del RUC del CLIENTE, o vacío si no aparece",
   "tipo_comprobante": "01|03|07|08|12",
   "serie": "serie sola, ej: F001 o FE01",
   "numero": "número solo, sin la serie, ej: 00002591",
@@ -48,8 +49,11 @@ REGLAS IMPORTANTES:
 1. Serie y número van SEPARADOS. Si ves "FE01-00002591", entonces
    serie es "FE01" y numero es "00002591".
 
-2. El RUC del EMISOR, no el del cliente. En una factura el emisor suele
-   estar arriba con su logo; el cliente aparece como "CLIENTE" o "SEÑOR(ES)".
+2. Hay DOS RUC en una factura y no se confunden:
+   · "proveedor_ruc" es el del EMISOR, arriba, junto al logo.
+   · "adquiriente_ruc" es el del CLIENTE, abajo, tras "CLIENTE" o
+     "SEÑOR(ES)". Si el comprobante no lo trae, déjalo vacío; no lo
+     inventes ni repitas el del emisor.
 
 3. En "_confianza" incluye un valor entre 0 y 1 por cada campo que hayas
    completado, indicando qué tan seguro estás de haberlo leído bien.

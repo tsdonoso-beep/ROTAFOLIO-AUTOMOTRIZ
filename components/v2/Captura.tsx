@@ -250,6 +250,7 @@ export default function Captura({ memos, memoInicial, parametros, onListo }: Pro
         {
           clase: "COMPROBANTE",
           proveedor_ruc: valores.proveedor_ruc,
+          adquiriente_ruc: valores.adquiriente_ruc,
           tipo_comprobante: valores.tipo_comprobante,
           fecha_emision: valores.fecha_emision,
           subtotal: valores.subtotal, igv: valores.igv, total: valores.total,
@@ -257,6 +258,7 @@ export default function Captura({ memos, memoInicial, parametros, onListo }: Pro
         },
         {
           parametros,
+          rucEmpresa: destino?.empresaRuc ?? memos[0]?.empresaRuc ?? null,
           // Sin memo no hay monto autorizado contra el cual comparar: las
           // validaciones de exceso y de fecha simplemente no aplican.
           memo: destino ? {
@@ -284,6 +286,7 @@ export default function Captura({ memos, memoInicial, parametros, onListo }: Pro
         clase: "COMPROBANTE",
         proveedor_ruc: valores.proveedor_ruc || null,
         proveedor_nombre: valores.proveedor_nombre || null,
+        adquiriente_ruc: valores.adquiriente_ruc || null,
         tipo_comprobante: valores.tipo_comprobante || null,
         serie: valores.serie || null,
         numero: valores.numero || null,
