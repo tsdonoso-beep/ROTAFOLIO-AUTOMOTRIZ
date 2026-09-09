@@ -68,6 +68,63 @@ export async function POST(req: NextRequest) {
   }
 }
 
+/**
+ * Mueve un archivo ya subido a otra carpeta.
+ *
+ * Un comprobante capturado sin memo se archiva en una carpeta de
+ * pendientes: la foto solo vive en la memoria del navegador y se perdería
+ * al cerrar. Cuando después se le asigna un memo, el archivo tiene que
+ * viajar a la carpeta que le corresponde, porque la trazabilidad por
+ * centro de costo y memo es justamente lo que se usa para auditar.
+ */
+export async function PATCH(req: NextRequest) {
+  try {
+    const { fileId, carpeta1, carpeta2 } = (await req.json()) as {
+      fileId: string; carpeta1: string; carpeta2: string;
+    };
+
+    const email = process.env.GOOGLE_SA_EMAIL;
+    const key = process.env.GOOGLE_SA_PRIVATE_KEY?.replace(/\\n/g, "\n");
+    const rootId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+
+    if (!email || !key || !rootId) {
+      return NextResponse.json(
+        { error: "Credenciales de Drive no configuradas en el servidor." },
+        { status: 500 }
+      );
+    }
+
+    const auth = new google.auth.GoogleAuth({
+      credentials: { client_email: email, private_key: key },
+      scopes: ["https://www.googleapis.com/auth/drive"],
+    });
+    const drive = google.drive({ version: "v3", auth });
+
+    const fId1 = await getOrCreateFolder(drive, carpeta1, rootId);
+    const destino = await getOrCreateFolder(drive, carpeta2, fId1);
+
+    // Hay que saber de dónde sale para poder quitarlo de ahí: Drive maneja
+    // los padres como una lista, no como una ruta única.
+    const actual = await drive.files.get({
+      fileId, fields: "parents", ...DRIVES,
+    });
+    const padres = actual.data.parents ?? [];
+
+    const movido = await drive.files.update({
+      fileId,
+      addParents: destino,
+      removeParents: padres.join(","),
+      fields: "id,webViewLink",
+      ...DRIVES,
+    });
+
+    return NextResponse.json({ id: movido.data.id, url: movido.data.webViewLink });
+  } catch (e) {
+    console.error("Drive move error:", e);
+    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+  }
+}
+
 async function getOrCreateFolder(
   drive: ReturnType<typeof google.drive>,
   nombre: string,

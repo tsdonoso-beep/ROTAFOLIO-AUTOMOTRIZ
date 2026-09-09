@@ -4,7 +4,10 @@ import { clienteServidor, solicitanteActual } from "@/lib/supabase/servidor";
 import { Encabezado, EstadoMemo, Medidor, Vacio, soles, Atraso } from "@/components/v2/Encabezado";
 import { IconoBandeja, IconoMemos } from "@/components/v2/Iconos";
 import { consolidar } from "@/lib/dominio/memo";
-import type { EstadoGasto, ClaseGasto, Alerta } from "@/lib/dominio/tipos";
+import { leerParametros } from "@/lib/dominio/parametros";
+import { MEMO_EDITABLE } from "@/lib/dominio/estados";
+import CapturaRapida from "@/components/v2/CapturaRapida";
+import type { EstadoGasto, ClaseGasto, Alerta, EstadoMemo as TEstadoMemo } from "@/lib/dominio/tipos";
 
 /** Vista inicial del rendidor: sus memos, no un formulario de creación. */
 export default async function MisMemos() {
@@ -26,7 +29,8 @@ export default async function MisMemos() {
         .select(`
           id, correlativo, tipo, destino, estado, monto_autorizado,
           fecha_salida, fecha_retorno_prev,
-          centros_costo ( codigo, nombre ),
+          centros_costo ( codigo, nombre, drive_folder ),
+          empresas ( ruc ),
           gastos ( id, estado, clase, total, alertas )
         `)
         .in("id", ids)
@@ -41,12 +45,41 @@ export default async function MisMemos() {
     .eq("usuario_id", solicitante.usuarioId)
     .is("memo_id", null);
 
+  const { data: filasParam } = await sb.from("parametros").select("clave, valor");
+
+  // Los memos que todavía admiten gastos, en la forma que necesita la
+  // captura para validar y para archivar la foto sin volver a consultar.
+  const disponibles = (memos ?? [])
+    .filter(m => MEMO_EDITABLE.includes(m.estado as TEstadoMemo))
+    .map(m => {
+      const cc = m.centros_costo as unknown as
+        { codigo: string; nombre: string; drive_folder: string | null } | null;
+      const emp = m.empresas as unknown as { ruc: string } | null;
+      const g = (m.gastos ?? []) as Array<{
+        estado: EstadoGasto; clase: ClaseGasto; total: number | null; alertas: Alerta[];
+      }>;
+      return {
+        id: m.id,
+        correlativo: m.correlativo,
+        destino: m.destino,
+        estado: m.estado as TEstadoMemo,
+        fecha_salida: m.fecha_salida,
+        fecha_retorno_prev: m.fecha_retorno_prev,
+        monto_autorizado: Number(m.monto_autorizado),
+        rendido: consolidar(Number(m.monto_autorizado), g).rendido,
+        centroCostoFolder: cc?.drive_folder || cc?.codigo || "SIN-CENTRO",
+        empresaRuc: emp?.ruc ?? null,
+      };
+    });
+
   return (
     <>
       <Encabezado
         titulo="Mis memos"
         bajada="Las rendiciones que te asignaron. Entra en una para cargar comprobantes."
       />
+
+      <CapturaRapida memos={disponibles} parametros={leerParametros(filasParam)} />
 
       {(sinAsignar ?? 0) > 0 && (
         <Link href="/memos/sin-asignar" style={{ textDecoration: "none", display: "block", marginBottom: 14 }}>

@@ -58,14 +58,20 @@ export default async function DetalleMemo({ params }: { params: Promise<{ id: st
         observacion_actual: memo.observacion_actual,
         centro: memo.centros_costo as unknown as { codigo: string; nombre: string } | null,
       }}
-      contexto={{
+      memoCaptura={{
+        id: memo.id,
+        correlativo: memo.correlativo,
+        destino: memo.destino,
+        estado: memo.estado,
+        fecha_salida: memo.fecha_salida,
+        fecha_retorno_prev: memo.fecha_retorno_prev,
+        monto_autorizado: Number(memo.monto_autorizado),
+        rendido: 0,   // lo recalcula VistaMemo con los gastos ya cargados
         // La foto se archiva bajo <centro de costo>/<memo>. Si el centro no
         // declara carpeta, se usa su código: es preferible una carpeta nueva
         // con nombre reconocible a perder el archivo.
-        empresaAbrev: empresa?.razon_social ?? "",
-        empresaRuc: empresa?.ruc ?? null,
         centroCostoFolder: centro?.drive_folder || centro?.codigo || "SIN-CENTRO",
-        correlativo: memo.correlativo,
+        empresaRuc: empresa?.ruc ?? null,
       }}
       gastos={(gastos ?? []) as unknown as Gasto[]}
       parametros={leerParametros(filasParam)}

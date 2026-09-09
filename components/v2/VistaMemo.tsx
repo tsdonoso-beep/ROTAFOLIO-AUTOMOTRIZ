@@ -2,7 +2,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import Captura from "./Captura";
+import Captura, { type MemoDisponible } from "./Captura";
 import GastoFila from "./GastoFila";
 import { Aviso, Cifra, EstadoMemo, Medidor, Tarjeta, Vacio, soles } from "./Encabezado";
 import {
@@ -24,16 +24,11 @@ interface Props {
   gastos: Gasto[];
   parametros: Parametros;
   puedeCapturar: boolean;
-  /** Datos que la captura necesita para archivar la foto en Drive. */
-  contexto: {
-    empresaAbrev: string;
-    empresaRuc: string | null;
-    centroCostoFolder: string;
-    correlativo: string;
-  };
+  /** Este memo, en la forma que la captura necesita para validar y archivar. */
+  memoCaptura: MemoDisponible;
 }
 
-export default function VistaMemo({ memo, gastos, parametros, puedeCapturar, contexto }: Props) {
+export default function VistaMemo({ memo, gastos, parametros, puedeCapturar, memoCaptura }: Props) {
   const router = useRouter();
   const [pendiente, iniciar] = useTransition();
   const [aviso, setAviso] = useState<{ tipo: "error" | "ok"; texto: string } | null>(null);
@@ -182,15 +177,9 @@ export default function VistaMemo({ memo, gastos, parametros, puedeCapturar, con
         <Tarjeta style={{ marginBottom: 16 }}>
           <p className="rotulo" style={{ marginBottom: 13 }}>Agregar comprobante</p>
           <Captura
-            memoId={memo.id}
+            memos={[{ ...memoCaptura, rendido: c.rendido }]}
+            memoInicial={memo.id}
             parametros={parametros}
-            memo={{
-              monto_autorizado: Number(memo.monto_autorizado),
-              fecha_salida: memo.fecha_salida,
-              fecha_retorno_prev: memo.fecha_retorno_prev,
-            }}
-            contexto={contexto}
-            rendidoPrevio={c.rendido}
             onListo={() => setAviso({ tipo: "ok", texto: "Comprobante agregado." })}
           />
         </Tarjeta>

@@ -15,7 +15,8 @@ import {
   camposPendientes, fusionar, sustentoFaltante, vacio, type Origen,
 } from "@/lib/ocr/fusion";
 import { validarGasto } from "@/lib/dominio/validaciones";
-import type { Alerta, Parametros, ResultadoExtraccion } from "@/lib/dominio/tipos";
+import { asignarPorFecha, explicar, memoDe, type Asignacion } from "@/lib/dominio/asignacion";
+import type { Alerta, EstadoMemo, Parametros, ResultadoExtraccion } from "@/lib/dominio/tipos";
 
 const MAX_LADO = 1800;
 const CALIDAD = 0.82;
@@ -30,18 +31,30 @@ const NOMBRE_CAMPO: Record<string, string> = {
   total: "total",
 };
 
+/**
+ * Un memo al que este comprobante podría ir, con todo lo que hace falta
+ * para validarlo y archivarlo sin volver a consultar la base.
+ */
+export interface MemoDisponible {
+  id: string;
+  correlativo: string;
+  destino: string | null;
+  estado: EstadoMemo;
+  fecha_salida: string | null;
+  fecha_retorno_prev: string | null;
+  monto_autorizado: number;
+  /** Lo ya rendido en ese memo, para la alerta de exceso. */
+  rendido: number;
+  centroCostoFolder: string;
+  empresaRuc: string | null;
+}
+
 interface Props {
-  memoId: string;
+  /** Todos los memos abiertos de la persona. El comprobante busca el suyo. */
+  memos: MemoDisponible[];
+  /** Preseleccionado al entrar desde un memo concreto. */
+  memoInicial?: string;
   parametros: Parametros;
-  memo: { monto_autorizado: number; fecha_salida: string | null; fecha_retorno_prev: string | null };
-  /** Datos para archivar la foto en Drive y descartar el RUC propio. */
-  contexto: {
-    empresaAbrev: string;
-    empresaRuc: string | null;
-    centroCostoFolder: string;
-    correlativo: string;
-  };
-  rendidoPrevio: number;
   onListo: () => void;
 }
 
@@ -55,9 +68,7 @@ interface Preparada {
   hash: string;
 }
 
-export default function Captura({
-  memoId, parametros, memo, contexto, rendidoPrevio, onListo,
-}: Props) {
+export default function Captura({ memos, memoInicial, parametros, onListo }: Props) {
   const router = useRouter();
   const [fase, setFase] = useState<Fase>("reposo");
   const [progreso, setProgreso] = useState("");
@@ -69,6 +80,13 @@ export default function Captura({
   const [imagen, setImagen] = useState<Preparada | null>(null);
   const [valores, setValores] = useState<ResultadoExtraccion>(vacio());
   const [origen, setOrigen] = useState<Record<string, Origen>>({});
+
+  // A qué memo va este comprobante. Lo propone la fecha; lo confirma la
+  // persona. `null` = a la bandeja sin asignar.
+  const [destinoId, setDestinoId] = useState<string | null>(memoInicial ?? null);
+  const [asignacion, setAsignacion] = useState<Asignacion | null>(null);
+
+  const destino = memos.find(m => m.id === destinoId) ?? null;
 
   const camara = useRef<HTMLInputElement>(null);
   const galeria = useRef<HTMLInputElement>(null);
@@ -99,7 +117,7 @@ export default function Captura({
         try {
           const { texto } = await leerImagen(preparada.dataUrl, setFraccion);
           lecturaOcr = parsearComprobante(texto, {
-            rucPropio: contexto.empresaRuc,
+            rucPropio: memos[0]?.empresaRuc ?? null,
             igvPorcentaje: parametros.igv_porcentaje,
           });
         } catch {
@@ -150,6 +168,14 @@ export default function Captura({
         o.fecha_emision = "manual";
       }
 
+      // La fecha ya dice a qué memo pertenece. Esto es lo que hoy hace a
+      // mano quien recibe el sobre al final del viaje.
+      if (!memoInicial) {
+        const a = asignarPorFecha(v.fecha_emision, memos);
+        setAsignacion(a);
+        setDestinoId(memoDe(a)?.id ?? null);
+      }
+
       setValores(v);
       setOrigen(o);
       setFase("revision");
@@ -160,7 +186,21 @@ export default function Captura({
       setProgreso("");
       setFraccion(0);
     }
-  }, [contexto.empresaRuc, parametros.igv_porcentaje]);
+  }, [memos, memoInicial, parametros.igv_porcentaje]);
+
+  /**
+   * Corregir la fecha puede cambiar a qué memo pertenece el gasto, así que
+   * la propuesta se recalcula. No se pisa una elección manual del memo.
+   */
+  const alCambiarValores = (v: ResultadoExtraccion, o: Record<string, Origen>) => {
+    if (!memoInicial && v.fecha_emision !== valores.fecha_emision) {
+      const a = asignarPorFecha(v.fecha_emision, memos);
+      setAsignacion(a);
+      setDestinoId(memoDe(a)?.id ?? null);
+    }
+    setValores(v);
+    setOrigen(o);
+  };
 
   // ── Carga manual, sin foto ──
   const cargarAMano = () => {
@@ -169,6 +209,11 @@ export default function Captura({
     setImagen(null);
     const v = vacio();
     v.fecha_emision = new Date().toISOString().slice(0, 10);
+    if (!memoInicial) {
+      const a = asignarPorFecha(v.fecha_emision, memos);
+      setAsignacion(a);
+      setDestinoId(memoDe(a)?.id ?? null);
+    }
     setValores(v);
     setOrigen({ fecha_emision: "manual" });
     setFase("revision");
@@ -179,6 +224,8 @@ export default function Captura({
     setImagen(null);
     setValores(vacio());
     setOrigen({});
+    setDestinoId(memoInicial ?? null);
+    setAsignacion(null);
     setError("");
     setNota("");
   };
@@ -210,12 +257,14 @@ export default function Captura({
         },
         {
           parametros,
-          memo: {
-            monto_autorizado: memo.monto_autorizado,
-            fecha_salida: memo.fecha_salida,
-            fecha_retorno_prev: memo.fecha_retorno_prev,
-            rendido_previo: rendidoPrevio,
-          },
+          // Sin memo no hay monto autorizado contra el cual comparar: las
+          // validaciones de exceso y de fecha simplemente no aplican.
+          memo: destino ? {
+            monto_autorizado: destino.monto_autorizado,
+            fecha_salida: destino.fecha_salida,
+            fecha_retorno_prev: destino.fecha_retorno_prev,
+            rendido_previo: destino.rendido,
+          } : undefined,
           duplicadoComprobante: dup.comprobante,
           duplicadoImagen: dup.imagen,
         }
@@ -229,7 +278,7 @@ export default function Captura({
       const { data: creado, error: errIns } = await sb.from("gastos").insert({
         // Generado en el dispositivo: hace idempotente el reintento.
         client_id: crypto.randomUUID(),
-        memo_id: memoId,
+        memo_id: destinoId,
         usuario_id: fila!.id,
         estado: alertas.length ? "CON_ALERTA" : "VALIDADO",
         clase: "COMPROBANTE",
@@ -265,6 +314,10 @@ export default function Captura({
       // El gasto ya está guardado. La subida a Drive va después y a
       // propósito: si la red falla aquí, el gasto no se pierde — queda
       // anotado el error y se puede reintentar desde el detalle.
+      // Sin memo todavía no se sabe la carpeta final, pero la foto se sube
+      // igual: solo existe en la memoria del navegador y se perdería al
+      // cerrar. Va a una carpeta de pendientes y se mueve a la del memo
+      // cuando el comprobante se asigne.
       if (imagen && creado) {
         setProgreso("Archivando la foto en Drive…");
         try {
@@ -276,8 +329,8 @@ export default function Captura({
               base64: imagen.base64,
               mimeType: imagen.mimeType,
               fileName: nombre,
-              carpeta1: contexto.centroCostoFolder,
-              carpeta2: contexto.correlativo,
+              carpeta1: destino?.centroCostoFolder ?? "SIN-ASIGNAR",
+              carpeta2: destino?.correlativo ?? new Date().toISOString().slice(0, 7),
             }),
           });
           const json = await res.json();
@@ -303,10 +356,7 @@ export default function Captura({
     } finally {
       setProgreso("");
     }
-  }, [
-    valores, imagen, memoId, parametros, memo, rendidoPrevio,
-    contexto.centroCostoFolder, contexto.correlativo, onListo, router,
-  ]);
+  }, [valores, imagen, destinoId, destino, parametros, onListo, router]);
 
   // ════════════════════════════════════════════════════════════
   //  Pantalla de confirmación
@@ -368,9 +418,54 @@ export default function Captura({
               </div>
             )}
 
+            {/*
+              A qué memo va. Se muestra ANTES de los campos porque es la
+              decisión que hoy toma a mano quien recibe el sobre al final
+              del viaje, ordenando comprobante por comprobante entre los
+              tres o cuatro memos que ese viaje generó.
+            */}
+            {!memoInicial && (
+              <div style={{ marginBottom: 18 }}>
+                <p className="rotulo" style={{ marginBottom: 8 }}>Va al memo</p>
+
+                <select
+                  className="fg-input"
+                  value={destinoId ?? ""}
+                  onChange={e => setDestinoId(e.target.value || null)}
+                  style={{ fontFamily: "var(--font-dm), sans-serif" }}
+                >
+                  <option value="">Dejar sin asignar</option>
+                  {memos.map(m => (
+                    <option key={m.id} value={m.id}>
+                      {m.correlativo}
+                      {m.destino ? ` · ${m.destino}` : ""}
+                      {m.fecha_salida ? ` (${m.fecha_salida} a ${m.fecha_retorno_prev})` : ""}
+                    </option>
+                  ))}
+                </select>
+
+                {asignacion && (
+                  <p style={{
+                    fontSize: 11.5, marginTop: 7, lineHeight: 1.5,
+                    display: "flex", gap: 6, alignItems: "flex-start",
+                    color: asignacion.tipo === "exacta" ? "var(--success)"
+                      : asignacion.tipo === "ninguna" ? "var(--text3)"
+                      : "var(--warn)",
+                  }}>
+                    <span style={{ flexShrink: 0, marginTop: 1 }}>
+                      {asignacion.tipo === "exacta"
+                        ? <IconoCheck size={13} />
+                        : <IconoAlerta size={13} />}
+                    </span>
+                    {explicar(asignacion)}
+                  </p>
+                )}
+              </div>
+            )}
+
             <FormularioGasto
               valores={valores} origen={origen} parametros={parametros}
-              onCambio={(v, o) => { setValores(v); setOrigen(o); }}
+              onCambio={alCambiarValores}
             />
 
             {error && (
@@ -391,8 +486,10 @@ export default function Captura({
                   {" "}gasto es de{" "}
                   <strong className="cifra" style={{ color: "var(--text)" }}>
                     {soles(valores.total)}
-                  </strong>.
-                  {imagen && " Al confirmar, la foto se archiva en Drive."}
+                  </strong>
+                  {destino ? <> y va a <strong>{destino.correlativo}</strong>.</> : "."}
+                  {!destino && " Quedará en tu bandeja hasta que lo muevas a un memo."}
+                  {imagen && destino && " Al confirmar, la foto se archiva en Drive."}
                 </p>
               )}
 
