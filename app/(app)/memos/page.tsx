@@ -6,6 +6,7 @@ import { IconoBandeja, IconoMemos } from "@/components/v2/Iconos";
 import { consolidar } from "@/lib/dominio/memo";
 import { leerParametros } from "@/lib/dominio/parametros";
 import { MEMO_EDITABLE } from "@/lib/dominio/estados";
+import { diasDeAtraso } from "@/lib/dominio/equipo";
 import CapturaRapida from "@/components/v2/CapturaRapida";
 import type { EstadoGasto, ClaseGasto, Alerta, EstadoMemo as TEstadoMemo } from "@/lib/dominio/tipos";
 
@@ -46,6 +47,10 @@ export default async function MisMemos() {
     .is("memo_id", null);
 
   const { data: filasParam } = await sb.from("parametros").select("clave, valor");
+
+  // El reloj se lee una sola vez acá y se pasa como dato. Leerlo dentro del
+  // render hace impura la función y React lo marca con razón.
+  const hoy = new Date();
 
   // Los memos que todavía admiten gastos, en la forma que necesita la
   // captura para validar y para archivar la foto sin volver a consultar.
@@ -120,8 +125,8 @@ export default async function MisMemos() {
             const excedido = c.rendido > c.autorizado;
             const cc = m.centros_costo as unknown as { codigo: string; nombre: string } | null;
 
-            const dias = m.fecha_retorno_prev && ["ABIERTO", "EN_RENDICION"].includes(m.estado)
-              ? Math.floor((Date.now() - new Date(m.fecha_retorno_prev).getTime()) / 86_400_000)
+            const dias = ["ABIERTO", "EN_RENDICION"].includes(m.estado)
+              ? diasDeAtraso(m.fecha_retorno_prev, hoy)
               : 0;
 
             return (

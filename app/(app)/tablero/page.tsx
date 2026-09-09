@@ -1,21 +1,27 @@
 import { redirect } from "next/navigation";
 import { clienteServidor, solicitanteActual } from "@/lib/supabase/servidor";
-import { autoriza } from "@/lib/dominio/permisos";
-import { Encabezado, Tarjeta, Vacio, soles } from "@/components/v2/Encabezado";
-import { consolidar } from "@/lib/dominio/memo";
+import { autoriza, veTodo } from "@/lib/dominio/permisos";
+import { Encabezado, Tarjeta, Vacio, Cifra, soles } from "@/components/v2/Encabezado";
+import { consolidarEquipo, resumirEquipo, type MemoDeEquipo } from "@/lib/dominio/equipo";
 import { IconoTablero } from "@/components/v2/Iconos";
-import type { Alerta, ClaseGasto, EstadoGasto } from "@/lib/dominio/tipos";
 
-interface MemoTablero {
+interface MemoCrudo {
   id: string;
   correlativo: string;
   estado: string;
   monto_autorizado: number;
   fecha_retorno_prev: string | null;
   memo_asignados: Array<{ usuarios: { id: string; nombre: string } | null }>;
-  gastos: Array<{ estado: EstadoGasto; clase: ClaseGasto; total: number | null; alertas: Alerta[] }>;
+  gastos: MemoDeEquipo["gastos"];
 }
 
+/**
+ * El tablero de una jefatura: su gente, no sus memos.
+ *
+ * Las políticas de fila ya deciden a quién alcanza cada quien —un líder
+ * ve a los suyos, Contabilidad ve todo—, así que esta consulta pide lo
+ * mismo para todos y la base devuelve lo que corresponde.
+ */
 export default async function Tablero() {
   const solicitante = await solicitanteActual();
   if (!solicitante) redirect("/ingresar");
@@ -29,79 +35,85 @@ export default async function Tablero() {
       memo_asignados ( usuarios ( id, nombre ) ),
       gastos ( estado, clase, total, alertas )
     `)
-    .in("estado", ["ABIERTO", "EN_RENDICION"]);
+    .in("estado", ["ABIERTO", "EN_RENDICION", "OBSERVADA"]);
 
-  const memos = (data ?? []) as unknown as MemoTablero[];
+  const memos: MemoDeEquipo[] = ((data ?? []) as unknown as MemoCrudo[]).map(m => ({
+    id: m.id,
+    correlativo: m.correlativo,
+    estado: m.estado as MemoDeEquipo["estado"],
+    monto_autorizado: Number(m.monto_autorizado),
+    fecha_retorno_prev: m.fecha_retorno_prev,
+    personas: (m.memo_asignados ?? [])
+      .map(a => a.usuarios)
+      .filter((u): u is { id: string; nombre: string } => !!u),
+    gastos: m.gastos ?? [],
+  }));
 
-  // Agrupado por persona: es la pregunta que hace una jefatura, no el
-  // detalle memo por memo.
-  const porPersona = new Map<string, {
-    nombre: string; memos: number; sinRendir: number; atraso: number;
-  }>();
+  // El reloj se lee acá, una sola vez, y se pasa como dato: la función que
+  // calcula el atraso es pura y por eso se puede probar.
+  const filas = consolidarEquipo(memos, new Date());
+  const r = resumirEquipo(filas);
 
-  for (const m of memos) {
-    const c = consolidar(Number(m.monto_autorizado), m.gastos ?? []);
-    const dias = m.fecha_retorno_prev
-      ? Math.floor((Date.now() - new Date(m.fecha_retorno_prev).getTime()) / 86_400_000)
-      : 0;
-
-    for (const a of m.memo_asignados ?? []) {
-      if (!a.usuarios) continue;
-      const actual = porPersona.get(a.usuarios.id) ?? {
-        nombre: a.usuarios.nombre, memos: 0, sinRendir: 0, atraso: 0,
-      };
-      actual.memos += 1;
-      actual.sinRendir += Math.max(0, c.saldo);
-      actual.atraso = Math.max(actual.atraso, dias);
-      porPersona.set(a.usuarios.id, actual);
-    }
-  }
-
-  const filas = [...porPersona.values()].sort((a, b) => b.atraso - a.atraso);
-  const totalSinRendir = filas.reduce((s, f) => s + f.sinRendir, 0);
+  const global = veTodo(solicitante.roles);
 
   return (
     <>
       <Encabezado
-        titulo="Tablero de pendientes"
-        bajada="Quién tiene memos abiertos, por cuánto y desde hace cuánto."
+        titulo={global ? "Pendientes de rendición" : "Mi equipo"}
+        bajada={global
+          ? "Quién tiene memos sin cerrar, por cuánto y desde hace cuánto."
+          : "Las personas a tu cargo con memos sin cerrar. El seguimiento es tuyo: quien recibe las rendiciones ya no persigue de a uno."}
       />
 
       {!filas.length ? (
         <Vacio
           icono={<IconoTablero size={26} />}
-          titulo="Nadie tiene memos abiertos"
-          texto="Cuando se abran memos en tu área, aquí verás el consolidado por persona y los días de atraso."
+          titulo={global ? "Nadie tiene memos abiertos" : "Tu equipo está al día"}
+          texto={global
+            ? "Cuando se abran memos aparecerá aquí el consolidado por persona."
+            : "Nadie a tu cargo tiene memos sin cerrar. Si esperabas ver a alguien, puede que todavía no le hayan asignado su jefatura en Sistema."}
         />
       ) : (
         <>
           <div style={{
             display: "grid", gap: 10, marginBottom: 18,
-            gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+            gridTemplateColumns: "repeat(auto-fit, minmax(148px, 1fr))",
           }}>
-            {[
-              { e: "Personas con memos", v: String(filas.length), a: false },
-              { e: "Memos abiertos", v: String(memos.length), a: false },
-              { e: "Sin rendir", v: soles(totalSinRendir), a: totalSinRendir > 0 },
-              { e: "Mayor atraso", v: `${Math.max(0, ...filas.map(f => f.atraso))} días`, a: filas.some(f => f.atraso > 15) },
-            ].map(k => (
-              <Tarjeta key={k.e} padding={14}>
-                <p className="font-display" style={{
-                  fontSize: 18, fontWeight: 800, letterSpacing: "-0.02em", textAlign: "center",
-                  color: k.a ? "var(--danger)" : "var(--text)",
-                }}>
-                  {k.v}
-                </p>
-                <p style={{
-                  fontSize: 9.5, color: "var(--text3)", marginTop: 3, textAlign: "center",
-                  fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase",
-                  fontFamily: "var(--font-sora), sans-serif",
-                }}>
-                  {k.e}
-                </p>
-              </Tarjeta>
-            ))}
+            <Tarjeta padding={15}>
+              <Cifra rotulo="Personas" valor={String(r.personas)} />
+            </Tarjeta>
+            <Tarjeta padding={15}>
+              <Cifra rotulo="Memos sin cerrar" valor={String(r.memosAbiertos)} />
+            </Tarjeta>
+            <Tarjeta padding={15}>
+              <Cifra
+                rotulo="Sin rendir" valor={soles(r.totalSinRendir)}
+                tono={r.totalSinRendir > 0 ? "aviso" : "tenue"}
+              />
+            </Tarjeta>
+            <Tarjeta padding={15}>
+              <Cifra
+                rotulo="Mayor atraso"
+                valor={r.mayorAtraso > 0 ? `${r.mayorAtraso} días` : "al día"}
+                tono={r.mayorAtraso > 15 ? "peligro" : r.mayorAtraso > 0 ? "aviso" : "acento"}
+              />
+            </Tarjeta>
           </div>
+
+          {r.personasVencidas > 0 && !global && (
+            <div style={{
+              marginBottom: 14, padding: "12px 15px", borderRadius: "var(--radio-s)",
+              background: "var(--warn-bg)", border: "1px solid var(--warn-borde)",
+            }}>
+              <p style={{ fontSize: 12.5, color: "var(--warn)", lineHeight: 1.55 }}>
+                <strong style={{ fontFamily: "var(--font-sora), sans-serif" }}>
+                  {r.personasVencidas} de tu equipo pasó su fecha de retorno
+                </strong>{" "}
+                sin cerrar la rendición. Están ordenados por antigüedad: el de
+                arriba es el que conviene llamar primero.
+              </p>
+            </div>
+          )}
 
           <Tarjeta padding={0}>
             <div style={{ overflowX: "auto" }}>
@@ -122,7 +134,7 @@ export default async function Tablero() {
                 </thead>
                 <tbody>
                   {filas.map((f, i) => (
-                    <tr key={f.nombre} style={{
+                    <tr key={f.usuarioId} style={{
                       borderBottom: i < filas.length - 1 ? "1px solid var(--border)" : "none",
                     }}>
                       <td style={{ padding: "11px 16px", fontWeight: 600, color: "var(--text)" }}>
@@ -130,22 +142,24 @@ export default async function Tablero() {
                       </td>
                       <td style={{ padding: "11px 16px", textAlign: "right", color: "var(--text2)" }}>
                         {f.memos}
+                        {f.vencidos > 0 && f.vencidos < f.memos && (
+                          <span style={{ color: "var(--warn)", fontSize: 11 }}> ({f.vencidos} vencidos)</span>
+                        )}
                       </td>
-                      <td style={{
-                        padding: "11px 16px", textAlign: "right", fontWeight: 700,
-                        fontFamily: "var(--font-sora), sans-serif", color: "var(--text)",
+                      <td className="cifra" style={{
+                        padding: "11px 16px", textAlign: "right", fontSize: 13, color: "var(--text)",
                       }}>
                         {soles(f.sinRendir)}
                       </td>
                       <td style={{ padding: "11px 16px", textAlign: "right" }}>
                         <span className="badge" style={
-                          f.atraso > 15
+                          f.atrasoDias > 15
                             ? { background: "var(--danger-bg)", color: "var(--danger)" }
-                            : f.atraso > 0
+                            : f.atrasoDias > 0
                             ? { background: "var(--warn-bg)", color: "var(--warn)" }
                             : { background: "var(--success-bg)", color: "var(--success)" }
                         }>
-                          {f.atraso > 0 ? `${f.atraso} días` : "al día"}
+                          {f.atrasoDias > 0 ? `${f.atrasoDias} días` : "al día"}
                         </span>
                       </td>
                     </tr>

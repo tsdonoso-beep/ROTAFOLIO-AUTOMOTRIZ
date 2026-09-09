@@ -2,8 +2,8 @@ import { redirect } from "next/navigation";
 import { clienteServidor, solicitanteActual } from "@/lib/supabase/servidor";
 import { autoriza } from "@/lib/dominio/permisos";
 import { Encabezado, Tarjeta } from "@/components/v2/Encabezado";
-import { NOMBRE_ROL } from "@/lib/dominio/navegacion";
 import { IconoAdministrar } from "@/components/v2/Iconos";
+import ListaUsuarios, { type UsuarioFila } from "@/components/v2/ListaUsuarios";
 import type { Rol } from "@/lib/dominio/tipos";
 
 export default async function Sistema() {
@@ -14,7 +14,7 @@ export default async function Sistema() {
   const sb = await clienteServidor();
 
   const [usuarios, centros, parametros, eventos] = await Promise.all([
-    sb.from("usuarios").select("id, nombre, dni, dni_provisional, email, activo, roles_usuario(rol)").order("nombre"),
+    sb.from("usuarios").select("id, nombre, dni, dni_provisional, email, activo, jefatura_id, roles_usuario(rol)").order("nombre"),
     sb.from("centros_costo").select("codigo, nombre, activo, drive_folder").order("codigo"),
     sb.from("parametros").select("clave, valor, descripcion").order("clave"),
     sb.from("eventos").select("accion, entidad, ocurrido_en").order("ocurrido_en", { ascending: false }).limit(10),
@@ -39,51 +39,22 @@ export default async function Sistema() {
               Los documentos marcados como <strong>provisionales</strong> son de
               relleno: sirven para probar el ingreso sin correo, pero hay que
               reemplazarlos por la lista real de RRHH antes de usar la app en
-              serio. Mientras tanto no se puede cruzar con planilla.
+              serio. La jerarquía de jefaturas también es de ejemplo.
             </p>
           </div>
-          <Tarjeta padding={0}>
-            {(usuarios.data ?? []).map((u, i, arr) => (
-              <div key={u.id} style={{
-                padding: "13px 16px",
-                borderBottom: i < arr.length - 1 ? "1px solid var(--border)" : "none",
-                display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap",
-              }}>
-                <div style={{ flex: 1, minWidth: 190 }}>
-                  <p style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)" }}>
-                    {u.nombre}
-                    {!u.activo && <span style={{ marginLeft: 7, fontSize: 11, color: "var(--text3)" }}>(inactivo)</span>}
-                  </p>
-                  <p style={{
-                    fontSize: 11.5, color: "var(--text3)", marginTop: 2,
-                    display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap",
-                  }}>
-                    <span className="mono">{u.dni}</span>
-                    {u.dni_provisional && (
-                      <span className="badge badge-warn" style={{ fontSize: 9 }}>
-                        provisional
-                      </span>
-                    )}
-                    {u.email
-                      ? <span>· {u.email}</span>
-                      : <span style={{ fontStyle: "italic" }}>· sin correo</span>}
-                  </p>
-                </div>
-                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                  {((u.roles_usuario ?? []) as Array<{ rol: Rol }>).map(r => (
-                    <span key={r.rol} style={{
-                      fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 999,
-                      background: "var(--surface2)", color: "var(--text2)",
-                      border: "1px solid var(--border)",
-                      fontFamily: "var(--font-sora), sans-serif",
-                    }}>
-                      {NOMBRE_ROL[r.rol]}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </Tarjeta>
+
+          <ListaUsuarios
+            usuarios={(usuarios.data ?? []).map(u => ({
+              id: u.id,
+              nombre: u.nombre,
+              dni: u.dni,
+              dni_provisional: u.dni_provisional,
+              email: u.email,
+              activo: u.activo,
+              jefatura_id: u.jefatura_id,
+              roles: ((u.roles_usuario ?? []) as Array<{ rol: Rol }>).map(r => r.rol),
+            })) as UsuarioFila[]}
+          />
         </section>
 
         {/* ── Centros de costo ── */}
