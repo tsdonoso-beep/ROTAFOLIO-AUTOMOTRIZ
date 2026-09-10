@@ -1,6 +1,9 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { explicarNeto, liquidar, situacionDe, type MemoLiquidable } from "../liquidacion.ts";
+import {
+  explicarNeto, liquidar, memosLiquidables, netoSinPagar, situacionDe,
+  type EstadoLiquidacion, type LiquidacionEmitida, type MemoLiquidable,
+} from "../liquidacion.ts";
 import type { EstadoMemo } from "../tipos.ts";
 
 function memo(p: {
@@ -158,5 +161,74 @@ describe("explicarNeto", () => {
     assert.match(explicarNeto(liquidar([memo({ id: "A", autorizado: 300, rendido: 445, estado: "APROBADA" })])), /reembolsar 145/);
     assert.match(explicarNeto(liquidar([memo({ id: "A", autorizado: 500, rendido: 500, estado: "APROBADA" })])), /a cero/);
     assert.match(explicarNeto(liquidar([])), /sin memos|no tiene/i);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════
+
+describe("memosLiquidables", () => {
+  const emitida = (
+    id: string, memoIds: string[], estado: EstadoLiquidacion, neto = 100
+  ): LiquidacionEmitida => ({
+    id, neto, estado, referencia: null,
+    emitidaEn: "2026-09-01", pagadaEn: null, memoIds,
+  });
+
+  const conMemos = (...ids: string[]) =>
+    liquidar(ids.map(id => ({
+      id, correlativo: id, estado: "APROBADA" as const, destino: null,
+      fecha_salida: "2026-03-04", monto_autorizado: 500,
+      gastos: [{ estado: "APROBADO" as const, clase: "COMPROBANTE" as const, total: 380, alertas: [] }],
+    })));
+
+  test("sin nada emitido, todos los cerrados están disponibles", () => {
+    const r = memosLiquidables(conMemos("A", "B"), []);
+    assert.deepEqual(r.disponibles.sort(), ["A", "B"]);
+    assert.deepEqual(r.yaLiquidados, []);
+  });
+
+  test("un memo ya liquidado no vuelve a entrar: se pagaría dos veces", () => {
+    const r = memosLiquidables(conMemos("A", "B"), [emitida("L1", ["A"], "EMITIDA")]);
+    assert.deepEqual(r.disponibles, ["B"]);
+    assert.deepEqual(r.yaLiquidados, ["A"]);
+  });
+
+  test("pagada también cuenta como tomado", () => {
+    const r = memosLiquidables(conMemos("A"), [emitida("L1", ["A"], "PAGADA")]);
+    assert.deepEqual(r.disponibles, []);
+  });
+
+  test("una liquidación anulada libera sus memos", () => {
+    // Anular es justamente deshacer: si no liberara, el memo quedaría
+    // atrapado y nunca se le podría pagar a la persona.
+    const r = memosLiquidables(conMemos("A"), [emitida("L1", ["A"], "ANULADA")]);
+    assert.deepEqual(r.disponibles, ["A"]);
+  });
+
+  test("los memos abiertos no entran aunque no estén tomados", () => {
+    const l = liquidar([{
+      id: "X", correlativo: "X", estado: "EN_RENDICION", destino: null,
+      fecha_salida: "2026-03-04", monto_autorizado: 500, gastos: [],
+    }]);
+    assert.deepEqual(memosLiquidables(l, []).disponibles, []);
+  });
+});
+
+describe("netoSinPagar", () => {
+  const e = (neto: number, estado: EstadoLiquidacion): LiquidacionEmitida => ({
+    id: "l", neto, estado, referencia: null,
+    emitidaEn: "2026-09-01", pagadaEn: null, memoIds: [],
+  });
+
+  test("suma solo lo emitido y todavía no pagado", () => {
+    assert.equal(netoSinPagar([e(300, "EMITIDA"), e(120, "PAGADA"), e(50, "ANULADA")]), 300);
+  });
+
+  test("lo que se debe y lo que deben se netean entre liquidaciones", () => {
+    assert.equal(netoSinPagar([e(300, "EMITIDA"), e(-145, "EMITIDA")]), 155);
+  });
+
+  test("sin nada emitido no se debe nada", () => {
+    assert.equal(netoSinPagar([]), 0);
   });
 });

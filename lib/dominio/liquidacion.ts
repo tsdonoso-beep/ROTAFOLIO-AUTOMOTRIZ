@@ -148,3 +148,58 @@ export function explicarNeto(l: Liquidacion): string {
 function redondear(n: number): number {
   return Math.round(n * 100) / 100;
 }
+
+// ════════════════════════════════════════════════════════════════
+// El documento emitido
+// ════════════════════════════════════════════════════════════════
+
+export type EstadoLiquidacion = "EMITIDA" | "PAGADA" | "ANULADA";
+
+export interface LiquidacionEmitida {
+  id: string;
+  neto: number;
+  estado: EstadoLiquidacion;
+  referencia: string | null;
+  emitidaEn: string;
+  pagadaEn: string | null;
+  memoIds: string[];
+}
+
+/**
+ * Qué memos se pueden meter en una liquidación nueva.
+ *
+ * Los que ya están en una liquidación vigente quedan fuera: si entraran de
+ * nuevo, se pagarían dos veces. La base lo rechaza igual —hay un disparador
+ * que lo impide—, pero acá se calcula antes para no ofrecer un botón que va
+ * a fallar, y para poder decir cuántos quedaron fuera y por qué.
+ */
+export function memosLiquidables(
+  l: Liquidacion, emitidas: LiquidacionEmitida[]
+): { disponibles: string[]; yaLiquidados: string[] } {
+  const tomados = new Set(
+    emitidas.filter(e => e.estado !== "ANULADA").flatMap(e => e.memoIds)
+  );
+
+  const cerrados = l.lineas
+    .filter(x => x.situacion === "liquidable")
+    .map(x => x.memoId);
+
+  return {
+    disponibles: cerrados.filter(id => !tomados.has(id)),
+    yaLiquidados: cerrados.filter(id => tomados.has(id)),
+  };
+}
+
+/** Lo que todavía no se le pagó a la persona ni ella devolvió. */
+export function netoSinPagar(emitidas: LiquidacionEmitida[]): number {
+  const suma = emitidas
+    .filter(e => e.estado === "EMITIDA")
+    .reduce((s, e) => s + e.neto, 0);
+  return Math.round(suma * 100) / 100;
+}
+
+export const NOMBRE_ESTADO_LIQUIDACION: Record<EstadoLiquidacion, string> = {
+  EMITIDA: "Emitida, sin pagar",
+  PAGADA: "Pagada",
+  ANULADA: "Anulada",
+};

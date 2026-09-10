@@ -4,7 +4,8 @@ import { Aviso, Tarjeta, soles } from "./Encabezado";
 import { IconoAlerta, IconoAtras, IconoCheck, IconoDescargar } from "./Iconos";
 import { descargarCsv } from "@/lib/export/csv";
 import { filasLiquidacion, nombreArchivoLiquidacion } from "@/lib/export/liquidacion";
-import type { Liquidacion, SituacionMemo } from "@/lib/dominio/liquidacion";
+import PanelPago from "./PanelPago";
+import type { Liquidacion, LiquidacionEmitida, SituacionMemo } from "@/lib/dominio/liquidacion";
 
 const NOMBRE_SITUACION: Record<SituacionMemo, string> = {
   liquidable: "Cerrado",
@@ -13,12 +14,17 @@ const NOMBRE_SITUACION: Record<SituacionMemo, string> = {
 };
 
 interface Props {
-  persona: { nombre: string; dni: string };
+  persona: { id: string; nombre: string; dni: string };
   liquidacion: Liquidacion;
   emitidoPor: string;
+  emitidas: LiquidacionEmitida[];
+  disponibles: string[];
+  puedeRegistrarPago: boolean;
 }
 
-export default function VistaLiquidacion({ persona, liquidacion: l, emitidoPor }: Props) {
+export default function VistaLiquidacion({
+  persona, liquidacion: l, emitidoPor, emitidas, disponibles, puedeRegistrarPago,
+}: Props) {
   const debe = l.neto > 0;
   const leDeben = l.neto < 0;
 
@@ -104,6 +110,13 @@ export default function VistaLiquidacion({ persona, liquidacion: l, emitidoPor }
           </Aviso>
         </div>
       )}
+
+      <PanelPago
+        usuarioId={persona.id}
+        emitidas={emitidas}
+        disponibles={disponibles}
+        puedeRegistrarPago={puedeRegistrarPago}
+      />
 
       <div style={{
         display: "flex", justifyContent: "space-between",

@@ -316,8 +316,9 @@ export async function abrirMemo(memoId: string): Promise<Resultado> {
     return { ok: false, error: `${memo.correlativo} ya no es un borrador.` };
   }
 
-  const { error } = await sb
-    .from("memos").update({ estado: "ABIERTO" }).eq("id", memoId);
+  const { error } = await sb.rpc("cambiar_estado_memo", {
+    p_memo: memoId, p_hacia: "ABIERTO",
+  });
   if (error) return { ok: false, error: error.message };
 
   await registrarEvento(sb, "MEMO", memoId, "ABRIR", solicitante.usuarioId,
@@ -443,16 +444,14 @@ export async function aprobarRendicion(memoId: string): Promise<Resultado> {
   const transicion = transicionMemoValida(memo.estado as EstadoMemo, "APROBADA", solicitante.roles);
   if (!transicion.ok) return { ok: false, error: transicion.motivo };
 
-  const { error } = await sb.from("memos").update({
-    estado: "APROBADA",
-    aprobado_por: solicitante.usuarioId,
-    aprobado_en: new Date().toISOString(),
-    observacion_actual: null,
-  }).eq("id", memoId);
+  // Va por la función de la base. Un update directo lo filtraba a cero
+  // filas —sin error— para un REVISOR_COSTOS que no fuera además
+  // ADMIN_MEMOS: la política memos_escritura solo deja escribir memos a
+  // esos dos roles.
+  const { error } = await sb.rpc("cambiar_estado_memo", {
+    p_memo: memoId, p_hacia: "APROBADA",
+  });
   if (error) return { ok: false, error: error.message };
-
-  await sb.from("gastos").update({ estado: "APROBADO" })
-    .eq("memo_id", memoId).eq("estado", "PRESENTADO");
 
   await registrarEvento(sb, "MEMO", memoId, "APROBAR", solicitante.usuarioId,
     { estado: memo.estado }, { estado: "APROBADA" });
@@ -501,9 +500,9 @@ export async function observarGastos(
   }
 
   const resumen = `${conMotivo.length} gasto(s) observado(s).`;
-  const { error } = await sb.from("memos")
-    .update({ estado: "OBSERVADA", observacion_actual: resumen })
-    .eq("id", memoId);
+  const { error } = await sb.rpc("cambiar_estado_memo", {
+    p_memo: memoId, p_hacia: "OBSERVADA", p_observacion: resumen,
+  });
   if (error) return { ok: false, error: error.message };
 
   await registrarEvento(sb, "MEMO", memoId, "OBSERVAR", solicitante.usuarioId,
@@ -528,13 +527,13 @@ export async function marcarContabilizado(memoId: string, asiento: string): Prom
   const transicion = transicionMemoValida(memo.estado as EstadoMemo, "CONTABILIZADA", solicitante.roles);
   if (!transicion.ok) return { ok: false, error: transicion.motivo };
 
-  const { error } = await sb.from("memos")
-    .update({ estado: "CONTABILIZADA", contabilizado_en: new Date().toISOString() })
-    .eq("id", memoId);
+  // Contabilidad nunca pudo contabilizar: memos_escritura no la incluye, y
+  // el update se filtraba a cero filas sin dar error. La función también
+  // arrastra los gastos a CONTABILIZADO, en la misma llamada.
+  const { error } = await sb.rpc("cambiar_estado_memo", {
+    p_memo: memoId, p_hacia: "CONTABILIZADA",
+  });
   if (error) return { ok: false, error: error.message };
-
-  await sb.from("gastos").update({ estado: "CONTABILIZADO" })
-    .eq("memo_id", memoId).eq("estado", "APROBADO");
 
   await registrarEvento(sb, "MEMO", memoId, "CONTABILIZAR", solicitante.usuarioId,
     { estado: memo.estado }, { estado: "CONTABILIZADA", asiento: asiento || null });

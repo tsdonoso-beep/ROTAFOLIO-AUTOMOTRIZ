@@ -9,7 +9,7 @@ import type { EstadoGasto, EstadoMemo, Rol } from "./tipos.ts";
 // MEMO (§4.1)
 // ════════════════════════════════════════════════════════════════
 
-interface TransicionMemo {
+export interface TransicionMemo {
   desde: EstadoMemo;
   hacia: EstadoMemo;
   roles: Rol[];
@@ -17,7 +17,7 @@ interface TransicionMemo {
   automatica?: boolean;
 }
 
-const TRANSICIONES_MEMO: TransicionMemo[] = [
+export const TRANSICIONES_MEMO: TransicionMemo[] = [
   { desde: "BORRADOR",      hacia: "ABIERTO",       roles: ["ADMIN_MEMOS", "ADMIN_SISTEMA"] },
   { desde: "BORRADOR",      hacia: "ANULADO",       roles: ["ADMIN_MEMOS", "ADMIN_SISTEMA"] },
   { desde: "ABIERTO",       hacia: "EN_RENDICION",  roles: [], automatica: true },
