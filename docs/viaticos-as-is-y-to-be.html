@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Viáticos y rendiciones · As Is, propuestas y accesos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#E9ECE3; --card:#FBFCF8; --ink:#17201D; --ink-2:#5B665E; --ink-3:#8A948C;
+  --rule:#C6CDBE; --teal:#2A5B62; --stamp:#B0362C; --stamp-soft:rgba(176,54,44,.10);
+  --new:#2E7D5B; --new-soft:rgba(46,125,91,.10); --amber:#8A6B27;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--paper); color:var(--ink); font-family:Barlow,system-ui,sans-serif; font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased}
+header{padding:26px 22px 0; max-width:1620px; margin:0 auto}
+h1{font-family:"Barlow Condensed",sans-serif; font-size:clamp(30px,5vw,46px); font-weight:700; line-height:1.02; margin:0 0 6px}
+.sub{color:var(--ink-2); max-width:70ch; margin:0 0 18px}
+.tabs{display:flex; flex-wrap:wrap; border-bottom:1px solid var(--rule)}
+.tab{appearance:none; background:none; border:0; cursor:pointer; font-family:"Barlow Condensed",sans-serif; font-size:17px; font-weight:600; color:var(--ink-2); padding:9px 14px 8px; margin-bottom:-1px; border-bottom:3px solid transparent}
+.tab:hover{color:var(--ink)}
+.tab[aria-selected="true"]{color:var(--ink); border-bottom-color:var(--stamp)}
+.tab.prop[aria-selected="true"]{border-bottom-color:var(--new)}
+.tab:focus-visible{outline:2px solid var(--teal); outline-offset:2px}
+.ctx{max-width:1620px; margin:0 auto; padding:14px 22px 0}
+.ctx p{margin:0 0 8px; color:var(--ink-2); font-size:14.5px; max-width:84ch}
+.ctx .resu{display:inline-block; font-family:"Barlow Condensed",sans-serif; font-weight:700; font-size:13px; color:var(--new); border:1px solid var(--new); border-radius:2px; padding:1px 8px; margin-right:6px}
+.legend{display:flex; flex-wrap:wrap; gap:6px 18px; padding:10px 22px 6px; max-width:1620px; margin:0 auto; font-size:13px; color:var(--ink-2)}
+.lg{display:flex; align-items:center; gap:7px}
+.hint{font-size:12.5px; color:var(--ink-3); padding:0 22px 6px; max-width:1620px; margin:0 auto}
+
+/* ---- lienzo con carriles fijos ---- */
+.wrap{max-width:1620px; margin:0 auto; padding:2px 22px 34px}
+.board{background:#fff; border:1px solid var(--rule); border-radius:3px; display:flex; overflow:hidden}
+.lanescol{flex:none; border-right:1px solid var(--rule); background:#fff; z-index:3; box-shadow:3px 0 6px rgba(23,32,29,.06)}
+.scroller{overflow-x:auto; overflow-y:hidden; flex:1}
+svg{display:block; font-family:Barlow,sans-serif}
+svg .task{cursor:pointer}
+svg .task rect.body{fill:#EDF3F8; stroke:#2E6FA8; stroke-width:1.4; rx:7}
+svg .task.rup rect.body{stroke:var(--stamp); stroke-dasharray:5 3}
+svg .task.nuevo rect.body{fill:#E9F4EE; stroke:var(--new)}
+svg .task.pend rect.body{fill:#FDF7EA; stroke:var(--amber); stroke-dasharray:5 3}
+svg .task.pend:hover rect.body{fill:#F8EFDA}
+svg .badge.p rect{fill:#FBF2DE; stroke:var(--amber)}
+svg .badge.p text{fill:var(--amber)}
+svg .badge.p:hover rect{fill:var(--amber)}
+svg .badge.p:hover text{fill:#fff}
+svg .tnum.p{fill:var(--amber)}
+.p-title.pend{color:var(--amber)}
+svg .task:hover rect.body{fill:#DEEAF4}
+svg .task.nuevo:hover rect.body{fill:#D8EDE2}
+svg text{fill:#17201D}
+svg .tnum{font-family:"IBM Plex Mono",monospace; font-size:9.5px; fill:#2E6FA8}
+svg .tnum.n{fill:var(--new)}
+svg .tlabel{font-size:11.4px; font-weight:500}
+svg .glabel{font-size:11px; font-weight:600}
+svg .flabel{font-size:10.5px; fill:#5B665E}
+svg .dlabel{font-size:10px; fill:#5B665E}
+svg .poolname{font-family:"Barlow Condensed",sans-serif; font-size:12.5px; font-weight:700; letter-spacing:.04em; fill:#2A5B62}
+svg .rolename{font-family:"Barlow Condensed",sans-serif; font-size:12.5px; font-weight:600; fill:#5B665E}
+svg .badge{cursor:pointer}
+svg .badge rect{fill:#F6EDEB; stroke:var(--stamp); stroke-width:1.3; rx:2}
+svg .badge text{fill:var(--stamp); font-family:"Barlow Condensed",sans-serif; font-weight:700; font-size:10.5px}
+svg .badge:hover rect{fill:var(--stamp)}
+svg .badge:hover text{fill:#fff}
+svg .badge.n rect{fill:#E4F1EA; stroke:var(--new)}
+svg .badge.n text{fill:var(--new)}
+svg .badge.n:hover rect{fill:var(--new)}
+svg .badge.n:hover text{fill:#fff}
+
+/* ---- presentación ---- */
+.deck{max-width:1120px; margin:0 auto; padding:6px 22px 44px}
+.slide{background:#fff; border:1px solid var(--rule); border-radius:3px; padding:34px 40px 38px; min-height:540px}
+.slide h2{font-family:"Barlow Condensed",sans-serif; font-size:32px; font-weight:700; margin:0 0 4px; color:var(--teal); line-height:1.05}
+.slide .kicker{font-family:"Barlow Condensed",sans-serif; font-weight:600; font-size:14px; color:var(--ink-3); letter-spacing:.03em; margin:0 0 14px}
+.slide p{max-width:80ch; margin:0 0 14px}
+.slide ul{margin:0 0 16px; padding-left:20px; max-width:80ch}
+.slide li{margin:0 0 7px}
+.slide h3{font-family:"Barlow Condensed",sans-serif; font-size:20px; margin:20px 0 6px}
+table{border-collapse:collapse; width:100%; border:1px solid var(--rule); margin:8px 0 18px; font-size:13.8px}
+th{background:var(--teal); color:#fff; font-family:"Barlow Condensed",sans-serif; font-weight:700; font-size:14px; text-align:left; padding:7px 10px}
+td{border-top:1px solid var(--rule); padding:8px 10px; vertical-align:top}
+td.hoy{color:var(--stamp)} td.man{color:var(--new)}
+code,pre{font-family:"IBM Plex Mono",monospace}
+pre{background:#F2F4F7; border-left:3px solid var(--teal); padding:12px 14px; overflow-x:auto; font-size:12.4px; line-height:1.55; margin:8px 0 16px}
+.callout{background:#FBFCF8; border:1px solid var(--rule); border-left:3px solid var(--stamp); padding:13px 16px; margin:14px 0}
+.callout.n{border-left-color:var(--new)}
+.callout.a{border-left-color:var(--amber)}
+.callout h3{font-family:"Barlow Condensed",sans-serif; font-size:18px; margin:0 0 5px}
+.callout p{margin:0 0 7px} .callout p:last-child{margin:0}
+.deckbar{display:flex; align-items:center; gap:14px; padding:12px 2px 0}
+.dbtn{appearance:none; background:#fff; border:1px solid var(--rule); border-radius:3px; width:34px; height:34px; cursor:pointer; font-size:16px; color:var(--ink-2)}
+.dbtn:hover:not(:disabled){border-color:var(--teal); color:var(--teal)}
+.dbtn:disabled{opacity:.35; cursor:default}
+.dots{display:flex; gap:6px; flex-wrap:wrap; flex:1}
+.dot{width:9px; height:9px; border-radius:50%; border:1px solid var(--ink-3); background:transparent; cursor:pointer; padding:0}
+.dot[aria-current="true"]{background:var(--teal); border-color:var(--teal)}
+.dcount{font-family:"IBM Plex Mono",monospace; font-size:12.5px; color:var(--ink-3)}
+
+/* ---- panel ---- */
+.scrim{position:fixed; inset:0; background:rgba(23,32,29,.32); opacity:0; pointer-events:none; transition:opacity .18s; z-index:40}
+.scrim.on{opacity:1; pointer-events:auto}
+aside{position:fixed; top:0; right:0; bottom:0; width:min(430px,100%); background:var(--card); border-left:1px solid var(--rule); z-index:50; transform:translateX(102%); transition:transform .2s ease; overflow-y:auto; box-shadow:-10px 0 30px rgba(23,32,29,.12)}
+aside.on{transform:none}
+.panel{padding:22px 24px 60px}
+.p-close{position:sticky; top:0; float:right; margin:-6px -6px 0 0; background:var(--card); border:1px solid var(--rule); border-radius:3px; width:30px; height:30px; cursor:pointer; font-size:17px; color:var(--ink-2)}
+.p-num{font-family:"IBM Plex Mono",monospace; font-size:12.5px; color:#2E6FA8}
+.p-who{font-family:"Barlow Condensed",sans-serif; font-weight:600; color:var(--ink-3); font-size:15px}
+.p-title{font-family:"Barlow Condensed",sans-serif; font-size:26px; font-weight:700; line-height:1.1; margin:2px 0 14px}
+.p-title.rup{color:var(--stamp)} .p-title.nuevo{color:var(--new)}
+.p-body p{margin:0 0 14px; font-size:14.5px}
+.f{border-top:1px solid var(--rule); padding:11px 0 3px}
+.f dt{font-family:"Barlow Condensed",sans-serif; font-weight:600; font-size:14px; color:var(--ink-3); margin-bottom:2px}
+.f dd{margin:0 0 6px; font-size:14.5px}
+.quote{border-left:3px solid var(--stamp); background:var(--stamp-soft); padding:10px 13px; margin:14px 0; font-style:italic; font-size:14.5px}
+.quote cite{display:block; font-style:normal; font-size:13px; color:var(--ink-2); margin-top:5px}
+.pill{display:inline-block; font-family:"IBM Plex Mono",monospace; font-size:11.5px; border:1px solid rgba(42,91,98,.35); color:var(--teal); padding:1px 6px; border-radius:2px; margin:0 4px 4px 0}
+.pill.n{border-color:var(--new); color:var(--new)}
+.pill.p{border-color:var(--amber); color:var(--amber)}
+footer{max-width:1620px; margin:0 auto; padding:16px 22px 46px; color:var(--ink-3); font-size:13px; border-top:1px solid var(--rule)}
+footer p{margin:0; max-width:84ch}
+@media (max-width:700px){
+  aside{width:100%; top:auto; height:76vh; transform:translateY(102%); border-left:0; border-top:1px solid var(--rule); border-radius:6px 6px 0 0}
+  aside.on{transform:none}
+  .slide{padding:24px 20px 30px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Viáticos y rendiciones</h1>
+  <p class="sub">El proceso que Norma eligió para empezar. A la izquierda, cómo funciona hoy, reconstruido con lo levantado con Rosa, Carolina y David. A la derecha, cómo quedaría con la aplicación que estamos construyendo. Toca cualquier actividad para ver su detalle.</p>
+  <div class="tabs" role="tablist" id="tabs"></div>
+</header>
+
+<div class="ctx" id="ctx"></div>
+<div class="legend" id="legend">
+  <span class="lg"><svg width="26" height="16"><rect x="1" y="1" width="24" height="14" rx="4" fill="#EDF3F8" stroke="#2E6FA8" stroke-width="1.3"/></svg>Actividad actual</span>
+  <span class="lg"><svg width="26" height="16"><rect x="1" y="1" width="24" height="14" rx="4" fill="#E9F4EE" stroke="#2E7D5B" stroke-width="1.3"/></svg>Actividad propuesta</span>
+  <span class="lg"><svg width="18" height="18"><path d="M9 1L17 9L9 17L1 9Z" fill="#F5DE7A" stroke="#B99B14" stroke-width="1.3"/></svg>Decisión</span>
+  <span class="lg"><svg width="18" height="18"><circle cx="9" cy="9" r="7" fill="#DFF0D8" stroke="#5A9E4B" stroke-width="1.5"/></svg>Inicio</span>
+  <span class="lg"><svg width="18" height="18"><circle cx="9" cy="9" r="7" fill="#F8DEDB" stroke="#B0362C" stroke-width="2.4"/></svg>Fin</span>
+  <span class="lg"><svg width="26" height="16"><rect x="1" y="2" width="24" height="12" rx="2" fill="#F6EDEB" stroke="#B0362C" stroke-width="1.3"/></svg>Punto de ruptura</span>
+  <span class="lg"><svg width="26" height="16"><rect x="1" y="1" width="24" height="14" rx="4" fill="#FDF7EA" stroke="#8A6B27" stroke-width="1.3" stroke-dasharray="4 3"/></svg>Todavía no construido</span>
+</div>
+<p class="hint" id="hint">Los carriles quedan fijos al desplazarse. Toca cualquier actividad para ver su detalle.</p>
+
+<div id="view"></div>
+
+<footer><p>Fuentes: entrevistas con Rosa, Carolina y David; el mapeo por etapas del trabajo de Rosa; sesión de trabajo interna del equipo. El flujo «Con la app» describe lo que está construido y verificado contra la base de datos al 10 de septiembre de 2026; lo que todavía no existe va marcado en ámbar.</p></footer>
+
+<div class="scrim" id="scrim"></div>
+<aside id="panel" aria-hidden="true" aria-label="Detalle"><div class="panel" id="panelBody"></div></aside>
+
+<script>
+/* ===================== CÓMO FUNCIONA HOY ===================== */
+const ASIS={
+ nombre:"Cómo funciona hoy",
+ ctxHtml:`<p>Un solo viaje recorre siete áreas y veintitrés pasos antes de convertirse en asiento contable. Nace de un memo, se financia por adelantado, se gasta en provincia sin supervisión, se rinde semanas después en papel, se revisa dos veces y recién entonces llega a Contabilidad.</p>
+  <p>Las nueve marcas rojas son los puntos donde el proceso se rompe. Ocho ocurren antes de que el expediente llegue a Contabilidad; la novena es lo que le queda a Rosa después.</p>`,
+ lanes:[
+  {pool:"JEFATURA",role:"Jefatura de proyectos"},
+  {pool:"CONTROL DE GESTIÓN",role:"David · Costos"},
+  {pool:"FINANZAS",role:"Jenny · Tesorería"},
+  {pool:"ADMINISTRACIÓN",role:"Anie · Caja chica"},
+  {pool:"CAMPO",role:"Trabajador que viaja"},
+  {pool:"CONTABILIDAD",role:"Rosa"},
+  {pool:"SUNAT",role:"Plataforma"}
+ ],
+ nodes:[
+  {id:"s",type:"start",row:0,col:0,t:"Se aprueba el viaje"},
+  {id:"a1",type:"task",row:0,col:1,num:"1.1",t:"Define destino, días y personas",who:"Jefatura de proyectos",
+   que:"Se decide a dónde va el personal, cuántos días y quiénes. De aquí sale todo lo demás: el presupuesto, el memo y el dinero.",
+   docs:["Programación del viaje"],dep:["Proyectos"]},
+  {id:"a2",type:"task",row:1,col:2,num:"1.2",t:"Arma el presupuesto del memo",who:"Control de Gestión",
+   que:"Se calcula sobre los días declarados: desayuno, almuerzo, cena, movilidad entre colegios y un extra por imprevistos. El hospedaje no entra porque lo gestiona Anie por separado.",
+   docs:["Formato de cálculo de viáticos"],tools:["Excel"],dep:["Jefatura"],
+   quote:"Todo nace del memo.",qw:"David, costos y control de gestión"},
+  {id:"a3",type:"task",row:1,col:3,num:"1.3",t:"Abre dos memos: viáticos y pasajes",who:"Control de Gestión",
+   que:"Cuando el viaje es aéreo se abren dos memos separados. El de pasajes se emite primero con la fecha de ida y se actualiza después con la de retorno, porque al abrirlo no se sabe cuándo vuelve la persona.",
+   docs:["Memo de viáticos","Memo de pasajes"],dep:["Jefatura"],
+   dolor:"El correlativo del memo no está estandarizado: cada área lleva el suyo y no hay numeración única en el grupo.",
+   doc:{label:"Memo",side:"up"}},
+  {id:"a4",type:"task",row:3,col:3,num:"1.4",t:"Compra pasajes terrestres y reserva hospedaje",who:"Anie",
+   que:"Los viajes cercanos se pagan directamente con la caja chica que maneja Anie. El hospedaje de todo el personal que viaja también lo gestiona ella, de forma centralizada.",
+   docs:["Comprobantes de pasajes","Reservas de hospedaje"],tools:["Caja chica"],dep:["Jefatura"]},
+  {id:"a5",type:"task",row:2,col:4,num:"1.5",t:"Abona el viático al trabajador",who:"Jenny · Tesorería",
+   que:"Se deposita el dinero calculado. Jenny paga todo y para todas las empresas del grupo.",
+   docs:["Constancia de transferencia"],tools:["Banca"],dep:["Control de Gestión"]},
+  {id:"b1",type:"task",row:4,col:5,num:"2.1",t:"Viaja y gasta en campo",who:"Trabajador",
+   que:"Movilidad entre colegios, alimentación y los imprevistos del viaje. Van técnicos que instalan, capacitadores, gestores y hasta profesores cuando hay levantamiento de observaciones.",
+   docs:["Boletas","Facturas","Constancias de Yape"],dep:["Proveedores de provincia"]},
+  {id:"b2",type:"task",row:4,col:6,num:"2.2",t:"Reúne comprobantes y llena la planilla de movilidad",who:"Trabajador",
+   que:"Guarda todo en un sobre. Los taxis no van en la rendición: se registran en una planilla de movilidad aparte, en papel, cuyo formato entrega Recursos Humanos y que se entrega a Administración.",
+   docs:["Boletas y facturas","Planilla de movilidad","Declaración jurada"],tools:["Papel"],dep:["Recursos Humanos","Administración"],
+   dolor:"En provincia hay gastos que simplemente no tienen comprobante, y hay proveedores que cobran más por facturar.",
+   rup:{id:"V5",label:"Sin comprobante",t:"El gasto existe pero no tiene respaldo",
+     que:"Lo que no tiene comprobante va por declaración jurada, que tiene tope. Y los comprobantes térmicos se borran solos: quien no los fotografía a tiempo se queda sin sustento.",
+     quote:"Con la moto de cinco soles no te da.",qw:"David, costos y control de gestión"}},
+  {id:"g1",type:"gateway",row:4,col:7,t:"¿El viaje se ejecutó como se planificó?"},
+  {id:"b3",type:"task",row:4,col:8,num:"2.3",t:"Lo redestinan a otro punto en el camino",who:"Trabajador",
+   que:"Sale con presupuesto para cinco días en un destino y a mitad del viaje lo mandan dos días a otro lado. El dinero del primer memo se gasta en un lugar que ese memo no contemplaba.",
+   dep:["Jefatura"],
+   rup:{id:"V1",label:"El plan no se respeta",t:"El presupuesto deja de tener sentido a mitad del viaje",
+     que:"Control de Gestión calcula sobre un plan de días y destinos. Cuando el plan cambia sobre la marcha, el presupuesto ya no sirve de referencia y la revisión posterior se vuelve una reconstrucción.",
+     quote:"Sería bueno automatizar eso, siempre y cuando se respete el plan. Y ellos no respetan su plan.",qw:"David, costos y control de gestión"}},
+  {id:"b4",type:"task",row:0,col:9,num:"2.4",t:"Abre otro memo para el viaje siguiente",who:"Jefatura",
+   que:"El trabajador regresa un miércoles y el lunes sale otra vez. Se abre un memo nuevo sin que el anterior se haya rendido.",
+   docs:["Nuevo memo"],dep:["Control de Gestión"],
+   rup:{id:"V3",label:"Memos encadenados",t:"Se abre un memo nuevo sin rendir el anterior",
+     que:"Una misma persona puede acumular varios memos abiertos. En un caso extremo se acumularon alrededor de cincuenta y una devolución cercana a los mil novecientos soles.",
+     quote:"Llegas el miércoles en la noche y el lunes a primera hora te estás yendo a otro punto.",qw:"Carolina, finanzas"}},
+  {id:"b5",type:"task",row:4,col:10,num:"2.5",t:"Vuelve y deja la rendición para cuando haya tiempo",who:"Trabajador",
+   que:"La rendición compite con la carga operativa. Se rinde cuando el personal encuentra un hueco, y para entonces ya se juntaron tres o cuatro memos.",
+   rup:{id:"V4",label:"Nadie controla que rindan",t:"No hay responsable del cumplimiento",
+     que:"La jefatura no hace seguimiento y Control de Gestión termina persiguiendo. El área ha trabajado sábados y domingos para ponerse al día con el atraso acumulado.",
+     quote:"¿Quién controla que rindan? Anda por nosotros. Estamos perdiendo todos los días.",qw:"David, costos y control de gestión"}},
+  {id:"c1",type:"task",row:3,col:11,num:"3.1",t:"Se sienta con Anie a ordenar los comprobantes",who:"Anie · Trabajador",
+   que:"Sacan todos los memos pendientes y ordenan boletas y facturas. Puede tomar un día entero por persona.",
+   docs:["Boletas","Facturas"],tools:["Papel"],
+   quote:"Sacan los memos que tengan y comienzan a rendir. Se quedan ahí todo un día.",qw:"Carolina, finanzas"},
+  {id:"c2",type:"task",row:4,col:12,num:"3.2",t:"Llena a mano la plantilla de rendición e imprime",who:"Trabajador",
+   que:"Una plantilla de Excel con el número de memo, la fecha de solicitud, la empresa y una fila por comprobante. Cada persona la llena por su cuenta.",
+   docs:["Plantilla de rendición"],tools:["Excel","Impresora"],
+   rup:{id:"V9",label:"Reglas no escritas",t:"Los topes viven en la cabeza de las personas",
+     que:"La planilla de movilidad tiene reglas: un tope por día y la obligación de partir el excedente al mes siguiente. No están documentadas en ningún lado.",
+     quote:"Son reglas no escritas. O sea, viven en la cabeza de una persona.",qw:"Sesión de trabajo del equipo"}},
+  {id:"c3",type:"task",row:4,col:13,num:"3.3",t:"Arma el sobre manila y lo entrega",who:"Trabajador",
+   que:"Comprobantes físicos dentro de un sobre, con la plantilla impresa como carátula.",
+   docs:["Sobre manila","Plantilla impresa"],tools:["Papel"],doc:{label:"Sobre manila",side:"down"}},
+  {id:"d1",type:"task",row:1,col:14,num:"4.1",t:"Revisa gasto por gasto contra el presupuesto",who:"Control de Gestión",
+   que:"Se compara lo gastado contra lo presupuestado por día. Si gastó de más, hay que sustentarlo; si gastó de menos, devuelve; y si fue exacto, también se revisa.",
+   docs:["Cuadro de gastos","Comprobantes"],tools:["Excel"],dep:["Trabajador"],
+   dolor:"Los memos se reparten entre varios proyectos y la gente los agrupa como puede. Cuando el cuadro llega ordenado por persona en vez de por proyecto, no cuadra.",
+   rup:{id:"V6",label:"Proyecto mal asignado",t:"El gasto no se puede atribuir al proyecto correcto",
+     que:"Un mismo memo puede repartirse entre varios proyectos. Si la glosa viene por persona y no por proyecto, la asignación se confunde y hay que rehacerla.",
+     quote:"Se confunden. Al final se confunden.",qw:"David, costos y control de gestión"}},
+  {id:"g2",type:"gateway",row:1,col:15,t:"¿Cuadra el saldo del memo?"},
+  {id:"d2",type:"task",row:4,col:16,num:"4.2",t:"Devuelve el saldo o sustenta el exceso",who:"Trabajador",
+   que:"El sobrante se deposita de vuelta a la cuenta de la empresa. El exceso hay que justificarlo.",
+   docs:["Constancia de depósito"],dep:["Finanzas"]},
+  {id:"d3",type:"task",row:1,col:16,num:"4.3",t:"Escanea, sube al Drive y arma el folder manila",who:"Control de Gestión",
+   que:"La documentación se digitaliza en una carpeta compartida a la que casi todas las áreas tienen acceso de lectura, y en paralelo se arma el compilado físico.",
+   docs:["Carpeta de rendiciones en Drive","Folder manila"],tools:["Drive","Escáner"],
+   dolor:"El escaneo se hace por formalidad hacia Contabilidad, pero el expediente físico se sigue armando igual: se hacen las dos cosas."},
+  {id:"d4",type:"task",row:1,col:17,num:"4.4",t:"Entrega el compilado a Contabilidad",who:"Control de Gestión",
+   que:"Sobre manila sobre sobre manila. Es el fajo que llega al escritorio de Rosa.",
+   docs:["Compilado de rendiciones"],
+   rup:{id:"V7",label:"Llega en papel y desordenado",t:"Contabilidad recibe el bloque completo, sin estructura",
+     que:"Costos y administración no conversan directamente con Contabilidad sobre el formato, así que el expediente llega armado según el criterio de cada quien.",
+     quote:"Costos y admin no conversan, y a contabilidad le llega todo desordenado.",qw:"David, costos y control de gestión"}},
+  {id:"e1",type:"task",row:5,col:18,num:"5.1",t:"Revisa comprobante contra el cuadro, uno por uno",who:"Rosa",
+   que:"Le llega por el área de costos: Annie, y Felipe y Rodrigo cuando los chicos no dan abasto. Toma el Excel impreso como carátula y va contrastando cada boleta con su fila. Comprobante, cuadro, comprobante, cuadro.",
+   docs:["Comprobantes de la rendición","Planillas de movilidad","Declaraciones juradas","Memos de asignación de fondos"],tools:["Papel","Excel"],
+   dep:["Costos (Annie, Felipe, Rodrigo)","Finanzas","Proyectos"],
+   dolor:"Además valida requisitos formales: placa en los gastos vehiculares, Nuevo RUS para aceptar una boleta, concepto correcto en los recibos por honorarios. El volumen depende de los viajes y no se puede anticipar.",
+   quote:"Hay días que todas estas son para mañana.",qw:"Rosa, contabilidad",
+   rup:{id:"V10",label:"Registro uno por uno",t:"El trabajo llega ordenado, pero se sigue digitando a mano",
+     que:"Antes el mismo expediente se revisaba dos y tres veces entre Proyectos, Finanzas, Contabilidad y Costos. Eso ya se corrigió y hoy Rosa recibe algo limpio: cuando la rendición llega a Contabilidad, se cierra —ella registra y no vuelve a discutir si el gasto procede—. Lo que no se resolvió es que el registro sigue siendo manual, comprobante por comprobante, sobre volúmenes que en la caja de administración llegan a cien o doscientas líneas.",
+     quote:"A mí me corresponde solamente. Tranquila: el proceso ya está ordenado.",qw:"Rosa, contabilidad"}},
+  {id:"e2",type:"task",row:5,col:19,num:"5.2",t:"Marca el centro de costo con colores sobre el papel",who:"Rosa",
+   que:"Va pintando cada gasto según el centro de costo al que pertenece, para después registrar todos los del mismo color juntos.",
+   tools:["Resaltadores","Excel impreso"],
+   quote:"Lo marca de colores para saber a qué centro de costo asignar, y sobre eso ya lo va digitando.",qw:"Observación del proceso de Rosa"},
+  {id:"e3",type:"task",row:5,col:20,num:"5.3",t:"Digita en los subdiarios 11, 21 y 31",who:"Rosa",
+   que:"Los tres a la par: las compras de la rendición en el 11, la devolución del dinero en el 21 y la rendición propiamente dicha en el 31. Para el 21 calcula ella misma la diferencia entre lo depositado y lo rendido.",
+   tools:["CONCAR (subdiarios 11, 21 y 31)"],
+   dolor:"Es doble trabajo: primero ingresa al registro de compras y después hace la rendición. Y el mismo fajo mezcla varios centros de costo, que hay que separar a mano entre administrativo y proyectos."},
+  {id:"e4",type:"task",row:5,col:21,num:"5.4",t:"Imprime y adjunta el legajo al asiento",who:"Rosa",
+   que:"Adjunta todo el sustento al asiento 31 para no tener que rearmarlo si alguien lo consulta después. Es la razón por la que, habiendo escaneo, igual se imprime: el legajo tiene que estar pegado al asiento.",
+   docs:["Legajo impreso"],tools:["Impresora"],
+   dolor:"Todo el sustento se imprime en papel, incluso el que ya venía digitalizado en el Drive."},
+  {id:"t1",type:"timer",row:6,col:22,t:"El SIRE se libera el día 8",
+   que:"Recién desde esa fecha se puede cruzar lo registrado contra lo que SUNAT reporta.",tools:["SIRE"]},
+  {id:"e5",type:"task",row:5,col:23,num:"5.5",t:"Cruza los comprobantes contra el SIRE",who:"Rosa",
+   que:"Verifica que cada comprobante exista y esté declarado, y que la devolución del saldo aparezca en la cuenta.",
+   tools:["SIRE","CONCAR"],dep:["SUNAT"]},
+  {id:"f1",type:"task",row:2,col:24,num:"6.1",t:"Libera el fondo del viaje siguiente",who:"Finanzas",
+   que:"El nuevo desembolso depende de que la liquidación anterior esté cerrada en el sistema.",
+   dep:["Contabilidad","Control de Gestión"],
+   rup:{id:"V8",label:"Reposición bloqueada",t:"El atraso del cierre frena el siguiente viaje",
+     que:"El retraso que empezó en campo termina bloqueando la operación: mientras no cierre la liquidación, no sale el fondo del próximo viaje."}},
+  {id:"end",type:"end",row:2,col:25,t:"Rendición cerrada"}
+ ],
+ edges:[["s","a1"],["a1","a2"],["a2","a3"],["a2","a4"],["a3","a5"],["a4","a5"],["a5","b1"],
+        ["b1","b2"],["b2","g1"],["g1","b3","No"],["b3","b1"],["g1","b5","Sí"],
+        ["b5","b4"],["b4","b1"],["b5","c1"],["c1","c2"],["c2","c3"],["c3","d1"],
+        ["d1","g2"],["g2","d2","No"],["d2","d1"],["g2","d3","Sí"],["d3","d4"],
+        ["d4","e1"],["e1","e2"],["e2","e3"],["e3","e4"],["e4","t1"],["t1","e5"],["e5","f1"],["f1","end"]]
+};
+
+/* ===================== TO BE ===================== */
+const TOBE={
+ nombre:"Con la app",
+ ctxHtml:`<p><span class="resu">Con la app</span> El mismo viaje, los mismos siete actores. Lo que cambia no es quién hace qué, sino dónde vive la información: el comprobante se captura en el momento y en el sitio, y de ahí en adelante nadie vuelve a transcribirlo.</p>
+  <p>Los recuadros verdes ya están construidos y probados contra la base de datos real. El recuadro ámbar es lo que todavía no existe: se dibuja igual para no prometer de más.</p>
+  <p><b>De los nueve puntos de ruptura, la app cierra cinco</b> —memos encadenados, proyecto mal asignado, papel desordenado, reposición bloqueada y registro uno por uno—. <b>Atenúa tres:</b> el control de que rindan, los gastos sin comprobante y las reglas no escritas. <b>Y no toca uno:</b> que el plan del viaje cambie a mitad de camino. Eso último es coordinación entre personas, no software.</p>`,
+ lanes:[
+  {pool:"JEFATURA",role:"Jefatura de proyectos"},
+  {pool:"CONTROL DE GESTIÓN",role:"David · Costos"},
+  {pool:"FINANZAS",role:"Jenny · Tesorería"},
+  {pool:"ADMINISTRACIÓN",role:"Anie · Memos"},
+  {pool:"CAMPO",role:"Trabajador que viaja"},
+  {pool:"CONTABILIDAD",role:"Rosa"},
+  {pool:"LA APP",role:"INRO Viáticos"}
+ ],
+ nodes:[
+  {id:"s",type:"start",row:0,col:0,t:"Se aprueba el viaje"},
+
+  {id:"a1",type:"task",row:0,col:1,num:"1.1",t:"Define destino, días y personas",who:"Jefatura de proyectos",
+   que:"No cambia. La decisión del viaje sigue siendo de la jefatura y sigue naciendo fuera de la app.",
+   docs:["Programación del viaje"],dep:["Proyectos"]},
+
+  {id:"a2",type:"task",row:3,col:2,num:"1.2",t:"Registra el memo eligiendo el centro de costo",who:"Anie",nuevo:true,
+   que:"El centro de costo sale de un catálogo, no se escribe a mano, y queda pegado al memo desde el origen. El correlativo lo genera la base con una secuencia por empresa, año y tipo: INROPRIN-2026-VIA-00001. Ya no hay una numeración por área.",
+   docs:["Memo digital"],tools:["INRO Viáticos"],
+   resuelve:"V6 · correlativo",
+   quote:"El correlativo del memo no está estandarizado: cada área lleva el suyo.",qw:"Lo que decía el As Is"},
+
+  {id:"a3",type:"task",row:6,col:3,num:"1.3",t:"Comprueba si esa persona debe rendiciones",who:"La app",nuevo:true,
+   que:"Antes de dejar abrir el memo, revisa si el asignado arrastra rendiciones cuya fecha de retorno ya pasó, con un margen configurable de días de gracia. El aviso aparece al elegir a la persona, no al final del formulario.",
+   tools:["INRO Viáticos"],resuelve:"V3 · V4",
+   dolor:"Hoy el parámetro está en modo aviso: advierte y deja continuar. Encenderlo para que frene de verdad es cambiar un valor, pero es una decisión de Dirección."},
+
+  {id:"g1",type:"gateway",row:6,col:4,t:"¿Arrastra rendiciones vencidas?"},
+
+  {id:"a4",type:"task",row:0,col:5,num:"1.4",t:"Recibe la solicitud y decide",who:"Jefatura",nuevo:true,
+   que:"El memo queda en borrador y al jefe le llega la solicitud con el correlativo, el monto y el motivo congelados. Puede dar el visto bueno o rechazarlo con una razón escrita, que el que pidió va a leer.",
+   docs:["Solicitud de apertura"],tools:["INRO Viáticos"],resuelve:"V3",
+   dolor:"El visto bueno vale por el monto que se firmó: si después alguien sube el monto del memo, la base rechaza la apertura y hay que volver a pedirlo. Sin eso sería una constancia y no un control."},
+
+  {id:"a5",type:"task",row:6,col:6,num:"1.5",t:"Abre el memo y lo hace visible al trabajador",who:"La app",nuevo:true,
+   que:"Recién al abrirse aparece en «Mis memos» de la persona asignada. Un borrador no lo ve nadie más que quien lo administra.",
+   tools:["INRO Viáticos"]},
+
+  {id:"a6",type:"task",row:2,col:7,num:"1.6",t:"Abona el viático al trabajador",who:"Jenny · Tesorería",
+   que:"No cambia. El desembolso sigue siendo de Tesorería y sigue ocurriendo fuera de la app.",
+   docs:["Constancia de transferencia"],tools:["Banca"]},
+
+  {id:"b1",type:"task",row:4,col:8,num:"2.1",t:"Viaja y gasta en campo",who:"Trabajador",
+   que:"No cambia. Movilidad entre colegios, alimentación e imprevistos.",
+   dep:["Proveedores de provincia"]},
+
+  {id:"b2",type:"task",row:4,col:9,num:"2.2",t:"Fotografía el comprobante en el momento",who:"Trabajador",nuevo:true,
+   que:"En el sitio, con el teléfono, apenas le entregan la boleta. Ya no espera al sobre manila ni a tener un hueco semanas después.",
+   tools:["Cámara del teléfono"],resuelve:"V5",
+   quote:"Los comprobantes térmicos se borran solos: quien no los fotografía a tiempo se queda sin sustento.",qw:"Lo que decía el As Is"},
+
+  {id:"b3",type:"task",row:6,col:10,num:"2.3",t:"Lee el comprobante y levanta las alertas",who:"La app",nuevo:true,
+   que:"Primero un motor de lectura que corre en el propio teléfono y no depende de ninguna cuota: saca RUC, serie, número, fecha, subtotal, IGV y total. Solo si quedan campos sin resolver consulta a la IA. La app sigue funcionando aunque se acabe la cuota diaria.",
+   tools:["OCR en el teléfono","IA (opcional)"],resuelve:"V9",
+   dolor:"Las alertas son las reglas escritas: RUC que no valida, comprobante repetido, la aritmética que no cuadra, la fecha fuera del rango del memo, el comprobante emitido a otra empresa. Antes vivían en la cabeza de las personas."},
+
+  {id:"b4",type:"task",row:4,col:11,num:"2.4",t:"Confirma el monto y el proveedor",who:"Trabajador",nuevo:true,
+   que:"La persona ve lo que la app leyó, con un distintivo por campo que dice de dónde salió cada dato: leído, IA, calculado o escrito por ella. Corrige lo que haga falta. El único campo obligatorio es el monto, porque un Yape o una transferencia son solo eso y también tienen que poder archivarse.",
+   tools:["INRO Viáticos"]},
+
+  {id:"b5",type:"task",row:6,col:12,num:"2.5",t:"Guarda el comprobante y su foto",who:"La app",nuevo:true,
+   que:"Recién cuando la persona confirma que esa es la foto correcta y ese es el monto, se guarda el gasto y la imagen sube a Drive, ordenada por empresa, período y centro de costo.",
+   docs:["Foto del comprobante"],tools:["Google Drive"]},
+
+  {id:"t1",type:"task",row:0,col:12,num:"2.6",t:"Ve a su gente en el tablero",who:"Jefatura",nuevo:true,
+   que:"Mientras el viaje ocurre, el jefe ve a las personas a su cargo con memos sin cerrar, por cuánto y desde hace cuántos días, ordenadas por antigüedad: el de arriba es al que conviene llamar primero.",
+   tools:["INRO Viáticos"],resuelve:"V4",
+   quote:"¿Quién controla que rindan? Anda por nosotros. Estamos perdiendo todos los días.",qw:"David, costos y control de gestión"},
+
+  {id:"p1",type:"task",row:4,col:13,num:"2.7",t:"Gasto sin comprobante posible",who:"Trabajador",pend:true,
+   que:"La declaración jurada y la planilla de movilidad existen en el modelo de datos, en las validaciones y en la exportación, con sus topes por día. Pero el trabajador todavía NO puede cargarlas desde la app: la captura solo acepta comprobantes. Y los dos topes están sin configurar.",
+   docs:["Declaración jurada","Planilla de movilidad"],
+   dolor:"Es una decisión tomada, no un olvido: se acordó empezar solo con comprobantes. Mientras tanto, este camino sigue siendo de papel."},
+
+  {id:"b6",type:"task",row:4,col:14,num:"2.8",t:"Presenta la rendición desde el teléfono",who:"Trabajador",nuevo:true,
+   que:"No hay plantilla que llenar, ni impresión, ni sobre. La app comprueba antes que no quede nada sin extraer, nada duplicado y ninguna alerta sin confirmar.",
+   tools:["INRO Viáticos"],resuelve:"V7"},
+
+  {id:"c1",type:"task",row:1,col:15,num:"3.1",t:"Revisa en pantalla, gasto por gasto",who:"Control de Gestión",nuevo:true,
+   que:"Ve el memo con su monto autorizado, lo rendido, el saldo y cada comprobante con su foto y sus alertas. El centro de costo ya viene del memo, así que no hay que reconstruir a qué proyecto pertenece cada gasto.",
+   tools:["INRO Viáticos"],resuelve:"V6 · V7",
+   quote:"Los memos se reparten entre varios proyectos y la gente los agrupa como puede. Se confunden. Al final se confunden.",qw:"David, costos y control de gestión"},
+
+  {id:"g2",type:"gateway",row:1,col:16,t:"¿Todo conforme?"},
+
+  {id:"c2",type:"task",row:4,col:17,num:"3.2",t:"Corrige solo lo observado",who:"Trabajador",nuevo:true,
+   que:"La devolución es parcial: vuelven editables únicamente los comprobantes que le observaron, con el motivo escrito de cada uno. Lo que ya estaba conforme queda congelado.",
+   tools:["INRO Viáticos"]},
+
+  {id:"c3",type:"task",row:5,col:17,num:"3.3",t:"Descarga el archivo y registra",who:"Rosa",nuevo:true,
+   que:"Un archivo por rendición, con una fila por comprobante y el centro de costo ya asignado. Separador de punto y coma y marca de orden de bytes, para que Excel en español lo abra en columnas sin pelear.",
+   docs:["Archivo para Contabilidad"],tools:["CONCAR","Excel"],resuelve:"V7 · V10",
+   dolor:"Lo que la app no hace es entrar a CONCAR por ella. Sigue habiendo un registro, pero sobre datos que ya no hay que transcribir ni separar a mano.",
+   quote:"Hay días que todas estas son para mañana.",qw:"Rosa, contabilidad"},
+
+  {id:"d1",type:"task",row:5,col:18,num:"4.1",t:"Emite la liquidación de la persona",who:"Rosa",nuevo:true,
+   que:"Netea todo lo que esa persona debe contra lo que se le debe, a lo largo de todos sus memos cerrados, y lo congela en un documento. Los montos los calcula la base, no el navegador: es un documento de pago.",
+   docs:["Liquidación"],tools:["INRO Viáticos"],
+   dolor:"Un memo no puede entrar en dos liquidaciones vigentes de la misma persona. Es lo que impide pagar dos veces."},
+
+  {id:"d2",type:"task",row:5,col:19,num:"4.2",t:"Registra el movimiento de plata",who:"Rosa",nuevo:true,
+   que:"Con su número de operación o voucher. Sin referencia la app no lo acepta: sin eso no hay forma de encontrar el movimiento después, que es justamente para lo que sirve registrarlo.",
+   docs:["Constancia del movimiento"],tools:["INRO Viáticos"],resuelve:"V8"},
+
+  {id:"d3",type:"task",row:6,col:20,num:"4.3",t:"Cierra los memos saldados",who:"La app",nuevo:true,
+   que:"Un memo llega a cerrado cuando está contabilizado y todas las personas que lo tienen asignado ya cobraron o pagaron su liquidación. Hasta hoy, ninguna rendición llegaba nunca a estar cerrada.",
+   tools:["INRO Viáticos"]},
+
+  {id:"e1",type:"task",row:2,col:21,num:"4.4",t:"Libera el fondo del viaje siguiente",who:"Finanzas",
+   que:"El desembolso siguiente deja de depender de un cierre que nadie sabía dónde estaba: la liquidación dice si se pagó, cuándo y con qué referencia.",
+   dep:["Contabilidad"],resuelve:"V8"},
+
+  {id:"end",type:"end",row:2,col:22,t:"Rendición cerrada"}
+ ],
+ edges:[["s","a1"],["a1","a2"],["a2","a3"],["a3","g1"],
+        ["g1","a4","Sí"],["a4","a5"],["g1","a5","No"],
+        ["a5","a6"],["a6","b1"],["b1","b2"],["b2","b3"],["b3","b4"],["b4","b5"],
+        ["b5","b2"],["b1","t1"],["b5","p1"],["p1","b6"],
+        ["b6","c1"],["c1","g2"],["g2","c2","No"],["c2","c1"],["g2","c3","Sí"],
+        ["c3","d1"],["d1","d2"],["d2","d3"],["d3","e1"],["e1","end"]]
+};
+
+
+/* ===================== BPMN ===================== */
+/* ===================== BPMN ===================== */
+const $=(s,r=document)=>r.querySelector(s);
+const NS="http://www.w3.org/2000/svg";
+const COLW=196, LANEH=132, TW=148, TH=62, POOLW=34, ROLEW=118, PAD=26;
+const LEFTW=POOLW+ROLEW;
+function el(n,a={},p){const e=document.createElementNS(NS,n);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;}
+function wrap(t,max){const w=t.split(" ");const o=[];let l="";w.forEach(x=>{if((l+" "+x).trim().length>max){o.push(l.trim());l=x;}else l+=" "+x;});if(l.trim())o.push(l.trim());return o;}
+function nodeBox(n){const x=PAD+n.col*COLW, y=PAD+n.row*LANEH;
+ if(n.type==="task")return{x:x+(COLW-TW)/2,y:y+(LANEH-TH)/2,w:TW,h:TH};
+ if(n.type==="gateway"){const s=46;return{x:x+(COLW-s)/2,y:y+(LANEH-s)/2,w:s,h:s};}
+ const r=34;return{x:x+(COLW-r)/2,y:y+(LANEH-r)/2,w:r,h:r};}
+const cx=b=>b.x+b.w/2, cy=b=>b.y+b.h/2;
+
+function renderFlow(f){
+  const cols=Math.max(...f.nodes.map(n=>n.col))+1;
+  const W=PAD*2+cols*COLW, H=PAD*2+f.lanes.length*LANEH;
+  $("#view").innerHTML=`<div class="wrap"><div class="board">
+    <div class="lanescol"><svg id="lanes" width="${LEFTW}" height="${H}" viewBox="0 0 ${LEFTW} ${H}"></svg></div>
+    <div class="scroller"><svg id="svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"></svg></div>
+  </div></div>`;
+
+  // carriles fijos
+  const L=$("#lanes");
+  let start=0;
+  f.lanes.forEach((l,i)=>{
+    const y=PAD+i*LANEH;
+    el("rect",{x:POOLW,y,width:ROLEW,height:LANEH,fill:"#F4F6F1",stroke:"#D5DAD0","stroke-width":.9},L);
+    const rt=el("text",{x:POOLW+ROLEW/2,y:y+LANEH/2,class:"rolename","text-anchor":"middle"},L);
+    wrap(l.role,17).forEach((ln,k,a)=>{el("tspan",{x:POOLW+ROLEW/2,dy:k?13:-(a.length-1)*6.5},rt).textContent=ln;});
+    if(i===f.lanes.length-1||f.lanes[i+1].pool!==l.pool){
+      const yy=PAD+start*LANEH, h=(i-start+1)*LANEH;
+      el("rect",{x:0,y:yy,width:POOLW,height:h,fill:"#EDF0E9",stroke:"#D5DAD0","stroke-width":.9},L);
+      // El nombre del pool va rotado dentro del alto del carril. Si no
+      // entra —"CONTROL DE GESTIÓN" en un solo carril— se comprime en vez
+      // de cortarse.
+      const pn=el("text",{class:"poolname","text-anchor":"middle",transform:`translate(${POOLW/2},${yy+h/2}) rotate(-90)`},L);
+      pn.textContent=l.pool;
+      const disp=h-14;
+      if(l.pool.length*7.2>disp){pn.setAttribute("textLength",disp);pn.setAttribute("lengthAdjust","spacingAndGlyphs");}
+      start=i+1;
+    }
+  });
+
+  const svg=$("#svg");
+  el("defs",{},svg).innerHTML=`<marker id="ar" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1L7 4L1 7Z" fill="#4A5A52"/></marker>`;
+  const bg=el("g",{},svg);
+  f.lanes.forEach((l,i)=>{
+    el("rect",{x:0,y:PAD+i*LANEH,width:W,height:LANEH,fill:i%2?"#FBFCFA":"#fff",stroke:"#D5DAD0","stroke-width":.9},bg);
+  });
+  const wireG=el("g",{},svg), nodeG=el("g",{},svg), byId={};
+  f.nodes.forEach(n=>byId[n.id]=n);
+  f.edges.forEach(([a,b,lab])=>{
+    const A=nodeBox(byId[a]),B=nodeBox(byId[b]); let d,lx,ly;
+    if(B.x<A.x){const yy=Math.max(A.y+A.h,B.y+B.h)+26; d=`M${cx(A)} ${A.y+A.h} V${yy} H${cx(B)} V${B.y+B.h}`; lx=(cx(A)+cx(B))/2; ly=yy-5;}
+    else if(Math.abs(cy(A)-cy(B))<3){d=`M${A.x+A.w} ${cy(A)} H${B.x}`; lx=(A.x+A.w+B.x)/2; ly=cy(A)-6;}
+    else{const mx=A.x+A.w+Math.max(16,(B.x-A.x-A.w)/2); d=`M${A.x+A.w} ${cy(A)} H${mx} V${cy(B)} H${B.x}`; lx=mx+6; ly=(cy(A)+cy(B))/2;}
+    el("path",{d,fill:"none",stroke:"#4A5A52","stroke-width":1.25,"marker-end":"url(#ar)"},wireG);
+    if(lab)el("text",{x:lx,y:ly,class:"flabel","text-anchor":"middle"},wireG).textContent=lab;
+  });
+  f.nodes.forEach(n=>{
+    const b=nodeBox(n);
+    if(n.doc){
+      const dy=n.doc.side==="up"?b.y-46:b.y+b.h+12, dx=b.x+b.w/2-13;
+      el("path",{d:`M${dx} ${dy}h17l9 9v25h-26Z`,fill:"#fff",stroke:"#8A948C","stroke-width":1.1},nodeG);
+      el("path",{d:`M${dx+17} ${dy}v9h9`,fill:"none",stroke:"#8A948C","stroke-width":1.1},nodeG);
+      el("path",{d:`M${b.x+b.w/2} ${n.doc.side==="up"?b.y:b.y+b.h} V${n.doc.side==="up"?dy+34:dy}`,fill:"none",stroke:"#A9B2A6","stroke-width":1,"stroke-dasharray":"2 3"},nodeG);
+      const dt=el("text",{x:b.x+b.w/2+22,y:dy+20,class:"dlabel"},nodeG);
+      wrap(n.doc.label,16).forEach((ln,k)=>{el("tspan",{x:b.x+b.w/2+22,dy:k?11:0},dt).textContent=ln;});
+    }
+    const g=el("g",{class:"task"+(n.rup?" rup":"")+(n.nuevo?" nuevo":"")+(n.pend?" pend":""),tabindex:"0",role:"button"},nodeG);
+    if(n.type==="task"){
+      el("rect",{class:"body",x:b.x,y:b.y,width:b.w,height:b.h},g);
+      const ic=n.pend?"#8A6B27":n.nuevo?"#2E7D5B":"#2E6FA8";
+      el("rect",{x:b.x+7,y:b.y+7,width:11,height:9,rx:1.5,fill:"none",stroke:ic,"stroke-width":1.1},g);
+      el("path",{d:`M${b.x+9} ${b.y+10}h7M${b.x+9} ${b.y+13}h5`,stroke:ic,"stroke-width":1},g);
+      el("text",{x:b.x+22,y:b.y+15,class:"tnum"+(n.nuevo?" n":n.pend?" p":"")},g).textContent=n.num||"";
+      const t=el("text",{x:b.x+b.w/2,y:b.y+34,class:"tlabel","text-anchor":"middle"},g);
+      wrap(n.t,24).forEach((ln,k)=>{el("tspan",{x:b.x+b.w/2,dy:k?12.5:0},t).textContent=ln;});
+    } else if(n.type==="gateway"){
+      el("path",{d:`M${cx(b)} ${b.y}L${b.x+b.w} ${cy(b)}L${cx(b)} ${b.y+b.h}L${b.x} ${cy(b)}Z`,fill:"#F5DE7A",stroke:"#B99B14","stroke-width":1.4},g);
+      el("path",{d:`M${cx(b)-8} ${cy(b)-8}L${cx(b)+8} ${cy(b)+8}M${cx(b)+8} ${cy(b)-8}L${cx(b)-8} ${cy(b)+8}`,stroke:"#8A7410","stroke-width":1.3},g);
+      const t=el("text",{x:cx(b),y:b.y+b.h+13,class:"glabel","text-anchor":"middle"},g);
+      wrap(n.t,22).forEach((ln,k)=>{el("tspan",{x:cx(b),dy:k?12:0},t).textContent=ln;});
+    } else {
+      const isEnd=n.type==="end", isT=n.type==="timer";
+      el("circle",{cx:cx(b),cy:cy(b),r:16,fill:isEnd?"#F8DEDB":isT?"#FFF6DF":"#DFF0D8",stroke:isEnd?"#B0362C":isT?"#B99B14":"#5A9E4B","stroke-width":isEnd?2.6:1.6},g);
+      if(isT){el("circle",{cx:cx(b),cy:cy(b),r:9,fill:"none",stroke:"#8A7410","stroke-width":1.2},g);
+        el("path",{d:`M${cx(b)} ${cy(b)-5}V${cy(b)}H${cx(b)+4}`,fill:"none",stroke:"#8A7410","stroke-width":1.3},g);}
+      const t=el("text",{x:cx(b),y:cy(b)+30,class:"flabel","text-anchor":"middle"},g);
+      wrap(n.t,20).forEach((ln,k)=>{el("tspan",{x:cx(b),dy:k?11:0},t).textContent=ln;});
+    }
+    g.addEventListener("click",()=>openNode(n));
+    g.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();openNode(n);}});
+    if(n.rup)badge(nodeG,b,n.rup.label,"",()=>openRup(n.rup));
+    else if(n.pend)badge(nodeG,b,"Todavía no",  "p",()=>openNode(n));
+    else if(n.resuelve)badge(nodeG,b,"Resuelve "+n.resuelve,"n",()=>openNode(n));
+  });
+}
+function badge(parent,b,label,cls,fn){
+  const bw=label.length*5.6+18;
+  const g=el("g",{class:"badge"+(cls?" "+cls:""),tabindex:"0",role:"button",transform:`translate(${b.x+b.w-bw+6},${b.y-15}) rotate(-3)`},parent);
+  el("rect",{x:0,y:0,width:bw,height:16},g);
+  el("text",{x:bw/2,y:11.5,"text-anchor":"middle"},g).textContent=label;
+  g.addEventListener("click",e=>{e.stopPropagation();fn();});
+  g.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();e.stopPropagation();fn();}});
+}
+
+
+/* ===================== PANEL ===================== */
+/* ===================== PANEL ===================== */
+function pills(a,n){return a.map(x=>`<span class="pill${n?" n":""}">${x}</span>`).join("");}
+function openNode(n){
+  const f=[];
+  if(n.docs&&n.docs.length)f.push(["Documentos",pills(n.docs,n.nuevo)]);
+  if(n.tools&&n.tools.length)f.push(["Herramientas",pills(n.tools,n.nuevo)]);
+  if(n.dep&&n.dep.length)f.push(["Depende de",pills(n.dep,n.nuevo)]);
+  if(n.resuelve)f.push(["Resuelve",pills(n.resuelve.split(" · "),true)]);
+  if(n.pend)f.push(["Estado",'<span class="pill p">Todavía no construido</span>']);
+  openPanel({num:n.num,who:n.who,title:n.t,que:n.que,dolor:n.dolor,quote:n.quote,qw:n.qw,fields:f,nuevo:n.nuevo,pend:n.pend});
+}
+function openRup(r){openPanel({who:"Punto de ruptura "+r.id,title:r.t,rup:true,que:r.que,quote:r.quote,qw:r.qw,fields:[]});}
+function openPanel(o){
+  let h=`<button class="p-close" id="pc" aria-label="Cerrar">×</button>`;
+  if(o.num)h+=`<div class="p-num">${o.num}</div>`;
+  h+=`<div class="p-who">${o.who||""}</div><div class="p-title ${o.rup?"rup":""}${o.nuevo?" nuevo":""}${o.pend?" pend":""}">${o.title||""}</div><div class="p-body">`;
+  if(o.que)h+=`<p>${o.que}</p>`;
+  if(o.dolor)h+=`<p>${o.dolor}</p>`;
+  if(o.quote)h+=`<div class="quote">“${o.quote}”<cite>${o.qw||""}</cite></div>`;
+  if(o.fields&&o.fields.length){h+=`<dl>`;o.fields.forEach(([k,v])=>h+=`<div class="f"><dt>${k}</dt><dd>${v}</dd></div>`);h+=`</dl>`;}
+  $("#panelBody").innerHTML=h+`</div>`;
+  $("#pc").onclick=closePanel;
+  $("#panel").classList.add("on");$("#panel").setAttribute("aria-hidden","false");$("#scrim").classList.add("on");
+}
+function closePanel(){$("#panel").classList.remove("on");$("#panel").setAttribute("aria-hidden","true");$("#scrim").classList.remove("on");}
+$("#scrim").onclick=closePanel;
+
+
+/* ===================== PESTAÑAS ===================== */
+const VIEWS=[{k:"asis",o:ASIS},{k:"tobe",o:TOBE,p:1}];
+let current="asis";
+const tabsEl=$("#tabs");
+VIEWS.forEach(v=>{
+  const b=document.createElement("button");
+  b.className="tab"+(v.p?" prop":""); b.setAttribute("role","tab"); b.dataset.k=v.k; b.textContent=v.o.nombre;
+  b.onclick=()=>{current=v.k;sync();};
+  tabsEl.appendChild(b);
+});
+function sync(){
+  [...tabsEl.children].forEach(b=>b.setAttribute("aria-selected",b.dataset.k===current));
+  closePanel();
+  const v=VIEWS.find(x=>x.k===current);
+  $("#ctx").innerHTML=v.o.ctxHtml||"";
+  renderFlow(v.o);
+  window.scrollTo({top:0,behavior:"instant"});
+}
+document.addEventListener("keydown",e=>{
+  if(e.key==="Escape"){closePanel();return;}
+  if(e.key==="ArrowRight"||e.key==="ArrowLeft"){
+    if(e.target.tagName==="INPUT"||e.target.tagName==="TEXTAREA")return;
+    const i=VIEWS.findIndex(x=>x.k===current);
+    const j=e.key==="ArrowRight"?Math.min(i+1,VIEWS.length-1):Math.max(i-1,0);
+    if(j!==i){current=VIEWS[j].k;sync();}
+  }
+});
+sync();
+</script>
+</body>
+</html>
