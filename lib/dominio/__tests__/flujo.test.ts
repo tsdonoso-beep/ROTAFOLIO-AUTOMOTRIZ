@@ -5,7 +5,7 @@ import {
   impedimentosParaPresentar, puedeEditarGasto, transicionGastoValida, transicionMemoValida,
 } from "../estados.ts";
 import { autoriza, puede, veTodo } from "../permisos.ts";
-import { armarCorrelativo, consolidar, correlativoValido, evaluarBloqueoPorPendientes, rutaDrive } from "../memo.ts";
+import { armarCorrelativo, consolidar, correlativoValido, evaluarBloqueoPorPendientes, explicarPendientes, rutaDrive } from "../memo.ts";
 import { PARAMETROS_POR_DEFECTO, type Alerta, type EstadoGasto, type Gasto } from "../tipos.ts";
 
 // ════════════════════════════════════════════════════════════════
@@ -251,6 +251,41 @@ describe("Bloqueo por memos vencidos", () => {
   it("ignora los memos ya cerrados", () => {
     const r = evaluarBloqueoPorPendientes([memo("CERRADO", "2026-01-01")], PARAMETROS_POR_DEFECTO, hoy);
     assert.equal(r.vencidos.length, 0);
+  });
+
+  it("una rendición presentada ya no es un pendiente", () => {
+    // Quien presentó hizo su parte: lo que falta es que la revisen, y eso no
+    // es motivo para negarle plata nueva.
+    const presentada = { ...memo("ABIERTO", "2026-07-01"), estado: "PRESENTADA" as const };
+    const r = evaluarBloqueoPorPendientes(
+      [presentada as unknown as Parameters<typeof evaluarBloqueoPorPendientes>[0][number]],
+      { ...PARAMETROS_POR_DEFECTO, bloquear_memo_con_pendientes: true },
+      hoy
+    );
+    assert.ok(!r.advierte);
+  });
+
+  describe("explicarPendientes", () => {
+    it("nombra a la persona, el monto y los memos", () => {
+      // Quien crea el memo casi nunca es quien arrastra el pendiente: Annie
+      // abre memos para todos y no sabe de memoria qué debe cada uno.
+      const r = evaluarBloqueoPorPendientes([memo("ABIERTO", "2026-07-01")], PARAMETROS_POR_DEFECTO, hoy);
+      const texto = explicarPendientes("Justo Lavilla", r);
+      assert.match(texto, /Justo Lavilla/);
+      assert.match(texto, /X-2026-VIA-00001/);
+      assert.match(texto, /S\/ 500\.00/);
+      assert.match(texto, /65 días/);
+    });
+
+    it("usa el singular con un solo memo", () => {
+      const r = evaluarBloqueoPorPendientes([memo("ABIERTO", "2026-07-01")], PARAMETROS_POR_DEFECTO, hoy);
+      assert.match(explicarPendientes("Justo", r), /una rendición vencida/);
+    });
+
+    it("sin pendientes no dice nada", () => {
+      const r = evaluarBloqueoPorPendientes([], PARAMETROS_POR_DEFECTO, hoy);
+      assert.equal(explicarPendientes("Justo", r), "");
+    });
   });
 });
 

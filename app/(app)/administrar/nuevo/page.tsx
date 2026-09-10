@@ -23,6 +23,10 @@ export default async function NuevoMemo() {
   return (
     <FormularioMemo
       centros={centros ?? []}
+      // Quién puede pasar por encima del bloqueo de §7.3 se decide acá, en el
+      // servidor. El formulario solo muestra u oculta la casilla; la acción
+      // vuelve a comprobarlo antes de escribir.
+      puedeAutorizarPendientes={autoriza(solicitante, "autorizar_apertura_con_pendientes").ok}
       personas={(personas ?? []).map(p => ({
         id: p.id, nombre: p.nombre, dni: p.dni, email: p.email,
       }))}

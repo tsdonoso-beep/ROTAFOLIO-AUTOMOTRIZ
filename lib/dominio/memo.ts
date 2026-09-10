@@ -161,6 +161,28 @@ export function evaluarBloqueoPorPendientes(
   };
 }
 
+/**
+ * Cómo se le explica el bloqueo a quien está creando el memo.
+ *
+ * El mensaje nombra a la persona y sus memos vencidos porque quien crea el
+ * memo casi nunca es quien arrastra el pendiente: Annie abre memos para todo
+ * el mundo y no tiene por qué saber de memoria qué debe cada uno.
+ */
+export function explicarPendientes(nombre: string, r: ResultadoBloqueo): string {
+  if (!r.advierte) return "";
+
+  const lista = r.vencidos
+    .map(v => `${v.correlativo} (${v.dias_vencido} días, ${soles(v.monto_autorizado)})`)
+    .join(", ");
+  const cuantos = r.vencidos.length === 1 ? "una rendición vencida" : `${r.vencidos.length} rendiciones vencidas`;
+
+  return `${nombre} tiene ${cuantos} por ${soles(r.monto_total)}: ${lista}.`;
+}
+
+function soles(n: number): string {
+  return `S/ ${n.toFixed(2)}`;
+}
+
 // ════════════════════════════════════════════════════════════════
 // Ruta en Drive (§8.2)
 // ════════════════════════════════════════════════════════════════

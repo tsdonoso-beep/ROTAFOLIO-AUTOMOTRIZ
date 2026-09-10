@@ -1,14 +1,15 @@
 "use client";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Tarjeta } from "./Encabezado";
-import { IconoAtras, IconoCheck } from "./Iconos";
-import { crearMemo } from "@/app/acciones/memos";
+import { Aviso, Tarjeta } from "./Encabezado";
+import { IconoAlerta, IconoAtras, IconoCheck } from "./Iconos";
+import { crearMemo, revisarPendientes, type PendientesDeAsignado } from "@/app/acciones/memos";
 
 interface Props {
   centros: Array<{ id: string; codigo: string; nombre: string }>;
   personas: Array<{ id: string; nombre: string; dni: string; email: string | null }>;
+  puedeAutorizarPendientes: boolean;
 }
 
 const TIPOS = [
@@ -22,7 +23,7 @@ const hoy = () => new Date().toISOString().slice(0, 10);
 const enDias = (n: number) =>
   new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
 
-export default function FormularioMemo({ centros, personas }: Props) {
+export default function FormularioMemo({ centros, personas, puedeAutorizarPendientes }: Props) {
   const router = useRouter();
   const [pendiente, iniciar] = useTransition();
   const [error, setError] = useState("");
@@ -34,8 +35,32 @@ export default function FormularioMemo({ centros, personas }: Props) {
   const [salida, setSalida] = useState(hoy());
   const [retorno, setRetorno] = useState(enDias(7));
   const [monto, setMonto] = useState("");
+  const [autorizar, setAutorizar] = useState(false);
 
-  const listo = centro && asignados.length > 0 && Number(monto) > 0;
+  // La respuesta se guarda junto con la selección que la produjo. Así el
+  // aviso nunca queda describiendo a una persona que ya se deseleccionó
+  // mientras la consulta viajaba.
+  const seleccion = asignados.join(",");
+  const [consultado, setConsultado] = useState<{
+    seleccion: string; lista: PendientesDeAsignado[];
+  }>({ seleccion: "", lista: [] });
+
+  // Se pregunta al cambiar la selección, no al enviar: quien abre el memo
+  // debería enterarse de que la persona arrastra una rendición vencida
+  // ANTES de llenar el monto y las fechas.
+  useEffect(() => {
+    if (!seleccion) return;
+    let vigente = true;
+    revisarPendientes(seleccion.split(","))
+      .then(lista => { if (vigente) setConsultado({ seleccion, lista }); });
+    return () => { vigente = false; };
+  }, [seleccion]);
+
+  const pendientes = consultado.seleccion === seleccion ? consultado.lista : [];
+  const bloquean = pendientes.filter(p => p.bloquea);
+  const frenado = bloquean.length > 0 && !(puedeAutorizarPendientes && autorizar);
+
+  const listo = centro && asignados.length > 0 && Number(monto) > 0 && !frenado;
 
   const alternar = (id: string) =>
     setAsignados(a => a.includes(id) ? a.filter(x => x !== id) : [...a, id]);
@@ -47,6 +72,7 @@ export default function FormularioMemo({ centros, personas }: Props) {
         tipo, centro_costo_id: centro, asignados, destino,
         fecha_salida: salida, fecha_retorno_prev: retorno,
         monto_autorizado: Number(monto), abrir,
+        autorizar_pendientes: autorizar,
       });
       if (r.ok) {
         router.push("/administrar");
@@ -141,6 +167,35 @@ export default function FormularioMemo({ centros, personas }: Props) {
             })}
           </div>
         </Tarjeta>
+
+        {pendientes.length > 0 && (
+          <Aviso tono={bloquean.length ? "error" : "aviso"} icono={<IconoAlerta size={17} />}>
+            <strong style={{ fontFamily: "var(--font-sora), sans-serif" }}>
+              {bloquean.length ? "Rendiciones vencidas." : "Ojo con lo pendiente."}
+            </strong>{" "}
+            {pendientes.map(p => p.motivo).join(" ")}
+            {bloquean.length > 0 && (
+              puedeAutorizarPendientes ? (
+                <label style={{
+                  display: "flex", alignItems: "flex-start", gap: 9, marginTop: 11,
+                  cursor: "pointer", lineHeight: 1.45,
+                }}>
+                  <input type="checkbox" checked={autorizar}
+                    onChange={e => setAutorizar(e.target.checked)}
+                    style={{ marginTop: 2, width: 16, height: 16, flexShrink: 0, cursor: "pointer" }} />
+                  <span style={{ fontSize: 12.5 }}>
+                    Doy el visto bueno para abrir el memo igual. Queda registrado a mi
+                    nombre en la bitácora.
+                  </span>
+                </label>
+              ) : (
+                <span style={{ display: "block", marginTop: 8, fontSize: 12.5 }}>
+                  Para abrirlo igual hace falta el visto bueno de Jefatura.
+                </span>
+              )
+            )}
+          </Aviso>
+        )}
 
         <Tarjeta>
           <label className="fg-label">Monto autorizado (S/)</label>

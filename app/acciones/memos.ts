@@ -2,8 +2,9 @@
 import { revalidatePath } from "next/cache";
 import { clienteServidor, solicitanteActual } from "@/lib/supabase/servidor";
 import { autoriza } from "@/lib/dominio/permisos";
-import { GASTO_CUENTA_EN_TOTAL, impedimentosParaPresentar, puedeEditarGasto, transicionMemoValida } from "@/lib/dominio/estados";
+import { GASTO_CUENTA_EN_TOTAL, MEMO_PENDIENTE, impedimentosParaPresentar, puedeEditarGasto, transicionMemoValida } from "@/lib/dominio/estados";
 import { elegibleParaCaja, impedimentosParaRendirCaja, periodoDeCaja, resumirCaja } from "@/lib/dominio/cajachica";
+import { evaluarBloqueoPorPendientes, explicarPendientes } from "@/lib/dominio/memo";
 import { leerParametros } from "@/lib/dominio/parametros";
 import { validarGasto } from "@/lib/dominio/validaciones";
 import type { AccionEvento, EstadoGasto, EstadoMemo, Parametros } from "@/lib/dominio/tipos";
@@ -35,6 +36,89 @@ async function registrarEvento(
 }
 
 // ════════════════════════════════════════════════════════════════
+// Rendiciones vencidas que arrastra el asignado (§7.3)
+// ════════════════════════════════════════════════════════════════
+
+export interface PendientesDeAsignado {
+  usuarioId: string;
+  nombre: string;
+  /** Texto listo para mostrar. Vacío si esta persona no debe nada. */
+  motivo: string;
+  bloquea: boolean;
+}
+
+/**
+ * Qué arrastra cada persona que se está por asignar.
+ *
+ * Se consulta desde el formulario, mientras se eligen las personas, para que
+ * la advertencia aparezca ANTES de llenar el resto del memo y no como un
+ * error al final. `crearMemo` la vuelve a evaluar por su cuenta: esto es
+ * para avisar, no para decidir.
+ */
+export async function revisarPendientes(
+  asignados: string[]
+): Promise<PendientesDeAsignado[]> {
+  if (!asignados.length) return [];
+
+  const solicitante = await solicitanteActual();
+  if (!solicitante) return [];
+  if (!autoriza(solicitante, "crear_memo").ok) return [];
+
+  const sb = await clienteServidor();
+  return evaluarPendientes(sb, asignados);
+}
+
+async function evaluarPendientes(
+  sb: Awaited<ReturnType<typeof clienteServidor>>,
+  asignados: string[]
+): Promise<PendientesDeAsignado[]> {
+  const { data: filasParam } = await sb.from("parametros").select("clave, valor");
+  const parametros = leerParametros(filasParam);
+
+  const { data: personas } = await sb
+    .from("usuarios").select("id, nombre").in("id", asignados);
+
+  const { data: filas } = await sb
+    .from("memo_asignados")
+    .select("usuario_id, memos ( id, correlativo, estado, monto_autorizado, fecha_retorno_prev )")
+    .in("usuario_id", asignados);
+
+  type Fila = {
+    usuario_id: string;
+    memos: {
+      id: string; correlativo: string; estado: string;
+      monto_autorizado: number; fecha_retorno_prev: string | null;
+    } | null;
+  };
+
+  // El reloj se lee una sola vez: si cada persona se evaluara contra un
+  // "ahora" distinto, dos asignados podrían caer a lados opuestos del
+  // mismo día de gracia.
+  const ahora = new Date();
+
+  return (personas ?? []).map(p => {
+    const suyos = ((filas ?? []) as unknown as Fila[])
+      .filter(f => f.usuario_id === p.id && f.memos)
+      .map(f => ({
+        id: f.memos!.id,
+        correlativo: f.memos!.correlativo,
+        estado: f.memos!.estado as EstadoMemo,
+        monto_autorizado: Number(f.memos!.monto_autorizado),
+        fecha_retorno_prev: f.memos!.fecha_retorno_prev,
+      }))
+      .filter(m => MEMO_PENDIENTE.includes(m.estado));
+
+    const r = evaluarBloqueoPorPendientes(suyos, parametros, ahora);
+    return {
+      usuarioId: p.id,
+      nombre: p.nombre,
+      motivo: explicarPendientes(p.nombre, r),
+      bloquea: r.bloquea,
+    };
+  }).filter(x => x.motivo !== "");
+}
+
+// ════════════════════════════════════════════════════════════════
 // Crear memo (ADMIN_MEMOS)
 // ════════════════════════════════════════════════════════════════
 
@@ -47,6 +131,8 @@ export async function crearMemo(datos: {
   fecha_retorno_prev: string;
   monto_autorizado: number;
   abrir: boolean;
+  /** Visto bueno de quien puede pasar por encima del bloqueo de §7.3. */
+  autorizar_pendientes?: boolean;
 }): Promise<Resultado> {
   const solicitante = await solicitanteActual();
   if (!solicitante) return { ok: false, error: "Sesión no válida." };
@@ -62,6 +148,36 @@ export async function crearMemo(datos: {
   }
 
   const sb = await clienteServidor();
+
+  // §7.3 — no se entrega plata nueva a quien no rindió la anterior.
+  //
+  // El parámetro `bloquear_memo_con_pendientes` decide si esto detiene o
+  // solo advierte; en el piloto arranca apagado. La comprobación se hace
+  // igual en el servidor: la advertencia que ve el formulario es una
+  // cortesía, no el control.
+  const pendientes = await evaluarPendientes(sb, datos.asignados);
+  const bloqueantes = pendientes.filter(p => p.bloquea);
+
+  if (bloqueantes.length && !datos.autorizar_pendientes) {
+    return {
+      ok: false,
+      error: `${bloqueantes.map(p => p.motivo).join(" ")} `
+        + "Se necesita el visto bueno de Jefatura para abrir un memo nuevo.",
+    };
+  }
+
+  // Pasar por encima del bloqueo es una decisión de Jefatura, no de quien
+  // redacta el memo. Que el formulario mande la bandera no alcanza.
+  if (bloqueantes.length && datos.autorizar_pendientes) {
+    const puedeAutorizar = autoriza(solicitante, "autorizar_apertura_con_pendientes");
+    if (!puedeAutorizar.ok) {
+      return {
+        ok: false,
+        error: "Tu rol no puede autorizar la apertura con rendiciones vencidas. "
+          + "Pídeselo a Jefatura.",
+      };
+    }
+  }
 
   const { data: cc } = await sb
     .from("centros_costo")
@@ -112,6 +228,12 @@ export async function crearMemo(datos: {
 
   await registrarEvento(sb, "MEMO", memo.id, "CREAR", solicitante.usuarioId, null, {
     correlativo, monto_autorizado: datos.monto_autorizado, asignados: datos.asignados,
+    // Si se abrió pese a rendiciones vencidas, queda escrito qué se pasó por
+    // alto y quién lo autorizó. Es el rastro que va a pedir Auditoría.
+    ...(pendientes.length ? { pendientes: pendientes.map(p => p.motivo) } : {}),
+    ...(bloqueantes.length && datos.autorizar_pendientes
+      ? { autorizado_con_pendientes_por: solicitante.usuarioId }
+      : {}),
   });
 
   revalidatePath("/administrar");
