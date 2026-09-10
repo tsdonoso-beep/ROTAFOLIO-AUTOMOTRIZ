@@ -81,6 +81,10 @@ export function consolidar(
     saldo,
     devolucion: saldo > 0 ? saldo : 0,
     reembolso: saldo < 0 ? red(-saldo) : 0,
+    // Sin adelanto no hay exceso posible. La cuenta es la misma —el saldo
+    // sale negativo y todo cae en reembolso—, pero lo que la pantalla debe
+    // decir es otra cosa: nadie se pasó de nada.
+    sinAdelanto: red(montoAutorizado) === 0,
     por_clase: {
       COMPROBANTE: red(por_clase.COMPROBANTE),
       DECLARACION_JURADA: red(por_clase.DECLARACION_JURADA),

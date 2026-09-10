@@ -138,17 +138,23 @@ export default function VistaRevision({ memo, gastos, parametros, modo }: Props)
           <div style={{
             display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(105px, 1fr))", gap: 12,
           }}>
-            <Cifra rotulo="Autorizado" valor={soles(consolidado.autorizado)} tamano="m" />
             <Cifra
-              rotulo="Rendido"
-              valor={soles(consolidado.rendido)}
-              tono={excedido ? "peligro" : "neutro"}
+              rotulo="Autorizado"
+              valor={consolidado.sinAdelanto ? "sin adelanto" : soles(consolidado.autorizado)}
               tamano="m"
             />
             <Cifra
-              rotulo={excedido ? "A reembolsar" : "A devolver"}
-              valor={soles(excedido ? consolidado.reembolso : consolidado.devolucion)}
-              tono={excedido ? "peligro" : "acento"}
+              rotulo="Rendido"
+              valor={soles(consolidado.rendido)}
+              tono={excedido && !consolidado.sinAdelanto ? "peligro" : "neutro"}
+              tamano="m"
+            />
+            <Cifra
+              rotulo={excedido || consolidado.sinAdelanto ? "A reembolsar" : "A devolver"}
+              valor={soles(excedido || consolidado.sinAdelanto ? consolidado.reembolso : consolidado.devolucion)}
+              // Un reembolso de caja chica es lo normal, no una alarma:
+              // nadie se pasó de un monto porque no había monto.
+              tono={excedido && !consolidado.sinAdelanto ? "peligro" : "acento"}
               tamano="m"
             />
             <Cifra

@@ -125,18 +125,24 @@ export default function VistaMemo({ memo, gastos, parametros, puedeCapturar, mem
           <div style={{
             display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 16,
           }}>
-            <Cifra rotulo="Autorizado" valor={soles(c.autorizado)} tamano="l" tono="tenue" />
-            <Cifra rotulo="Rendido" valor={soles(c.rendido)} tamano="xl"
-              tono={excedido ? "peligro" : "neutro"} />
             <Cifra
-              rotulo={excedido ? "Excedido" : "Saldo"}
-              valor={soles(excedido ? c.reembolso : c.saldo)}
+              rotulo="Autorizado"
+              valor={c.sinAdelanto ? "sin adelanto" : soles(c.autorizado)}
+              tamano="l" tono="tenue"
+            />
+            <Cifra rotulo="Rendido" valor={soles(c.rendido)} tamano="xl"
+              tono={excedido && !c.sinAdelanto ? "peligro" : "neutro"} />
+            <Cifra
+              rotulo={c.sinAdelanto ? "A reembolsar" : excedido ? "Excedido" : "Saldo"}
+              valor={soles(c.sinAdelanto || excedido ? c.reembolso : c.saldo)}
               tamano="l"
-              tono={excedido ? "peligro" : "acento"}
+              tono={excedido && !c.sinAdelanto ? "peligro" : "acento"}
             />
           </div>
 
-          <Medidor rendido={c.rendido} autorizado={c.autorizado} />
+          {/* Sin adelanto no hay barra que llenar: el medidor mide consumo
+              de un monto autorizado, y acá no hay ninguno. */}
+          {!c.sinAdelanto && <Medidor rendido={c.rendido} autorizado={c.autorizado} />}
 
           {c.cantidad_gastos > 0 && (
             <div style={{

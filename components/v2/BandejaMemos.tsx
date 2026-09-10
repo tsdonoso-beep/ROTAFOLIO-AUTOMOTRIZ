@@ -88,13 +88,15 @@ export function BandejaMemos({ memos, base, vacio }: {
                     </span>
                   </div>
 
-                  <Medidor rendido={c.rendido} autorizado={c.autorizado} />
+                  {/* Sin adelanto no hay barra que llenar: el medidor mide
+                      consumo de un monto autorizado, y acá no hay ninguno. */}
+                  {!c.sinAdelanto && <Medidor rendido={c.rendido} autorizado={c.autorizado} />}
 
                   <p style={{
                     fontSize: 11.5, marginTop: 8, fontWeight: 600,
-                    color: excedido ? "var(--danger)" : "var(--text2)",
+                    color: excedido && !c.sinAdelanto ? "var(--danger)" : "var(--text2)",
                   }}>
-                    {excedido
+                    {c.sinAdelanto || excedido
                       ? `Reembolsar ${soles(c.reembolso)}`
                       : c.devolucion > 0 ? `Devolver ${soles(c.devolucion)}` : "Sin saldo"}
                     <span style={{ color: "var(--text3)", fontWeight: 400 }}>

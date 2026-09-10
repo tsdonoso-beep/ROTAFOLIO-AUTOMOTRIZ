@@ -221,6 +221,28 @@ describe("Consolidado", () => {
     const c = consolidar(100, [g(0.1, "COMPROBANTE"), g(0.2, "COMPROBANTE")]);
     assert.equal(c.rendido, 0.3);
   });
+
+  it("sin adelanto no hay exceso: es el caso de la caja chica", () => {
+    // El memo de una caja chica nace después de los gastos y con monto
+    // autorizado en cero. La cuenta da igual —saldo negativo, todo
+    // reembolso—, pero la pantalla decía "Excedido" y pintaba de rojo algo
+    // que es lo normal: nadie se pasó de un monto porque no había monto.
+    const c = consolidar(0, [g(45.5, "COMPROBANTE"), g(80.9, "COMPROBANTE")]);
+    assert.equal(c.sinAdelanto, true);
+    assert.equal(c.rendido, 126.4);
+    assert.equal(c.reembolso, 126.4);
+    assert.equal(c.devolucion, 0);
+  });
+
+  it("un memo con adelanto no se marca como caja chica", () => {
+    assert.equal(consolidar(1000, [g(400, "COMPROBANTE")]).sinAdelanto, false);
+  });
+
+  it("un memo sin adelanto y sin gastos tampoco es un exceso", () => {
+    const c = consolidar(0, []);
+    assert.equal(c.sinAdelanto, true);
+    assert.equal(c.reembolso, 0);
+  });
 });
 
 // ════════════════════════════════════════════════════════════════

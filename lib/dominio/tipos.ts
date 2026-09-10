@@ -329,6 +329,12 @@ export interface ConsolidadoMemo {
   /** Positivo: el rendidor devuelve. Negativo: la empresa reembolsa. */
   devolucion: number;
   reembolso: number;
+  /**
+   * Nadie entregó plata por adelantado, así que no hay nada contra qué
+   * compararse: todo lo rendido es un reembolso, no un exceso. Es el caso
+   * de la caja chica, donde el memo nace después de los gastos.
+   */
+  sinAdelanto: boolean;
   por_clase: Record<ClaseGasto, number>;
   cantidad_gastos: number;
   con_alertas: number;
