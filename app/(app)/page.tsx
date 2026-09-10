@@ -15,6 +15,7 @@ export default async function Inicio() {
   // se va directo al trabajo.
   if (secciones.length === 1) redirect(secciones[0].ruta);
 
+
   const sb = await clienteServidor();
   const { data: usuario } = await sb
     .from("usuarios").select("nombre").eq("id", solicitante.usuarioId).single();
