@@ -4,12 +4,15 @@ import { clienteServidor, solicitanteActual } from "@/lib/supabase/servidor";
 import { autoriza } from "@/lib/dominio/permisos";
 import { GASTO_CUENTA_EN_TOTAL, MEMO_PENDIENTE, impedimentosParaPresentar, puedeEditarGasto, transicionMemoValida } from "@/lib/dominio/estados";
 import { elegibleParaCaja, impedimentosParaRendirCaja, periodoDeCaja, resumirCaja } from "@/lib/dominio/cajachica";
+import { aQuienPreguntar } from "@/lib/dominio/autorizacion";
 import { evaluarBloqueoPorPendientes, explicarPendientes } from "@/lib/dominio/memo";
 import { leerParametros } from "@/lib/dominio/parametros";
 import { validarGasto } from "@/lib/dominio/validaciones";
 import type { AccionEvento, EstadoGasto, EstadoMemo, Parametros } from "@/lib/dominio/tipos";
 
-type Resultado = { ok: true; id?: string } | { ok: false; error: string };
+type Resultado =
+  | { ok: true; id?: string; aviso?: string }
+  | { ok: false; error: string };
 
 /**
  * Toda transición deja rastro. La marca de tiempo la pone la base, no el
@@ -42,6 +45,8 @@ async function registrarEvento(
 export interface PendientesDeAsignado {
   usuarioId: string;
   nombre: string;
+  /** De quién depende, para saber a quién pedirle el visto bueno. */
+  jefeId: string | null;
   /** Texto listo para mostrar. Vacío si esta persona no debe nada. */
   motivo: string;
   bloquea: boolean;
@@ -76,7 +81,7 @@ async function evaluarPendientes(
   const parametros = leerParametros(filasParam);
 
   const { data: personas } = await sb
-    .from("usuarios").select("id, nombre").in("id", asignados);
+    .from("usuarios").select("id, nombre, jefatura_id").in("id", asignados);
 
   const { data: filas } = await sb
     .from("memo_asignados")
@@ -112,6 +117,7 @@ async function evaluarPendientes(
     return {
       usuarioId: p.id,
       nombre: p.nombre,
+      jefeId: p.jefatura_id,
       motivo: explicarPendientes(p.nombre, r),
       bloquea: r.bloquea,
     };
@@ -158,25 +164,34 @@ export async function crearMemo(datos: {
   const pendientes = await evaluarPendientes(sb, datos.asignados);
   const bloqueantes = pendientes.filter(p => p.bloquea);
 
-  if (bloqueantes.length && !datos.autorizar_pendientes) {
-    return {
-      ok: false,
-      error: `${bloqueantes.map(p => p.motivo).join(" ")} `
-        + "Se necesita el visto bueno de Jefatura para abrir un memo nuevo.",
-    };
-  }
+  // Quien puede autorizar, firma en el acto. Quien no, le pide el visto
+  // bueno al jefe de cada persona bloqueada y el memo espera en borrador.
+  const firmaPropia =
+    bloqueantes.length > 0 &&
+    datos.autorizar_pendientes === true &&
+    autoriza(solicitante, "autorizar_apertura_con_pendientes").ok;
 
-  // Pasar por encima del bloqueo es una decisión de Jefatura, no de quien
-  // redacta el memo. Que el formulario mande la bandera no alcanza.
-  if (bloqueantes.length && datos.autorizar_pendientes) {
-    const puedeAutorizar = autoriza(solicitante, "autorizar_apertura_con_pendientes");
-    if (!puedeAutorizar.ok) {
+  let jefesAPedir: string[] = [];
+  const esperaVistoBueno = bloqueantes.length > 0 && !firmaPropia;
+
+  if (esperaVistoBueno) {
+    const aQuien = aQuienPreguntar(bloqueantes.map(p => ({
+      usuarioId: p.usuarioId, nombre: p.nombre, jefeId: p.jefeId,
+    })));
+
+    // Sin jefatura registrada no hay a quién pedirle nada. Mandarle la
+    // solicitud a cualquiera con el rol sería una firma falsa, y dejar
+    // pasar el memo sería saltarse el control: se detiene y se dice por qué.
+    if (aQuien.sinJefe.length) {
+      const quienes = aQuien.sinJefe.map(p => p.nombre).join(", ");
       return {
         ok: false,
-        error: "Tu rol no puede autorizar la apertura con rendiciones vencidas. "
-          + "Pídeselo a Jefatura.",
+        error: `${quienes} arrastra rendiciones vencidas y no tiene jefatura `
+          + "registrada, así que no hay a quién pedirle el visto bueno. "
+          + "Asígnale su jefatura en Sistema y vuelve a intentarlo.",
       };
     }
+    jefesAPedir = aQuien.jefes;
   }
 
   const { data: cc } = await sb
@@ -213,7 +228,9 @@ export async function crearMemo(datos: {
       fecha_salida: datos.fecha_salida || null,
       fecha_retorno_prev: datos.fecha_retorno_prev || null,
       monto_autorizado: datos.monto_autorizado,
-      estado: datos.abrir ? "ABIERTO" : "BORRADOR",
+      // Un memo a la espera del visto bueno nace en borrador aunque se
+      // haya pedido abrirlo: todavía no es un compromiso de nadie.
+      estado: datos.abrir && !esperaVistoBueno ? "ABIERTO" : "BORRADOR",
       creado_por: solicitante.usuarioId,
     })
     .select("id")
@@ -236,9 +253,120 @@ export async function crearMemo(datos: {
       : {}),
   });
 
+  let aviso: string | undefined;
+
+  if (esperaVistoBueno) {
+    const { error: errSol } = await sb.rpc("solicitar_autorizacion_memo", {
+      p_memo: memo.id,
+      p_jefes: jefesAPedir,
+      p_motivo: bloqueantes.map(p => p.motivo).join(" "),
+    });
+
+    // Si la solicitud no se pudo crear, el memo queda en borrador y sin
+    // pedido: se dice, en vez de dejar a alguien esperando una respuesta
+    // que nunca le van a pedir.
+    if (errSol) {
+      return {
+        ok: true,
+        id: memo.id,
+        aviso: `El memo quedó en borrador, pero no se pudo pedir el visto bueno `
+          + `(${errSol.message}). Nadie lo va a ver hasta que se pida de nuevo.`,
+      };
+    }
+
+    await registrarEvento(sb, "MEMO", memo.id, "AUTORIZAR_EXCEPCION",
+      solicitante.usuarioId, null, { solicitud_pedida_a: jefesAPedir });
+
+    aviso = "El memo quedó en borrador esperando el visto bueno de Jefatura. "
+      + "Se abre solo cuando respondan.";
+  }
+
   revalidatePath("/administrar");
   revalidatePath("/memos");
-  return { ok: true, id: memo.id };
+  revalidatePath("/tablero");
+  return { ok: true, id: memo.id, aviso };
+}
+
+// ════════════════════════════════════════════════════════════════
+// Abrir un borrador, y el visto bueno que a veces hace falta
+// ════════════════════════════════════════════════════════════════
+
+/**
+ * Pasa un memo de borrador a abierto.
+ *
+ * Quien decide si puede es un disparador en la base, no esta función: un
+ * ADMIN_MEMOS ya puede escribir memos, así que un control que viviera solo
+ * acá se saltaría llamando a la API directamente. Lo que hace esta función
+ * es traducir el rechazo a algo que se entienda.
+ */
+export async function abrirMemo(memoId: string): Promise<Resultado> {
+  const solicitante = await solicitanteActual();
+  if (!solicitante) return { ok: false, error: "Sesión no válida." };
+
+  const permiso = autoriza(solicitante, "crear_memo");
+  if (!permiso.ok) return { ok: false, error: permiso.motivo };
+
+  const sb = await clienteServidor();
+
+  const { data: memo } = await sb
+    .from("memos").select("id, estado, correlativo").eq("id", memoId).single();
+  if (!memo) return { ok: false, error: "El memo no existe." };
+
+  if (memo.estado !== "BORRADOR") {
+    return { ok: false, error: `${memo.correlativo} ya no es un borrador.` };
+  }
+
+  const { error } = await sb
+    .from("memos").update({ estado: "ABIERTO" }).eq("id", memoId);
+  if (error) return { ok: false, error: error.message };
+
+  await registrarEvento(sb, "MEMO", memoId, "ABRIR", solicitante.usuarioId,
+    { estado: "BORRADOR" }, { estado: "ABIERTO" });
+
+  revalidatePath("/administrar");
+  revalidatePath("/memos");
+  revalidatePath("/tablero");
+  return { ok: true, id: memoId };
+}
+
+/**
+ * El jefe concede o rechaza la apertura.
+ *
+ * Va por una función de la base porque las políticas de fila no saben
+ * restringir columnas: con un UPDATE directo, un jefe podría mover su
+ * solicitud a otro memo o cambiar el monto que está autorizando.
+ */
+export async function responderAutorizacion(
+  autorizacionId: string, conceder: boolean, respuesta: string
+): Promise<Resultado> {
+  const solicitante = await solicitanteActual();
+  if (!solicitante) return { ok: false, error: "Sesión no válida." };
+
+  const sb = await clienteServidor();
+
+  const { error } = await sb.rpc("responder_autorizacion_memo", {
+    p_autorizacion: autorizacionId,
+    p_conceder: conceder,
+    p_respuesta: respuesta.trim(),
+  });
+  if (error) return { ok: false, error: error.message };
+
+  // El memo no se abre solo: quien lo administra decide cuándo, y puede
+  // que para entonces haya cambiado de opinión sobre el monto. Lo que el
+  // visto bueno hace es levantar el candado.
+  const { data: a } = await sb
+    .from("autorizaciones_memo").select("memo_id").eq("id", autorizacionId).single();
+
+  if (a) {
+    await registrarEvento(
+      sb, "MEMO", a.memo_id, "AUTORIZAR_EXCEPCION", solicitante.usuarioId, null,
+      { autorizacion_apertura: conceder ? "CONCEDIDA" : "RECHAZADA", respuesta }
+    );
+  }
+
+  revalidatePath("/tablero");
+  revalidatePath("/administrar");
+  return { ok: true };
 }
 
 // ════════════════════════════════════════════════════════════════

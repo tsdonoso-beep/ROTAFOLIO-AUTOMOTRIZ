@@ -4,6 +4,7 @@ import { autoriza, veTodo } from "@/lib/dominio/permisos";
 import { Encabezado, Tarjeta, Vacio, Cifra, soles } from "@/components/v2/Encabezado";
 import { consolidarEquipo, resumirEquipo, type MemoDeEquipo } from "@/lib/dominio/equipo";
 import { IconoTablero } from "@/components/v2/Iconos";
+import PanelAutorizaciones, { type SolicitudPendiente } from "@/components/v2/PanelAutorizaciones";
 
 interface MemoCrudo {
   id: string;
@@ -28,6 +29,29 @@ export default async function Tablero() {
   if (!autoriza(solicitante, "autorizar_apertura_con_pendientes").ok) redirect("/");
 
   const sb = await clienteServidor();
+
+  // Lo que espera su firma va primero: es lo único de esta pantalla que le
+  // está frenando el trabajo a otra persona. Las políticas de fila ya
+  // limitan estas filas a las suyas.
+  const { data: solicitudes } = await sb
+    .from("autorizaciones_memo")
+    .select("id, correlativo, monto, destino, motivo, creado_en, usuarios!autorizaciones_memo_solicitada_por_fkey ( nombre )")
+    .eq("estado", "PENDIENTE")
+    .order("creado_en", { ascending: true });
+
+  const pendientesDeFirma: SolicitudPendiente[] = ((solicitudes ?? []) as unknown as Array<{
+    id: string; correlativo: string; monto: number; destino: string | null;
+    motivo: string; creado_en: string; usuarios: { nombre: string } | null;
+  }>).map(a => ({
+    id: a.id,
+    correlativo: a.correlativo,
+    monto: Number(a.monto),
+    destino: a.destino,
+    motivo: a.motivo,
+    pedidaPor: a.usuarios?.nombre ?? "Administración",
+    creadoEn: a.creado_en.slice(0, 10),
+  }));
+
   const { data } = await sb
     .from("memos")
     .select(`
@@ -64,6 +88,8 @@ export default async function Tablero() {
           ? "Quién tiene memos sin cerrar, por cuánto y desde hace cuánto."
           : "Las personas a tu cargo con memos sin cerrar. El seguimiento es tuyo: quien recibe las rendiciones ya no persigue de a uno."}
       />
+
+      <PanelAutorizaciones solicitudes={pendientesDeFirma} />
 
       {!filas.length ? (
         <Vacio

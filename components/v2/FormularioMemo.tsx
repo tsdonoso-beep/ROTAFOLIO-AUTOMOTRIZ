@@ -36,6 +36,7 @@ export default function FormularioMemo({ centros, personas, puedeAutorizarPendie
   const [retorno, setRetorno] = useState(enDias(7));
   const [monto, setMonto] = useState("");
   const [autorizar, setAutorizar] = useState(false);
+  const [listoConAviso, setListoConAviso] = useState("");
 
   // La respuesta se guarda junto con la selección que la produjo. Así el
   // aviso nunca queda describiendo a una persona que ya se deseleccionó
@@ -58,9 +59,13 @@ export default function FormularioMemo({ centros, personas, puedeAutorizarPendie
 
   const pendientes = consultado.seleccion === seleccion ? consultado.lista : [];
   const bloquean = pendientes.filter(p => p.bloquea);
-  const frenado = bloquean.length > 0 && !(puedeAutorizarPendientes && autorizar);
 
-  const listo = centro && asignados.length > 0 && Number(monto) > 0 && !frenado;
+  // Cuando hay bloqueo y quien crea el memo no puede levantarlo, el memo se
+  // crea igual: queda en borrador y le llega la solicitud al jefe. Por eso
+  // el botón no se traba —trabarlo dejaría a Administración sin salida—.
+  const iraAJefatura = bloquean.length > 0 && !(puedeAutorizarPendientes && autorizar);
+
+  const listo = centro && asignados.length > 0 && Number(monto) > 0;
 
   const alternar = (id: string) =>
     setAsignados(a => a.includes(id) ? a.filter(x => x !== id) : [...a, id]);
@@ -74,14 +79,48 @@ export default function FormularioMemo({ centros, personas, puedeAutorizarPendie
         monto_autorizado: Number(monto), abrir,
         autorizar_pendientes: autorizar,
       });
-      if (r.ok) {
-        router.push("/administrar");
-        router.refresh();
-      } else {
-        setError(r.error);
-      }
+      if (!r.ok) { setError(r.error); return; }
+      // Cuando el memo quedó esperando una firma, no se navega: quien lo
+      // creó tiene que enterarse de que no está abierto todavía.
+      if (r.aviso) { setListoConAviso(r.aviso); router.refresh(); return; }
+      router.push("/administrar");
+      router.refresh();
     });
   };
+
+  // El memo se creó pero no se abrió. Se dice acá y no en la bandeja
+  // porque quien lo creó cree que terminó, y no terminó.
+  if (listoConAviso) {
+    return (
+      <div style={{ maxWidth: 620 }}>
+        <Tarjeta>
+          <div style={{ display: "flex", gap: 11, alignItems: "flex-start" }}>
+            <span style={{ color: "var(--warn)", marginTop: 1 }}>
+              <IconoAlerta size={20} />
+            </span>
+            <div>
+              <h1 className="font-display" style={{
+                fontSize: 17, fontWeight: 800, color: "var(--text)",
+                letterSpacing: "-0.02em", marginBottom: 6,
+              }}>
+                Falta una firma
+              </h1>
+              <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.6 }}>
+                {listoConAviso}
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+            <Link href="/administrar" className="btn-primary"
+              style={{ flex: 1, justifyContent: "center", textDecoration: "none" }}>
+              Ver los memos
+            </Link>
+          </div>
+        </Tarjeta>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -190,7 +229,8 @@ export default function FormularioMemo({ centros, personas, puedeAutorizarPendie
                 </label>
               ) : (
                 <span style={{ display: "block", marginTop: 8, fontSize: 12.5 }}>
-                  Para abrirlo igual hace falta el visto bueno de Jefatura.
+                  Puedes crearlo igual: quedará en borrador y le llegará la solicitud
+                  al jefe de esa persona. Se abre cuando responda.
                 </span>
               )
             )}
@@ -246,7 +286,9 @@ export default function FormularioMemo({ centros, personas, puedeAutorizarPendie
           </button>
           <button className="btn-primary" onClick={() => enviar(true)} disabled={pendiente || !listo}
             style={{ flex: 2, justifyContent: "center", padding: 12 }}>
-            {pendiente ? "Creando…" : "Crear y abrir memo"}
+            {pendiente ? "Creando…"
+              : iraAJefatura ? "Crear y pedir el visto bueno"
+              : "Crear y abrir memo"}
           </button>
         </div>
         <p style={{ fontSize: 11, color: "var(--text3)", lineHeight: 1.45, marginTop: -4 }}>
