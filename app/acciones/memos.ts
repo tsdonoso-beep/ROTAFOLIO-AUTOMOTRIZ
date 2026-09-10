@@ -370,6 +370,58 @@ export async function responderAutorizacion(
   return { ok: true };
 }
 
+/**
+ * Anula un memo que no va a usarse.
+ *
+ * Existe porque el flujo del visto bueno dejaba un callejón sin salida: un
+ * borrador que Jefatura rechazó no se podía abrir ni cerrar, y quedaba ahí
+ * para siempre ocupando su correlativo y apareciendo en la lista de
+ * detenidos.
+ *
+ * Por ahora solo desde borrador. Anular un memo ya abierto es otra cosa:
+ * puede tener comprobantes cargados, y qué pasa con ellos —si vuelven a la
+ * bandeja sin asignar o se anulan también— es una decisión que todavía no
+ * se tomó. Mejor no poder hacerlo que hacerlo de una forma que después haya
+ * que deshacer.
+ */
+export async function anularMemo(memoId: string, motivo: string): Promise<Resultado> {
+  const solicitante = await solicitanteActual();
+  if (!solicitante) return { ok: false, error: "Sesión no válida." };
+
+  const permiso = autoriza(solicitante, "crear_memo");
+  if (!permiso.ok) return { ok: false, error: permiso.motivo };
+
+  if (!motivo.trim()) {
+    return { ok: false, error: "Escribe por qué se anula: queda en la bitácora." };
+  }
+
+  const sb = await clienteServidor();
+
+  const { data: memo } = await sb
+    .from("memos").select("estado, correlativo").eq("id", memoId).single();
+  if (!memo) return { ok: false, error: "El memo no existe." };
+
+  if (memo.estado !== "BORRADOR") {
+    return {
+      ok: false,
+      error: `${memo.correlativo} ya no es un borrador. Anular un memo abierto `
+        + "todavía no está resuelto: puede tener comprobantes cargados.",
+    };
+  }
+
+  const { error } = await sb.rpc("cambiar_estado_memo", {
+    p_memo: memoId, p_hacia: "ANULADO",
+  });
+  if (error) return { ok: false, error: error.message };
+
+  await registrarEvento(sb, "MEMO", memoId, "ANULAR", solicitante.usuarioId,
+    { estado: memo.estado }, { estado: "ANULADO", motivo: motivo.trim() });
+
+  revalidatePath("/administrar");
+  revalidatePath("/tablero");
+  return { ok: true };
+}
+
 // ════════════════════════════════════════════════════════════════
 // Presentar rendición (RENDIDOR)
 // ════════════════════════════════════════════════════════════════

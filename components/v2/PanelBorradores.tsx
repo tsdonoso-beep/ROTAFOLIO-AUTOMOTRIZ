@@ -2,8 +2,8 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Aviso, Tarjeta, soles } from "./Encabezado";
-import { IconoBloqueo, IconoCheck, IconoReloj } from "./Iconos";
-import { abrirMemo } from "@/app/acciones/memos";
+import { IconoBasura, IconoBloqueo, IconoCheck, IconoReloj } from "./Iconos";
+import { abrirMemo, anularMemo } from "@/app/acciones/memos";
 import { situacionDeApertura, type Autorizacion } from "@/lib/dominio/autorizacion";
 
 export interface Borrador {
@@ -52,10 +52,22 @@ function Fila({ b }: { b: Borrador }) {
   const esperando = b.autorizaciones.some(a => a.estado === "PENDIENTE");
   const rechazado = b.autorizaciones.some(a => a.estado === "RECHAZADA");
 
+  const [anulando, setAnulando] = useState(false);
+  const [motivo, setMotivo] = useState("");
+
   const abrir = () => {
     setError("");
     iniciar(async () => {
       const r = await abrirMemo(b.id);
+      if (r.ok) router.refresh();
+      else setError(r.error);
+    });
+  };
+
+  const anular = () => {
+    setError("");
+    iniciar(async () => {
+      const r = await anularMemo(b.id, motivo);
       if (r.ok) router.refresh();
       else setError(r.error);
     });
@@ -103,19 +115,51 @@ function Fila({ b }: { b: Borrador }) {
       }}>
         {error && <div style={{ marginBottom: 10 }}><Aviso tono="error">{error}</Aviso></div>}
 
-        {rechazado || (!s.puedeAbrir && !esperando) ? (
-          <p style={{ fontSize: 11.5, color: "var(--text3)", lineHeight: 1.5 }}>
-            {rechazado
-              ? "Este memo no se puede abrir. Anúlalo, o crea uno nuevo cuando la persona cierre lo que debe."
-              : "Devuelve el monto al que se autorizó, o pide el visto bueno otra vez."}
-          </p>
+        {anulando ? (
+          <>
+            <label className="fg-label">¿Por qué se anula?</label>
+            <input className="fg-input" value={motivo} autoFocus
+              onChange={e => setMotivo(e.target.value)}
+              placeholder="Ej: Jefatura lo rechazó, el viaje se cayó" />
+            <p style={{ marginTop: 6, fontSize: 11, color: "var(--text3)", lineHeight: 1.45 }}>
+              Queda en la bitácora. El memo no se borra: su correlativo sigue
+              existiendo, anulado.
+            </p>
+            <div style={{ display: "flex", gap: 9, marginTop: 12 }}>
+              <button className="btn-ghost" disabled={pendiente}
+                onClick={() => { setAnulando(false); setMotivo(""); }}
+                style={{ flex: 1, justifyContent: "center" }}>
+                Volver
+              </button>
+              <button className="btn-peligro" disabled={pendiente || !motivo.trim()}
+                onClick={anular} style={{ flex: 1, justifyContent: "center" }}>
+                {pendiente ? "Anulando…" : "Confirmar"}
+              </button>
+            </div>
+          </>
         ) : (
-          <button className="btn-primary" onClick={abrir}
-            disabled={pendiente || esperando}
-            style={{ width: "100%", justifyContent: "center" }}>
-            <IconoCheck size={15} />
-            {pendiente ? "Abriendo…" : esperando ? "Esperando a Jefatura" : "Abrir memo"}
-          </button>
+          <>
+            {rechazado || (!s.puedeAbrir && !esperando) ? (
+              <p style={{ fontSize: 11.5, color: "var(--text3)", lineHeight: 1.5, marginBottom: 11 }}>
+                {rechazado
+                  ? "Este memo no se puede abrir. Anúlalo, o crea uno nuevo cuando la persona cierre lo que debe."
+                  : "Devuelve el monto al que se autorizó, o pide el visto bueno otra vez."}
+              </p>
+            ) : (
+              <button className="btn-primary" onClick={abrir}
+                disabled={pendiente || esperando}
+                style={{ width: "100%", justifyContent: "center", marginBottom: 9 }}>
+                <IconoCheck size={15} />
+                {pendiente ? "Abriendo…" : esperando ? "Esperando a Jefatura" : "Abrir memo"}
+              </button>
+            )}
+
+            <button className="btn-ghost" onClick={() => setAnulando(true)} disabled={pendiente}
+              style={{ width: "100%", justifyContent: "center", fontSize: 12 }}>
+              <IconoBasura size={14} />
+              Anular
+            </button>
+          </>
         )}
       </div>
     </Tarjeta>
