@@ -88,7 +88,7 @@ for (const p of F.personas) {
   if (p.jefe && !jefeId) { console.log(`   ⚠ ${p.nombre}: su jefe ${p.jefe} no está`); continue; }
   const { error } = await sb.from("usuarios").update({ jefatura_id: jefeId }).eq("id", idPorDni.get(p.dni));
   ok(error, "jefatura de " + p.nombre);
-  jefeId ? conJefe++ : sinJefe++;
+  if (jefeId) conJefe++; else sinJefe++;
 }
 console.log(`   jefatura: ${conJefe} con jefe, ${sinJefe} encabezan su área`);
 

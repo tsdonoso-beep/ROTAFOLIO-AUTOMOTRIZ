@@ -1,0 +1,230 @@
+import { test, describe } from "node:test";
+import assert from "node:assert/strict";
+import { periodoCerradoAnterior, periodoDe, validarPeriodo } from "../periodo.ts";
+import { credencialesDe, usuarioSol } from "../credenciales.ts";
+import { cuerpoDeToken, olvidarToken, obtenerToken, urlDeToken, vigencia, vigente } from "../token.ts";
+import { leerTicket, urlArchivo, urlEstadoTicket, urlExportarPropuesta } from "../sire.ts";
+
+const HOY = new Date("2026-09-11T00:00:00Z");
+const CRED = {
+  clientId: "11111111-2222-3333-4444-555555555555", clientSecret: "secreto",
+  usuario: "USUARIOAPI", clave: "clave", ruc: "20512201611",
+};
+
+describe("período tributario", () => {
+  test("acepta un período cerrado", () => {
+    const r = validarPeriodo("202607", HOY);
+    assert.equal(r.ok, true);
+    if (r.ok) { assert.equal(r.anio, 2026); assert.equal(r.mes, 7); }
+  });
+
+  test("rechaza lo que no es yyyymm, que es el error 1006 de SUNAT", () => {
+    for (const malo of ["2026-07", "julio", "20267", "202600", "202613", ""]) {
+      assert.equal(validarPeriodo(malo, HOY).ok, false, malo);
+    }
+  });
+
+  test("rechaza el futuro antes de gastar una llamada", () => {
+    // SUNAT lo rechaza con el error 1007, pero recién después de que el
+    // token se pidió y el proceso se encoló.
+    const r = validarPeriodo("202612", HOY);
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.match(r.motivo, /todavía no existe/);
+  });
+
+  test("el mes en curso sí es válido, aunque esté a medias", () => {
+    assert.equal(validarPeriodo("202609", HOY).ok, true);
+  });
+
+  test("rechaza antes de que el SIRE existiera", () => {
+    const r = validarPeriodo("202112", HOY);
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.match(r.motivo, /2022/);
+  });
+
+  test("el período anterior cruza bien el año", () => {
+    assert.equal(periodoCerradoAnterior(HOY), "202608");
+    assert.equal(periodoCerradoAnterior(new Date("2026-01-15T00:00:00Z")), "202512");
+  });
+
+  test("periodoDe usa UTC y no la zona de quien corre esto", () => {
+    assert.equal(periodoDe(new Date("2026-03-01T00:30:00Z")), "202603");
+  });
+});
+
+describe("credenciales por empresa", () => {
+  const entorno = {
+    SUNAT_INROPRIN_CLIENT_ID: "id", SUNAT_INROPRIN_CLIENT_SECRET: "sec",
+    SUNAT_INROPRIN_USUARIO: "USUARIOAPI", SUNAT_INROPRIN_CLAVE: "clave",
+  };
+
+  test("las arma desde el entorno", () => {
+    const r = credencialesDe("INROPRIN", "20512201611", entorno);
+    assert.equal(r.ok, true);
+    if (r.ok) assert.equal(r.cred.clientId, "id");
+  });
+
+  test("dice exactamente qué variable falta", () => {
+    const incompleto = { ...entorno, SUNAT_INROPRIN_CLAVE: undefined };
+    const r = credencialesDe("INROPRIN", "20512201611", incompleto);
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.deepEqual(r.faltan, ["SUNAT_INROPRIN_CLAVE"]);
+  });
+
+  test("una abreviatura con guiones no rompe el nombre de la variable", () => {
+    const r = credencialesDe("INROPRIN-GECOR", "20512201611", {
+      SUNAT_INROPRIN_GECOR_CLIENT_ID: "a", SUNAT_INROPRIN_GECOR_CLIENT_SECRET: "b",
+      SUNAT_INROPRIN_GECOR_USUARIO: "c", SUNAT_INROPRIN_GECOR_CLAVE: "d",
+    });
+    assert.equal(r.ok, true);
+  });
+
+  test("una variable con solo espacios cuenta como ausente", () => {
+    const r = credencialesDe("INROPRIN", "20512201611", { ...entorno, SUNAT_INROPRIN_USUARIO: "   " });
+    assert.equal(r.ok, false);
+  });
+});
+
+describe("usuarioSol", () => {
+  test("pega el RUC al usuario, que es como SUNAT lo espera", () => {
+    assert.equal(usuarioSol("20512201611", "USUARIOAPI"), "20512201611USUARIOAPI");
+  });
+
+  test("no duplica el RUC si ya venía pegado", () => {
+    // Es fácil que alguien ponga el valor completo en la variable de
+    // entorno. Duplicarlo falla como "credenciales inválidas" y manda a
+    // buscar el problema donde no está.
+    assert.equal(usuarioSol("20512201611", "20512201611USUARIOAPI"), "20512201611USUARIOAPI");
+  });
+
+  test("ignora los espacios de sobra", () => {
+    assert.equal(usuarioSol(" 20512201611 ", " USUARIOAPI "), "20512201611USUARIOAPI");
+  });
+});
+
+describe("pedido de token", () => {
+  test("manda grant_type=password, no client_credentials", () => {
+    // SUNAT no usa el flujo habitual: además del par de credenciales pide
+    // el usuario de Clave SOL y su contraseña.
+    const c = cuerpoDeToken(CRED);
+    assert.equal(c.get("grant_type"), "password");
+    assert.equal(c.get("username"), "20512201611USUARIOAPI");
+    assert.equal(c.get("password"), "clave");
+  });
+
+  test("el scope apunta al host que se va a consumir", () => {
+    // Un token de SIRE no sirve para consultar comprobantes. Si el scope no
+    // coincide con el host, la llamada falla con un 401 sin explicación.
+    assert.equal(cuerpoDeToken(CRED).get("scope"), "https://api-sire.sunat.gob.pe");
+  });
+
+  test("el client_id va en la ruta, escapado", () => {
+    assert.equal(
+      urlDeToken("11111111-2222-3333-4444-555555555555"),
+      "https://api-seguridad.sunat.gob.pe/v1/clientessol/11111111-2222-3333-4444-555555555555/oauth2/token/"
+    );
+  });
+});
+
+describe("vigencia del token", () => {
+  test("se guarda un margen antes del vencimiento real", () => {
+    // Sin margen, una petición que sale en el último segundo llega con el
+    // token ya muerto.
+    assert.equal(vigencia(3600, 1_000_000, 60), 1_000_000 + 3540_000);
+  });
+
+  test("un token de vida cortísima vence de inmediato en vez de quedar en el pasado", () => {
+    assert.equal(vigencia(30, 1_000_000, 60), 1_000_000);
+  });
+
+  test("vigente() distingue el que sirve del que no", () => {
+    assert.equal(vigente({ valor: "x", venceEn: 2000 }, 1000), true);
+    assert.equal(vigente({ valor: "x", venceEn: 500 }, 1000), false);
+    assert.equal(vigente(null, 1000), false);
+  });
+});
+
+describe("obtenerToken", () => {
+  test("reutiliza el token mientras sigue vigente", async () => {
+    olvidarToken();
+    let llamadas = 0;
+    const falso = async () => {
+      llamadas++;
+      return new Response(JSON.stringify({ access_token: "T1", expires_in: 3600 }), { status: 200 });
+    };
+    await obtenerToken(CRED, { fetch: falso as unknown as typeof fetch });
+    await obtenerToken(CRED, { fetch: falso as unknown as typeof fetch });
+    assert.equal(llamadas, 1);
+  });
+
+  test("cuando SUNAT rechaza, el mensaje dice dónde mirar", async () => {
+    olvidarToken();
+    const falso = async () => new Response("invalid_client", { status: 401 });
+    await assert.rejects(
+      () => obtenerToken(CRED, { fetch: falso as unknown as typeof fetch }),
+      /20512201611USUARIOAPI/
+    );
+  });
+});
+
+describe("rutas del SIRE", () => {
+  test("exportar la propuesta lleva el período en la ruta", () => {
+    const u = urlExportarPropuesta("202607", "csv");
+    assert.match(u, /\/rce\/propuesta\/web\/propuesta\/202607\/exportacioncomprobantepropuesta/);
+    assert.match(u, /codTipoArchivo=1/);
+  });
+
+  test("txt y csv tienen códigos distintos", () => {
+    assert.match(urlExportarPropuesta("202607", "txt"), /codTipoArchivo=0/);
+  });
+
+  test("el estado del ticket se consulta con el período en los dos extremos", () => {
+    const u = urlEstadoTicket("202607", "20260000123");
+    assert.match(u, /perIni=202607&perFin=202607/);
+    assert.match(u, /numTicket=20260000123/);
+  });
+
+  test("el nombre del archivo se escapa", () => {
+    assert.match(urlArchivo("RCE 2026/07.zip", "1"), /nomArchivoReporte=RCE\+2026%2F07\.zip/);
+  });
+});
+
+describe("leerTicket", () => {
+  const conArchivo = {
+    registros: [{
+      numTicket: "20260000123", codEstadoProceso: "06", desEstadoProceso: "Terminado",
+      detalleTicket: [{ nomArchivoReporte: "LE20512201611.zip", codTipoArchivoReporte: "1" }],
+    }],
+  };
+
+  test("un ticket terminado trae su archivo", () => {
+    const t = leerTicket(conArchivo)!;
+    assert.equal(t.terminado, true);
+    assert.equal(t.fallado, false);
+    assert.deepEqual(t.archivo, { nombre: "LE20512201611.zip", tipo: "1" });
+  });
+
+  test("sin archivo todavía no está terminado", () => {
+    const t = leerTicket({ registros: [{ numTicket: "1", desEstadoProceso: "En proceso" }] })!;
+    assert.equal(t.terminado, false);
+    assert.equal(t.archivo, null);
+  });
+
+  test("reconoce el rechazo por el texto del estado", () => {
+    const t = leerTicket({ registros: [{ numTicket: "1", desEstadoProceso: "Proceso con Error" }] })!;
+    assert.equal(t.fallado, true);
+  });
+
+  test("si el tipo de archivo viene nulo, no rompe", () => {
+    // El manual avisa de este caso: hay que repetir el tipo que se pidió.
+    const t = leerTicket({ registros: [{ numTicket: "1", desEstadoProceso: "Terminado",
+      detalleTicket: [{ nomArchivoReporte: "a.zip", codTipoArchivoReporte: null }] }] })!;
+    assert.equal(t.archivo?.tipo, "");
+  });
+
+  test("una respuesta vacía no revienta", () => {
+    assert.equal(leerTicket({ registros: [] }), null);
+    assert.equal(leerTicket(null), null);
+    assert.equal(leerTicket({}), null);
+  });
+});
