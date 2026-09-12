@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 import { clienteServidor, solicitanteActual } from "@/lib/supabase/servidor";
 import { autoriza } from "@/lib/dominio/permisos";
 import { Encabezado, Tarjeta } from "@/components/v2/Encabezado";
-import { IconoAdministrar } from "@/components/v2/Iconos";
+import Link from "next/link";
+import { IconoAdministrar, IconoChevron, IconoLlave } from "@/components/v2/Iconos";
 import ListaUsuarios, { type UsuarioFila } from "@/components/v2/ListaUsuarios";
 import type { Rol } from "@/lib/dominio/tipos";
 
@@ -92,6 +93,30 @@ export default async function Sistema() {
               </div>
             ))}
           </Tarjeta>
+        </section>
+
+        {/* ── SUNAT ── */}
+        <section>
+          <Titulo texto="Conexión con SUNAT" />
+          <Link href="/sistema/sunat" className="tarjeta tarjeta-int" style={{
+            display: "flex", alignItems: "center", gap: 12, padding: "14px 16px",
+            textDecoration: "none",
+          }}>
+            <span style={{ color: "var(--accent-texto)", display: "flex" }}>
+              <IconoLlave size={18} />
+            </span>
+            <span style={{ flex: 1 }}>
+              <span style={{ display: "block", fontSize: 13.5, fontWeight: 600, color: "var(--text)" }}>
+                Credenciales del SIRE
+              </span>
+              <span style={{ display: "block", fontSize: 11.5, color: "var(--text3)", marginTop: 2 }}>
+                Estado por empresa y prueba de conexión. Son por RUC.
+              </span>
+            </span>
+            <span style={{ color: "var(--text3)", display: "flex" }}>
+              <IconoChevron size={16} />
+            </span>
+          </Link>
         </section>
 
         {/* ── Parámetros ── */}
