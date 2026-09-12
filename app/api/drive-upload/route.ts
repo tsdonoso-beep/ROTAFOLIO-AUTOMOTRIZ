@@ -12,12 +12,19 @@ const DRIVES = { supportsAllDrives: true, includeItemsFromAllDrives: true };
 
 export async function POST(req: NextRequest) {
   try {
-    const { base64, mimeType, fileName, carpeta1, carpeta2 } = (await req.json()) as {
+    const { base64, mimeType, fileName, carpetas, reemplazar } = (await req.json()) as {
       base64: string;
       mimeType: string;
       fileName: string;
-      carpeta1: string; // centro de costos
-      carpeta2: string; // caja / memo
+      /** Ruta desde la raíz: empresa / período / centro de costo / memo. */
+      carpetas: string[];
+      /**
+       * Si ya hay un archivo con ese nombre en la carpeta, reemplaza su
+       * contenido en vez de crear otro. Es lo que necesita el resumen del
+       * memo, que se regenera cada vez que el expediente cambia: sin esto
+       * quedarían veinte copias del mismo archivo.
+       */
+      reemplazar?: boolean;
     };
 
     const email = process.env.GOOGLE_SA_EMAIL;
@@ -37,13 +44,27 @@ export async function POST(req: NextRequest) {
     });
     const drive = google.drive({ version: "v3", auth });
 
-    // Estructura: FOTO-GRAMA / <centro de costos> / <caja> / archivo
-    const fId1 = await getOrCreateFolder(drive, carpeta1, rootId);
-    const fId2 = await getOrCreateFolder(drive, carpeta2, fId1);
+    // FOTO-GRAMA / empresa / AAAA-MM / centro de costo / memo / archivo.
+    // Se crea nivel por nivel: Drive no entiende de rutas, solo de padres.
+    const destino = await asegurarRuta(drive, carpetas, rootId);
+    const cuerpo = () => Readable.from(Buffer.from(base64, "base64"));
+
+    if (reemplazar) {
+      const previo = await buscarPorNombre(drive, fileName, destino);
+      if (previo) {
+        const act = await drive.files.update({
+          fileId: previo,
+          media: { mimeType, body: cuerpo() },
+          fields: "id,webViewLink",
+          ...DRIVES,
+        });
+        return NextResponse.json({ id: act.data.id, url: act.data.webViewLink, reemplazado: true });
+      }
+    }
 
     const uploaded = await drive.files.create({
-      requestBody: { name: fileName, parents: [fId2] },
-      media: { mimeType, body: Readable.from(Buffer.from(base64, "base64")) },
+      requestBody: { name: fileName, parents: [destino] },
+      media: { mimeType, body: cuerpo() },
       fields: "id,webViewLink",
       ...DRIVES,
     });
@@ -79,8 +100,8 @@ export async function POST(req: NextRequest) {
  */
 export async function PATCH(req: NextRequest) {
   try {
-    const { fileId, carpeta1, carpeta2 } = (await req.json()) as {
-      fileId: string; carpeta1: string; carpeta2: string;
+    const { fileId, carpetas } = (await req.json()) as {
+      fileId: string; carpetas: string[];
     };
 
     const email = process.env.GOOGLE_SA_EMAIL;
@@ -100,8 +121,7 @@ export async function PATCH(req: NextRequest) {
     });
     const drive = google.drive({ version: "v3", auth });
 
-    const fId1 = await getOrCreateFolder(drive, carpeta1, rootId);
-    const destino = await getOrCreateFolder(drive, carpeta2, fId1);
+    const destino = await asegurarRuta(drive, carpetas, rootId);
 
     // Hay que saber de dónde sale para poder quitarlo de ahí: Drive maneja
     // los padres como una lista, no como una ruta única.
@@ -123,6 +143,34 @@ export async function PATCH(req: NextRequest) {
     console.error("Drive move error:", e);
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
+}
+
+/** Crea la ruta completa desde la raíz y devuelve la carpeta final. */
+async function asegurarRuta(
+  drive: ReturnType<typeof google.drive>,
+  carpetas: string[],
+  rootId: string
+): Promise<string> {
+  let actual = rootId;
+  for (const nombre of carpetas) {
+    const limpio = (nombre ?? "").trim();
+    if (!limpio) continue;
+    actual = await getOrCreateFolder(drive, limpio, actual);
+  }
+  return actual;
+}
+
+async function buscarPorNombre(
+  drive: ReturnType<typeof google.drive>,
+  nombre: string,
+  parentId: string
+): Promise<string | null> {
+  const limpio = nombre.replace(/'/g, "\\'");
+  const res = await drive.files.list({
+    q: `name='${limpio}' and '${parentId}' in parents and trashed=false`,
+    fields: "files(id)", pageSize: 1, ...DRIVES,
+  });
+  return res.data.files?.[0]?.id ?? null;
 }
 
 async function getOrCreateFolder(

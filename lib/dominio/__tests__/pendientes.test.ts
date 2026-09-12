@@ -34,7 +34,7 @@ describe("pendientesDe", () => {
   test("cada pendiente dice a dónde ir", () => {
     for (const p of pendientesDe(con({
       vistoBueno: 1, gastosObservados: 1, rendicionesVencidas: 1, porRevisar: 1,
-      porContabilizar: 1, porPagar: 1, borradoresDetenidos: 1,
+      porContabilizar: 1, porPagar: 1, borradoresDetenidos: 1, fotosSinArchivar: 1,
     }))) {
       assert.match(p.ruta, /^\//, p.clave);
       assert.ok(p.detalle.length > 0, p.clave);
@@ -45,6 +45,15 @@ describe("pendientesDe", () => {
     // Es el caso que hizo falta construir todo esto: el documento salió y
     // nadie sabe si la plata se movió.
     assert.equal(pendientesDe(con({ porPagar: 1 }))[0].urgente, true);
+  });
+
+  test("una foto que no llegó es urgente: el gasto queda sin respaldo", () => {
+    // Se cuenta sobre el error de subida, no sobre la ausencia de foto: un
+    // Yape legítimamente no tiene imagen y eso no hay que avisarlo.
+    const r = pendientesDe(con({ fotosSinArchivar: 2 }));
+    assert.equal(r[0].urgente, true);
+    assert.match(r[0].titulo, /2 comprobantes tuyos se quedaron sin foto/);
+    assert.match(r[0].detalle, /no tiene respaldo/);
   });
 
   test("un borrador detenido no es urgente pero se dice igual", () => {

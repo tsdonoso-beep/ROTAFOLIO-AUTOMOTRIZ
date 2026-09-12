@@ -36,6 +36,16 @@ export async function contarPendientes(
     c.gastosObservados = count ?? 0;
   })());
 
+  // Una subida fallida se guardaba y nadie la miraba nunca. Se cuenta sobre
+  // drive_error y no sobre drive_url en blanco: un Yape legítimamente no
+  // tiene foto, y eso no es un problema que haya que avisar.
+  tareas.push((async () => {
+    const { count } = await sb
+      .from("gastos").select("*", soloCuenta)
+      .eq("usuario_id", yo).not("drive_error", "is", null);
+    c.fotosSinArchivar = count ?? 0;
+  })());
+
   tareas.push((async () => {
     const { data } = await sb
       .from("memo_asignados")

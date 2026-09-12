@@ -28,7 +28,7 @@ type G = Pick<Gasto,
   | "tipo_comprobante" | "serie" | "numero" | "fecha_emision"
   | "subtotal" | "igv" | "total" | "moneda" | "detalle" | "forma_pago"
   | "alertas" | "alertas_confirmadas" | "confianza_extraccion"
-  | "observacion" | "drive_url"
+  | "observacion" | "drive_url" | "drive_error"
 >;
 
 interface Props {
@@ -188,6 +188,13 @@ export default function GastoFila({
             {g.alertas_confirmadas && alertas.length > 0 && !observado && (
               <span className="badge badge-ok">
                 <IconoCheck size={11} style={{ marginLeft: -1 }} />Confirmado
+              </span>
+            )}
+            {/* Hasta ahora una foto que no llegó a Drive era indistinguible
+                de una que sí: el fallo se guardaba y nadie lo miraba. */}
+            {g.drive_error && (
+              <span className="badge badge-error" title={g.drive_error}>
+                <IconoAlerta size={11} style={{ marginLeft: -1 }} />Sin foto archivada
               </span>
             )}
           </div>

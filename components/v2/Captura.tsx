@@ -2,6 +2,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { clienteNavegador } from "@/lib/supabase/cliente";
+import { rutaDrive } from "@/lib/dominio/memo";
+import { actualizarLegajo } from "@/app/acciones/legajo";
 import { Aviso, Tarjeta, soles } from "./Encabezado";
 import {
   IconoAlerta, IconoAtras, IconoCamara, IconoCheck,
@@ -47,6 +49,8 @@ export interface MemoDisponible {
   rendido: number;
   centroCostoFolder: string;
   empresaRuc: string | null;
+  /** Primer nivel de la ruta en Drive. */
+  empresaAbrev: string;
 }
 
 interface Props {
@@ -332,8 +336,16 @@ export default function Captura({ memos, memoInicial, parametros, onListo }: Pro
               base64: imagen.base64,
               mimeType: imagen.mimeType,
               fileName: nombre,
-              carpeta1: destino?.centroCostoFolder ?? "SIN-ASIGNAR",
-              carpeta2: destino?.correlativo ?? new Date().toISOString().slice(0, 7),
+              // Sin memo todavía no hay expediente: va a una carpeta de
+              // pendientes por mes y viaja cuando se le asigne uno.
+              carpetas: destino
+                ? rutaDrive({
+                    empresaAbrev: destino.empresaAbrev,
+                    fechaSalida: destino.fecha_salida,
+                    centroCostoFolder: destino.centroCostoFolder,
+                    correlativo: destino.correlativo,
+                  })
+                : ["SIN-ASIGNAR", new Date().toISOString().slice(0, 7)],
             }),
           });
           const json = await res.json();
@@ -349,6 +361,11 @@ export default function Captura({ memos, memoInicial, parametros, onListo }: Pro
           );
         }
       }
+
+      // La carátula del expediente se rehace con el comprobante nuevo
+      // adentro. Si falla no se dice nada acá: la foto y el dato ya están
+      // guardados, y el resumen se vuelve a intentar en el próximo cambio.
+      if (destinoId) await actualizarLegajo(destinoId);
 
       cancelar();
       onListo();

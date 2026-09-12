@@ -21,7 +21,7 @@ export default async function DetalleMemo({ params }: { params: Promise<{ id: st
       id, correlativo, estado, destino, monto_autorizado,
       fecha_salida, fecha_retorno_prev, observacion_actual,
       centros_costo ( codigo, nombre, drive_folder ),
-      empresas ( ruc, razon_social ),
+      empresas ( ruc, razon_social, abreviatura ),
       memo_asignados ( usuario_id )
     `)
     .eq("id", id)
@@ -37,7 +37,7 @@ export default async function DetalleMemo({ params }: { params: Promise<{ id: st
   const centro = memo.centros_costo as unknown as
     { codigo: string; nombre: string; drive_folder: string | null } | null;
   const empresa = memo.empresas as unknown as
-    { ruc: string; razon_social: string } | null;
+    { ruc: string; razon_social: string; abreviatura: string } | null;
 
   const esAsignado = (memo.memo_asignados ?? [])
     .some((a: { usuario_id: string }) => a.usuario_id === solicitante.usuarioId);
@@ -72,6 +72,7 @@ export default async function DetalleMemo({ params }: { params: Promise<{ id: st
         // con nombre reconocible a perder el archivo.
         centroCostoFolder: centro?.drive_folder || centro?.codigo || "SIN-CENTRO",
         empresaRuc: empresa?.ruc ?? null,
+        empresaAbrev: empresa?.abreviatura ?? "SIN-EMPRESA",
       }}
       gastos={(gastos ?? []) as unknown as Gasto[]}
       parametros={leerParametros(filasParam)}

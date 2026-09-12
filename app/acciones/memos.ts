@@ -4,6 +4,7 @@ import { clienteServidor, solicitanteActual } from "@/lib/supabase/servidor";
 import { autoriza } from "@/lib/dominio/permisos";
 import { GASTO_CUENTA_EN_TOTAL, MEMO_PENDIENTE, impedimentosParaPresentar, puedeEditarGasto, transicionMemoValida } from "@/lib/dominio/estados";
 import { elegibleParaCaja, impedimentosParaRendirCaja, periodoDeCaja, resumirCaja } from "@/lib/dominio/cajachica";
+import { actualizarLegajo } from "./legajo";
 import { aQuienPreguntar } from "@/lib/dominio/autorizacion";
 import { evaluarBloqueoPorPendientes, explicarPendientes } from "@/lib/dominio/memo";
 import { leerParametros } from "@/lib/dominio/parametros";
@@ -473,6 +474,8 @@ export async function presentarRendicion(memoId: string): Promise<Resultado> {
   await registrarEvento(sb, "MEMO", memoId, "PRESENTAR", solicitante.usuarioId,
     { estado: memo.estado }, { estado: "PRESENTADA" });
 
+  await actualizarLegajo(memoId);
+
   revalidatePath("/memos");
   revalidatePath("/revisar");
   return { ok: true };
@@ -507,6 +510,8 @@ export async function aprobarRendicion(memoId: string): Promise<Resultado> {
 
   await registrarEvento(sb, "MEMO", memoId, "APROBAR", solicitante.usuarioId,
     { estado: memo.estado }, { estado: "APROBADA" });
+
+  await actualizarLegajo(memoId);
 
   revalidatePath("/revisar");
   revalidatePath("/contabilidad");
@@ -560,6 +565,8 @@ export async function observarGastos(
   await registrarEvento(sb, "MEMO", memoId, "OBSERVAR", solicitante.usuarioId,
     { estado: memo.estado }, { estado: "OBSERVADA", resumen });
 
+  await actualizarLegajo(memoId);
+
   revalidatePath("/revisar");
   revalidatePath("/memos");
   return { ok: true };
@@ -589,6 +596,8 @@ export async function marcarContabilizado(memoId: string, asiento: string): Prom
 
   await registrarEvento(sb, "MEMO", memoId, "CONTABILIZAR", solicitante.usuarioId,
     { estado: memo.estado }, { estado: "CONTABILIZADA", asiento: asiento || null });
+
+  await actualizarLegajo(memoId);
 
   revalidatePath("/contabilidad");
   return { ok: true };
@@ -759,6 +768,8 @@ export async function editarGasto(gastoId: string, datos: DatosGasto): Promise<R
     },
     { ...datos, estado: nuevoEstado, alertas });
 
+  if (gasto.memo_id) await actualizarLegajo(gasto.memo_id);
+
   revalidatePath("/memos");
   if (gasto.memo_id) revalidatePath(`/memos/${gasto.memo_id}`);
   return { ok: true };
@@ -856,6 +867,9 @@ export async function rendirCajaChica(datos: {
 
   await registrarEvento(sb, "MEMO", memoId as string, "PRESENTAR", solicitante.usuarioId,
     { estado: "EN_RENDICION" }, { estado: "PRESENTADA" });
+
+  // El memo nació con sus comprobantes dentro: su carátula se arma de una.
+  await actualizarLegajo(memoId as string);
 
   revalidatePath("/memos");
   revalidatePath("/memos/sin-asignar");

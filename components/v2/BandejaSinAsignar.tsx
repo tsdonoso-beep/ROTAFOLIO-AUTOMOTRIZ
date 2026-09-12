@@ -2,6 +2,8 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { clienteNavegador } from "@/lib/supabase/cliente";
+import { rutaDrive } from "@/lib/dominio/memo";
+import { actualizarLegajo } from "@/app/acciones/legajo";
 import { Aviso, Tarjeta, soles } from "./Encabezado";
 import { IconoAlerta, IconoCheck, IconoEnlace } from "./Iconos";
 import { asignarPorFecha, explicar, memoDe } from "@/lib/dominio/asignacion";
@@ -21,6 +23,7 @@ interface MemoDestino {
   rendido: number;
   centroCostoFolder: string;
   empresaRuc: string | null;
+  empresaAbrev: string;
 }
 
 interface Props {
@@ -289,8 +292,12 @@ function Fila({ gasto: g, memos, parametros, enCaja, onAlternarCaja, onResultado
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             fileId: g.storage_key,
-            carpeta1: destino.centroCostoFolder,
-            carpeta2: destino.correlativo,
+            carpetas: rutaDrive({
+              empresaAbrev: destino.empresaAbrev,
+              fechaSalida: destino.fecha_salida,
+              centroCostoFolder: destino.centroCostoFolder,
+              correlativo: destino.correlativo,
+            }),
           }),
         });
         const json = await res.json();
@@ -301,6 +308,9 @@ function Fila({ gasto: g, memos, parametros, enCaja, onAlternarCaja, onResultado
         // No se interrumpe: el comprobante ya está donde tiene que estar.
       }
     }
+
+    // El expediente cambió: su carátula se rehace con el comprobante dentro.
+    await actualizarLegajo(destino.id);
 
     onResultado("ok", `Comprobante movido a ${destino.correlativo}.`);
   };

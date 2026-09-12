@@ -28,11 +28,14 @@ export interface ConteosPendientes {
   porPagar: number;
   /** Borradores detenidos: esperando el visto bueno, o rechazados. */
   borradoresDetenidos: number;
+  /** Comprobantes tuyos cuya foto no llegó a archivarse. */
+  fotosSinArchivar: number;
 }
 
 export const SIN_PENDIENTES: ConteosPendientes = {
   vistoBueno: 0, gastosObservados: 0, rendicionesVencidas: 0,
   porRevisar: 0, porContabilizar: 0, porPagar: 0, borradoresDetenidos: 0,
+  fotosSinArchivar: 0,
 };
 
 export type ClavePendiente = keyof ConteosPendientes;
@@ -107,6 +110,14 @@ export function pendientesDe(c: ConteosPendientes): Pendiente[] {
       titulo: plural(c.porPagar, "liquidación emitida sin pagar", "liquidaciones emitidas sin pagar"),
       detalle: "El documento salió pero el movimiento de plata no está registrado.",
       ruta: "/liquidaciones",
+      urgente: true,
+    },
+    {
+      clave: "fotosSinArchivar",
+      cantidad: c.fotosSinArchivar,
+      titulo: plural(c.fotosSinArchivar, "comprobante tuyo se quedó sin foto", "comprobantes tuyos se quedaron sin foto"),
+      detalle: "El dato se guardó pero la imagen no llegó a Drive. Sin ella, el gasto no tiene respaldo cuando lo pidan.",
+      ruta: "/memos",
       urgente: true,
     },
     {

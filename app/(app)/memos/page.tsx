@@ -31,7 +31,7 @@ export default async function MisMemos() {
           id, correlativo, tipo, destino, estado, monto_autorizado,
           fecha_salida, fecha_retorno_prev,
           centros_costo ( codigo, nombre, drive_folder ),
-          empresas ( ruc ),
+          empresas ( ruc, abreviatura ),
           gastos ( id, estado, clase, total, alertas )
         `)
         .in("id", ids)
@@ -59,7 +59,7 @@ export default async function MisMemos() {
     .map(m => {
       const cc = m.centros_costo as unknown as
         { codigo: string; nombre: string; drive_folder: string | null } | null;
-      const emp = m.empresas as unknown as { ruc: string } | null;
+      const emp = m.empresas as unknown as { ruc: string; abreviatura: string } | null;
       const g = (m.gastos ?? []) as Array<{
         estado: EstadoGasto; clase: ClaseGasto; total: number | null; alertas: Alerta[];
       }>;
@@ -74,6 +74,7 @@ export default async function MisMemos() {
         rendido: consolidar(Number(m.monto_autorizado), g).rendido,
         centroCostoFolder: cc?.drive_folder || cc?.codigo || "SIN-CENTRO",
         empresaRuc: emp?.ruc ?? null,
+        empresaAbrev: emp?.abreviatura ?? "SIN-EMPRESA",
       };
     });
 
