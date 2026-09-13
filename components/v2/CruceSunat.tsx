@@ -151,13 +151,29 @@ function Informe({ res }: { res: Resultado }) {
 
       {sinRendir.length > 0 && (
         <div style={{ marginBottom: 14 }}>
-          <Aviso tono="aviso" icono={<IconoAlerta size={16} />}>
-            <strong>{sinRendir.length} comprobantes por {soles(r.montoSoloEnSunat)} que SUNAT
-            tiene a nombre de la empresa y nadie rindió.</strong>
-            <span style={{ display: "block", marginTop: 4, fontSize: 11.5, opacity: 0.9 }}>
-              Puede ser gasto que no se reportó, o crédito fiscal que se está dejando pasar.
-            </span>
-          </Aviso>
+          {res.nuestros === 0 ? (
+            // Sin nada capturado de ese mes, «sin rendir» es todo el archivo:
+            // no es un hallazgo, es la ausencia de datos con qué comparar.
+            // Presentarlo como alerta sería un susto falso.
+            <Aviso tono="info" icono={<IconoAlerta size={16} />}>
+              <strong>Esto todavía no dice nada.</strong>
+              <span style={{ display: "block", marginTop: 4, lineHeight: 1.55 }}>
+                SUNAT tiene {sinRendir.length} comprobantes de ese período, pero en la
+                aplicación no hay ninguno con fecha de ese mes. Sin nada que comparar,
+                todo cae del lado «sin rendir»: son las compras normales de la empresa,
+                no gastos sin reportar. El cruce recién dirá algo cuando haya
+                comprobantes capturados de ese período.
+              </span>
+            </Aviso>
+          ) : (
+            <Aviso tono="aviso" icono={<IconoAlerta size={16} />}>
+              <strong>{sinRendir.length} comprobantes por {soles(r.montoSoloEnSunat)} que SUNAT
+              tiene a nombre de la empresa y nadie rindió.</strong>
+              <span style={{ display: "block", marginTop: 4, fontSize: 11.5, opacity: 0.9 }}>
+                Puede ser gasto que no se reportó, o crédito fiscal que se está dejando pasar.
+              </span>
+            </Aviso>
+          )}
         </div>
       )}
 
@@ -319,12 +335,23 @@ function Procedencia({ res }: { res: Resultado }) {
             campos no es confiable.
           </p>
         )}
+        {lectura.duplicadas.length > 0 && (
+          <p style={{ color: "var(--warn)", marginTop: 6 }}>
+            Estas columnas también servían para un campo que ya estaba tomado por otra, así
+            que no se usaron:{" "}
+            <span className="mono">
+              {lectura.duplicadas.map(d => `${d.titulo} → ${d.campo}`).join(", ")}
+            </span>
+            . Si alguna es la correcta, el cruce está mirando la columna equivocada.
+          </p>
+        )}
         {lectura.sinMapear.length > 0 && (
           <p style={{ marginTop: 6 }}>
             Columnas que llegaron y no se usaron:{" "}
             <span className="mono">{lectura.sinMapear.join(", ")}</span>
           </p>
         )}
+        {lectura.titulos.length > 0 && <PrimeraFila lectura={lectura} />}
         {lectura.descartadas > 0 && (
           <p style={{ marginTop: 6 }}>
             Se descartaron {lectura.descartadas} filas sin RUC ni número (suelen ser totales).
@@ -374,5 +401,52 @@ function Diagnostico({ diag }: { diag: DiagnosticoTipo }) {
         del SIRE sin tener que adivinar.
       </p>
     </div>
+  );
+}
+
+/**
+ * La primera fila del archivo, columna por columna y en orden.
+ *
+ * Es la única forma de saber qué hay realmente en cada columna sin adivinar.
+ * El RCE trae dos identidades con títulos parecidos —la de la empresa y la
+ * del proveedor— y mirando solo los títulos no se distingue cuál es cuál.
+ */
+function PrimeraFila({ lectura }: { lectura: Resultado["lectura"] }) {
+  const porTitulo = new Map(lectura.mapeo.map(m => [m.titulo, m.campo] as const));
+  const duplicada = new Map(lectura.duplicadas.map(d => [d.titulo, d.campo] as const));
+
+  return (
+    <details style={{ marginTop: 10 }}>
+      <summary style={{ cursor: "pointer", color: "var(--text3)" }}>
+        Ver la primera fila columna por columna ({lectura.titulos.length} columnas)
+      </summary>
+      <div style={{ overflowX: "auto", marginTop: 8 }}>
+        <table style={{ borderCollapse: "collapse", fontSize: 11, width: "100%" }}>
+          <tbody>
+            {lectura.titulos.map((t, i) => {
+              const campo = porTitulo.get(t);
+              const dup = duplicada.get(t);
+              return (
+                <tr key={`${t}-${i}`} style={{ borderBottom: "1px solid var(--borde)" }}>
+                  <td className="mono" style={{ padding: "4px 10px 4px 0", color: "var(--text3)", textAlign: "right" }}>
+                    {i + 1}
+                  </td>
+                  <td style={{ padding: "4px 10px 4px 0", color: "var(--text2)", whiteSpace: "nowrap" }}>
+                    {t}
+                  </td>
+                  <td className="mono" style={{ padding: "4px 10px 4px 0", whiteSpace: "nowrap",
+                    color: campo ? "var(--accent-texto)" : dup ? "var(--warn)" : "var(--text3)" }}>
+                    {campo ? `→ ${campo}` : dup ? `(duplicada de ${dup})` : ""}
+                  </td>
+                  <td className="mono" style={{ padding: "4px 0", color: "var(--text)", wordBreak: "break-all" }}>
+                    {lectura.ejemplo[i] ?? ""}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </details>
   );
 }

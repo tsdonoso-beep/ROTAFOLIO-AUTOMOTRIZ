@@ -198,3 +198,41 @@ describe("leerPropuestaRce", () => {
     assert.equal(f.total, 1180);
   });
 });
+
+// El caso real del período 202608: el archivo trae DOS identidades y las dos
+// encajan en «ruc» y «razón social». Quedándose con la primera y callando la
+// segunda, las 3163 filas salieron a nombre de la propia empresa.
+describe("el RCE trae dos identidades", () => {
+  const cabecera = [
+    "Periodo", "CAR SUNAT", "RUC", "Apellidos y Nombres o Razón social",
+    "Fecha de emisión", "Tipo CP/Doc.", "Serie del CDP",
+    "Nro CP o Doc. Nro Inicial (Rango)", "Tipo Doc Identidad", "Nro Doc Identidad",
+    "Apellidos Nombres/ Razón Social", "Total CP", "Moneda",
+  ].join(";");
+  const fila = [
+    "202608", "CAR-1", "20512201611", "INDUSTRIAS ROLAND PRINT S.A.C",
+    "05/08/2026", "01", "E001", "1", "6", "20100055237",
+    "FERRETERIA EL SOL S.A.C.", "23.60", "PEN",
+  ].join(";");
+  const r = leerPropuestaRce(cabecera + "\n" + fila);
+
+  test("ninguna columna se pierde: todas están en alguna lista", () => {
+    const contadas = r.mapeo.length + r.sinMapear.length + r.duplicadas.length;
+    assert.equal(contadas, 13);
+  });
+
+  // Lo que faltaba: esta columna no aparecía en ninguna lista, así que no
+  // había forma de notar que el cruce miraba la identidad equivocada.
+  test("avisa de la segunda identidad en vez de descartarla callado", () => {
+    const titulos = r.duplicadas.map(d => d.titulo);
+    assert.ok(titulos.includes("Nro Doc Identidad"), `duplicadas: ${titulos}`);
+    assert.ok(titulos.includes("Apellidos Nombres/ Razón Social"), `duplicadas: ${titulos}`);
+  });
+
+  test("guarda los títulos en orden y una fila de ejemplo", () => {
+    assert.equal(r.titulos.length, 13);
+    assert.equal(r.titulos[2], "RUC");
+    assert.equal(r.ejemplo[2], "20512201611");
+    assert.equal(r.ejemplo[10], "FERRETERIA EL SOL S.A.C.");
+  });
+});

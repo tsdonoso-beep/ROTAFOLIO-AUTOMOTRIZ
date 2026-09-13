@@ -35,6 +35,20 @@ export interface LecturaRce {
   mapeo: Array<{ titulo: string; campo: keyof FilaRce }>;
   /** Títulos que llegaron y no se supo qué eran. */
   sinMapear: string[];
+  /**
+   * Títulos que apuntaban a un campo ya tomado por otra columna.
+   *
+   * El RCE trae dos identidades —la del generador y la del proveedor— y las
+   * dos encajan en «ruc» y «razón social». Quedarse con la primera y callar
+   * la segunda hizo que las 3163 filas del período 202608 salieran a nombre
+   * de la propia empresa. Ahora se listan, porque una columna descartada en
+   * silencio es un dato perdido que nadie va a buscar.
+   */
+  duplicadas: Array<{ titulo: string; campo: keyof FilaRce }>;
+  /** Los títulos en el orden en que llegaron. */
+  titulos: string[];
+  /** La primera fila con datos, para ver qué hay en cada columna. */
+  ejemplo: string[];
   /** Campos que esperábamos y no aparecieron en el archivo. */
   faltantes: string[];
   /** Filas que se descartaron por no tener nada aprovechable. */
@@ -202,7 +216,10 @@ export function leerPropuestaRce(texto: string): LecturaRce {
   const lineas = limpio.split(/\r?\n/).filter(l => l.trim() !== "");
 
   if (lineas.length === 0) {
-    return { filas: [], mapeo: [], sinMapear: [], faltantes: [...ESPERADOS], descartadas: 0 };
+    return {
+      filas: [], mapeo: [], sinMapear: [], duplicadas: [], titulos: [], ejemplo: [],
+      faltantes: [...ESPERADOS], descartadas: 0,
+    };
   }
 
   const sep = separadorDe(lineas[0]);
@@ -212,15 +229,18 @@ export function leerPropuestaRce(texto: string): LecturaRce {
   const sinMapear: string[] = [];
   const porCampo = new Map<keyof FilaRce, number>();
 
+  const duplicadas: LecturaRce["duplicadas"] = [];
+
   titulos.forEach((titulo, i) => {
     const campo = campoDe(titulo);
-    // Si dos títulos apuntan al mismo campo se queda el primero: en los
-    // reportes de SUNAT las columnas del comprobante van antes que las del
-    // documento que modifican.
     if (campo && !porCampo.has(campo)) {
       porCampo.set(campo, i);
       mapeo.push({ titulo, campo });
-    } else if (!campo && titulo) {
+    } else if (campo) {
+      // Ya había otra columna para ese campo. Antes esto se descartaba sin
+      // decir nada; ahora se dice, porque puede ser la columna correcta.
+      duplicadas.push({ titulo, campo });
+    } else if (titulo) {
       sinMapear.push(titulo);
     }
   });
@@ -260,6 +280,9 @@ export function leerPropuestaRce(texto: string): LecturaRce {
     filas,
     mapeo,
     sinMapear,
+    duplicadas,
+    titulos,
+    ejemplo: lineas.length > 1 ? partirLinea(lineas[1], sep) : [],
     faltantes: ESPERADOS.filter(c => !porCampo.has(c)),
     descartadas,
   };
