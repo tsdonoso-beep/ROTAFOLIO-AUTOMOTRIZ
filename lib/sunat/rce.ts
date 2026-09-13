@@ -14,9 +14,20 @@
 
 /** Un comprobante tal como SUNAT lo tiene registrado. */
 export interface FilaRce {
-  /** RUC de quien emitió el comprobante. */
+  /**
+   * RUC del proveedor: quien emitió el comprobante.
+   *
+   * Sale de «Nro Doc Identidad», no de «RUC». El archivo empieza cada fila
+   * con el RUC del generador —la propia empresa, repetido 3163 veces en el
+   * período 202608— y recién más adelante trae la contraparte. Tomar el
+   * primero hacía que todo el registro de compras saliera a nombre de quien
+   * compra.
+   */
   ruc: string | null;
   razonSocial: string | null;
+  /** RUC de quien generó el registro, que es la propia empresa. */
+  rucGenerador: string | null;
+  razonGenerador: string | null;
   /** Código SUNAT: 01 factura, 03 boleta, 07 nota de crédito... */
   tipoComprobante: string | null;
   serie: string | null;
@@ -65,14 +76,20 @@ export function normalizar(s: string): string {
 // Varias formas de llamar a lo mismo. SUNAT no es consistente entre
 // reportes, y estos títulos salen de su documentación y de sus ejemplos.
 const ALIAS: Array<{ campo: keyof FilaRce; titulos: string[] }> = [
+  // La contraparte va primero en la lista para que gane cuando el archivo
+  // trae las dos identidades, que es el caso del RCE completo.
   { campo: "ruc", titulos: [
-    "ruc", "nro doc identidad", "numero documento identidad", "ruc proveedor",
-    "nro de documento de identidad", "documento identidad",
+    "nro doc identidad", "numero documento identidad", "ruc proveedor",
+    "nro de documento de identidad", "documento identidad", "nro doc identidad proveedor",
   ] },
   { campo: "razonSocial", titulos: [
-    "razon social", "apellidos nombres razon social denominacion",
-    "apellidos y nombres o razon social", "razon social nombres",
-    "apellidos nombres o razon social", "nombre proveedor",
+    "apellidos nombres razon social", "apellidos nombres razon social denominacion",
+    "nombre proveedor", "razon social proveedor",
+  ] },
+  { campo: "rucGenerador", titulos: ["ruc", "ruc generador"] },
+  { campo: "razonGenerador", titulos: [
+    "apellidos y nombres o razon social", "razon social", "razon social nombres",
+    "apellidos nombres o razon social",
   ] },
   { campo: "tipoComprobante", titulos: [
     "tipo cp doc", "tipo de cdp o documento", "tipo comprobante", "tipo cp",
@@ -258,9 +275,13 @@ export function leerPropuestaRce(texto: string): LecturaRce {
     const cruda: Record<string, string> = {};
     titulos.forEach((t, j) => { if (t) cruda[t] = celdas[j] ?? ""; });
 
+    // Si el archivo trae una sola identidad —formatos más simples que el RCE
+    // completo— esa es la contraparte y se usa como tal.
     const fila: FilaRce = {
-      ruc: dame(celdas, "ruc").trim() || null,
-      razonSocial: dame(celdas, "razonSocial").trim() || null,
+      ruc: (dame(celdas, "ruc").trim() || dame(celdas, "rucGenerador").trim()) || null,
+      razonSocial: (dame(celdas, "razonSocial").trim() || dame(celdas, "razonGenerador").trim()) || null,
+      rucGenerador: dame(celdas, "rucGenerador").trim() || null,
+      razonGenerador: dame(celdas, "razonGenerador").trim() || null,
       tipoComprobante: codigoTipo(dame(celdas, "tipoComprobante")),
       serie: dame(celdas, "serie").trim().toUpperCase() || null,
       numero: normalizarNumero(dame(celdas, "numero")),
@@ -283,7 +304,46 @@ export function leerPropuestaRce(texto: string): LecturaRce {
     duplicadas,
     titulos,
     ejemplo: lineas.length > 1 ? partirLinea(lineas[1], sep) : [],
-    faltantes: ESPERADOS.filter(c => !porCampo.has(c)),
+    // La identidad del generador sirve de respaldo cuando el archivo trae
+    // una sola: no hay que reportarla como faltante si está cubierta.
+    faltantes: ESPERADOS.filter(c => {
+      if (porCampo.has(c)) return false;
+      if (c === "ruc") return !porCampo.has("rucGenerador");
+      return true;
+    }),
     descartadas,
+  };
+}
+
+/**
+ * Comprueba que la identidad leída sea la del proveedor y no la de la empresa.
+ *
+ * Un registro de COMPRAS no puede tener comprobantes emitidos por quien
+ * compra. Si casi todas las filas traen el RUC de la propia empresa, la
+ * columna elegida es la equivocada — que es exactamente lo que pasó con el
+ * período 202608: 3163 filas a nombre de INROPRIN.
+ *
+ * Existe para que el error se denuncie solo. La forma del archivo se dedujo
+ * de una muestra; si SUNAT la cambia, o si otra empresa recibe otro formato,
+ * esto lo dice en vez de devolver un cruce que no significa nada.
+ */
+export function revisarIdentidad(
+  filas: FilaRce[], rucEmpresa: string
+): { ok: true } | { ok: false; motivo: string; cuantas: number; total: number } {
+  const conRuc = filas.filter(f => f.ruc);
+  if (conRuc.length === 0) return { ok: true };
+
+  const propias = conRuc.filter(f => f.ruc === rucEmpresa.trim()).length;
+  // Un puñado puede ser legítimo: hay comprobantes que una empresa se emite a
+  // sí misma. Que lo sean casi todos no.
+  if (propias / conRuc.length < 0.9) return { ok: true };
+
+  return {
+    ok: false,
+    cuantas: propias,
+    total: conRuc.length,
+    motivo: `${propias} de ${conRuc.length} comprobantes salen a nombre de la propia empresa `
+      + `(RUC ${rucEmpresa}). En un registro de compras eso es imposible: se está leyendo la `
+      + `columna del generador y no la del proveedor. Los conteos de este cruce no valen.`,
   };
 }

@@ -15,7 +15,7 @@ import { credencialesDe, type CredencialesSunat } from "@/lib/sunat/credenciales
 import { pedirExportacion, consultarTicket, bajarArchivo, type ArchivoDelTicket } from "@/lib/sunat/sire";
 import { validarPeriodo } from "@/lib/sunat/periodo";
 import { leerZip } from "@/lib/sunat/zip";
-import { leerPropuestaRce, type LecturaRce } from "@/lib/sunat/rce";
+import { leerPropuestaRce, revisarIdentidad, type LecturaRce } from "@/lib/sunat/rce";
 import { cruzar, type Cruce, type ComprobanteNuestro } from "@/lib/dominio/cruce";
 
 /**
@@ -45,6 +45,11 @@ export interface Resultado {
   lectura: Omit<LecturaRce, "filas">;
   /** Cuántos comprobantes nuestros del período entraron al cruce. */
   nuestros: number;
+  /**
+   * Aviso cuando la identidad leída es la de la empresa y no la del
+   * proveedor. Si aparece, los conteos no valen.
+   */
+  identidadSospechosa: string | null;
 }
 
 /** Todo lo de aquí es de Administración del sistema. */
@@ -175,6 +180,7 @@ export async function traerYCruzar(
     // avisos de una línea.
     const reporte = dentro.reduce((a, b) => (b.contenido.length > a.contenido.length ? b : a));
     const { filas, ...lectura } = leerPropuestaRce(reporte.contenido.toString("utf8"));
+    const identidad = revisarIdentidad(filas, c.cred.ruc);
 
     const desde = `${p.anio}-${String(p.mes).padStart(2, "0")}-01`;
     const hasta = new Date(Date.UTC(p.anio, p.mes, 0)).toISOString().slice(0, 10);
@@ -212,6 +218,7 @@ export async function traerYCruzar(
         }))),
         lectura,
         nuestros: nuestros.length,
+        identidadSospechosa: identidad.ok ? null : identidad.motivo,
       },
     };
   } catch (e) {

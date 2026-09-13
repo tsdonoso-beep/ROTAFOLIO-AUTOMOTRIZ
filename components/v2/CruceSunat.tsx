@@ -137,6 +137,18 @@ function Informe({ res }: { res: Resultado }) {
 
   return (
     <div style={{ marginTop: 4 }}>
+      {/* Va antes que los números: si aparece, los números no valen. */}
+      {res.identidadSospechosa && (
+        <div style={{ margin: "14px 0" }}>
+          <Aviso tono="error" icono={<IconoAlerta size={16} />}>
+            <strong>El cruce está leyendo la columna equivocada.</strong>
+            <span style={{ display: "block", marginTop: 4, lineHeight: 1.55 }}>
+              {res.identidadSospechosa}
+            </span>
+          </Aviso>
+        </div>
+      )}
+
       <div style={{
         display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))",
         gap: 14, padding: "16px 0", borderTop: "1px solid var(--borde)",

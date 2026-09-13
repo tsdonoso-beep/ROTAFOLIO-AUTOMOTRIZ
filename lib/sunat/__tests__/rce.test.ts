@@ -2,7 +2,7 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
   leerPropuestaRce, separadorDe, partirLinea, aNumero, aFecha,
-  normalizarNumero, codigoTipo, normalizar,
+  normalizarNumero, codigoTipo, normalizar, revisarIdentidad, type FilaRce,
 } from "../rce.ts";
 
 describe("normalizar títulos", () => {
@@ -131,9 +131,11 @@ describe("leerPropuestaRce", () => {
   test("dice con qué columnas se quedó", () => {
     const r = leerPropuestaRce(archivo);
     const campos = r.mapeo.map(m => m.campo).sort();
+    // Un archivo con una sola identidad: sus columnas son las del generador,
+    // y la fila las usa como contraparte por respaldo.
     assert.deepEqual(campos, [
-      "fechaEmision", "moneda", "numero", "razonSocial", "ruc", "serie",
-      "tipoComprobante", "total",
+      "fechaEmision", "moneda", "numero", "razonGenerador", "rucGenerador",
+      "serie", "tipoComprobante", "total",
     ]);
     assert.deepEqual(r.faltantes, []);
   });
@@ -218,15 +220,31 @@ describe("el RCE trae dos identidades", () => {
 
   test("ninguna columna se pierde: todas están en alguna lista", () => {
     const contadas = r.mapeo.length + r.sinMapear.length + r.duplicadas.length;
+    assert.equal(contadas, r.titulos.length);
     assert.equal(contadas, 13);
   });
 
-  // Lo que faltaba: esta columna no aparecía en ninguna lista, así que no
-  // había forma de notar que el cruce miraba la identidad equivocada.
-  test("avisa de la segunda identidad en vez de descartarla callado", () => {
-    const titulos = r.duplicadas.map(d => d.titulo);
-    assert.ok(titulos.includes("Nro Doc Identidad"), `duplicadas: ${titulos}`);
-    assert.ok(titulos.includes("Apellidos Nombres/ Razón Social"), `duplicadas: ${titulos}`);
+  // El fallo que dio 3163 filas a nombre de la propia empresa.
+  test("el RUC es el del proveedor, no el de quien genera el registro", () => {
+    assert.equal(r.filas[0].ruc, "20100055237");
+    assert.equal(r.filas[0].razonSocial, "FERRETERIA EL SOL S.A.C.");
+  });
+
+  test("la identidad del generador se guarda aparte, sin pisar la del proveedor", () => {
+    assert.equal(r.filas[0].rucGenerador, "20512201611");
+    assert.equal(r.filas[0].razonGenerador, "INDUSTRIAS ROLAND PRINT S.A.C");
+  });
+
+  test("las dos identidades se mapean, ninguna queda como duplicada", () => {
+    const campos = r.mapeo.map(m => m.campo);
+    for (const c of ["ruc", "razonSocial", "rucGenerador", "razonGenerador"]) {
+      assert.ok(campos.includes(c as never), `falta ${c} en ${campos}`);
+    }
+    assert.deepEqual(r.duplicadas, []);
+  });
+
+  test("con este archivo la comprobación de identidad no salta", () => {
+    assert.equal(revisarIdentidad(r.filas, "20512201611").ok, true);
   });
 
   test("guarda los títulos en orden y una fila de ejemplo", () => {
@@ -234,5 +252,39 @@ describe("el RCE trae dos identidades", () => {
     assert.equal(r.titulos[2], "RUC");
     assert.equal(r.ejemplo[2], "20512201611");
     assert.equal(r.ejemplo[10], "FERRETERIA EL SOL S.A.C.");
+  });
+});
+
+describe("revisarIdentidad", () => {
+  const fila = (ruc: string | null): FilaRce => ({
+    ruc, razonSocial: "X", rucGenerador: "20512201611", razonGenerador: "INROPRIN",
+    tipoComprobante: "01", serie: "E001", numero: "1",
+    fechaEmision: "2026-08-05", total: 10, moneda: "PEN", cruda: {},
+  });
+
+  // Lo que pasó con el período 202608 antes de separar las dos identidades.
+  test("denuncia cuando todo sale a nombre de la propia empresa", () => {
+    const r = revisarIdentidad(Array.from({ length: 3163 }, () => fila("20512201611")), "20512201611");
+    assert.equal(r.ok, false);
+    if (!r.ok) {
+      assert.match(r.motivo, /imposible/);
+      assert.equal(r.cuantas, 3163);
+    }
+  });
+
+  test("con proveedores de verdad no dice nada", () => {
+    const filas = [fila("20100055237"), fila("20512333444"), fila("10456789012")];
+    assert.equal(revisarIdentidad(filas, "20512201611").ok, true);
+  });
+
+  // Una empresa sí puede emitirse algún comprobante a sí misma.
+  test("unos pocos propios no son un problema", () => {
+    const filas = [fila("20512201611"), ...Array.from({ length: 30 }, () => fila("20100055237"))];
+    assert.equal(revisarIdentidad(filas, "20512201611").ok, true);
+  });
+
+  test("sin filas no inventa un problema", () => {
+    assert.equal(revisarIdentidad([], "20512201611").ok, true);
+    assert.equal(revisarIdentidad([fila(null)], "20512201611").ok, true);
   });
 });
