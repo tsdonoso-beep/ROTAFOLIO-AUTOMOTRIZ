@@ -3,7 +3,7 @@ import { useRef, useState } from "react";
 import { Aviso, Tarjeta, Cifra, soles } from "./Encabezado";
 import { IconoAlerta, IconoDescargar, IconoReloj } from "./Iconos";
 import { pedirPropuesta, verTicket, traerYCruzar, type Resultado, type Diagnostico } from "@/app/acciones/cruce-sunat";
-import type { Emparejado } from "@/lib/dominio/cruce";
+import type { Emparejado, NotaSobreLoRendido } from "@/lib/dominio/cruce";
 import type { ArchivoDelTicket } from "@/lib/sunat/sire";
 
 type DiagnosticoTipo = Diagnostico;
@@ -148,6 +148,8 @@ function Informe({ res }: { res: Resultado }) {
           </Aviso>
         </div>
       )}
+
+      {res.notas.length > 0 && <Notas notas={res.notas} />}
 
       <div style={{
         display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))",
@@ -460,5 +462,79 @@ function PrimeraFila({ lectura }: { lectura: Resultado["lectura"] }) {
         </table>
       </div>
     </details>
+  );
+}
+
+/**
+ * Notas de crédito sobre comprobantes que alguien ya rindió.
+ *
+ * Va antes que los conteos porque es lo único de esta pantalla que tiene
+ * destinatario: alguien fotografió esa factura, la presentó, y puede que ya
+ * le hayan pagado. El resto del informe describe un estado; esto pide que
+ * alguien haga algo.
+ */
+function Notas({ notas }: { notas: NotaSobreLoRendido[] }) {
+  const anuladas = notas.filter(n => n.anulaTodo).length;
+
+  return (
+    <div style={{ margin: "14px 0" }}>
+      <Aviso tono="error" icono={<IconoAlerta size={16} />}>
+        <strong>
+          {notas.length === 1
+            ? "Un comprobante rendido tiene una nota que lo corrige."
+            : `${notas.length} comprobantes rendidos tienen una nota que los corrige.`}
+        </strong>
+        {anuladas > 0 && (
+          <span style={{ display: "block", marginTop: 4, lineHeight: 1.55 }}>
+            {anuladas === notas.length
+              ? (anuladas === 1 ? "La nota cubre el total: el gasto quedó en cero."
+                                : "Las notas cubren el total: esos gastos quedaron en cero.")
+              : `${anuladas} de ellos quedaron en cero.`}
+          </span>
+        )}
+      </Aviso>
+
+      <div style={{ overflowX: "auto", marginTop: 10 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+          <thead>
+            <tr style={{ borderBottom: "1px solid var(--borde)" }}>
+              {["Lo que se rindió", "La nota", "Se rindió por", "Queda en"].map((h, i) => (
+                <th key={h} className="rotulo" style={{
+                  textAlign: i >= 2 ? "right" : "left",
+                  padding: "7px 10px 7px 0", whiteSpace: "nowrap",
+                }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {notas.map((n, i) => (
+              <tr key={`${n.nuestro.id}-${i}`} style={{ borderBottom: "1px solid var(--borde)" }}>
+                <td style={{ padding: "8px 10px 8px 0", color: "var(--text)" }}>
+                  {n.nuestro.proveedorNombre ?? n.nuestro.ruc}
+                  <span className="mono" style={{ display: "block", fontSize: 10.5, color: "var(--text3)" }}>
+                    {[n.nuestro.serie, n.nuestro.numero].filter(Boolean).join("-")}
+                  </span>
+                </td>
+                <td className="mono" style={{ padding: "8px 10px 8px 0", color: "var(--text2)", whiteSpace: "nowrap" }}>
+                  {[n.nota.serie, n.nota.numero].filter(Boolean).join("-")}
+                  <span style={{ display: "block", fontSize: 10.5, color: "var(--text3)" }}>
+                    {n.nota.fechaEmision ?? ""}
+                  </span>
+                </td>
+                <td className="mono" style={{ padding: "8px 10px 8px 0", textAlign: "right", color: "var(--text2)", whiteSpace: "nowrap" }}>
+                  {n.nuestro.total == null ? "—" : soles(n.nuestro.total)}
+                </td>
+                <td className="mono" style={{
+                  padding: "8px 0", textAlign: "right", whiteSpace: "nowrap",
+                  color: n.anulaTodo ? "var(--danger)" : "var(--warn)",
+                }}>
+                  {n.quedaEn == null ? "—" : soles(n.quedaEn)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }

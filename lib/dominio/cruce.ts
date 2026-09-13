@@ -44,6 +44,14 @@ export interface ComprobanteSunat {
   fechaEmision: string | null;
   total: number | null;
   razonSocial: string | null;
+  /** A qué comprobante corrige, cuando es una nota de crédito o débito. */
+  modifica?: {
+    tipo: string | null;
+    serie: string | null;
+    numero: string | null;
+  } | null;
+  /** Estado según SUNAT. */
+  estado?: string | null;
 }
 
 export interface Emparejado {
@@ -183,4 +191,84 @@ export function cruzar(nuestros: ComprobanteNuestro[], enSunat: ComprobanteSunat
       montoSoloEnSunat: Math.round(soloEnSunat.reduce((a, s) => a + (s.total ?? 0), 0) * 100) / 100,
     },
   };
+}
+
+// ════════════════════════════════════════════════════════════════
+// Notas de crédito sobre lo que alguien ya rindió
+
+/** Una nota que afecta a un comprobante que nuestra gente sí reportó. */
+export interface NotaSobreLoRendido {
+  /** El comprobante nuestro al que le cae la nota. */
+  nuestro: ComprobanteNuestro;
+  /** La nota, tal como la tiene SUNAT. */
+  nota: ComprobanteSunat;
+  /** Cuánto queda del gasto después de la nota, si se puede calcular. */
+  quedaEn: number | null;
+  /** Si la nota cubre el comprobante entero. */
+  anulaTodo: boolean;
+}
+
+/** Tipos que corrigen otro comprobante. */
+const NOTAS = new Set(["07", "08"]);
+
+/**
+ * Busca las notas que afectan a comprobantes que nuestra gente rindió.
+ *
+ * Es la diferencia entre un dato y un aviso. SUNAT dice que existe una nota
+ * de crédito; lo que importa acá es que la factura que corrige es una que
+ * alguien fotografió, presentó y quizá ya le pagaron. Sin cruzarla contra lo
+ * rendido, la nota es una fila más en un archivo de tres mil.
+ *
+ * Las notas sobre comprobantes que nadie rindió no se devuelven: son asunto
+ * de Contabilidad por su vía normal, y mezclarlas haría que el aviso que sí
+ * importa se pierda entre cientos.
+ */
+export function notasSobreLoRendido(
+  nuestros: ComprobanteNuestro[], enSunat: ComprobanteSunat[]
+): NotaSobreLoRendido[] {
+  const mios = new Map<string, ComprobanteNuestro>();
+  for (const n of nuestros) {
+    const k = llaveDe(n);
+    if (k) mios.set(k, n);
+  }
+  if (mios.size === 0) return [];
+
+  const salida: NotaSobreLoRendido[] = [];
+
+  for (const s of enSunat) {
+    if (!s.tipoComprobante || !NOTAS.has(s.tipoComprobante)) continue;
+    if (!s.modifica) continue;
+
+    // La nota apunta al comprobante corregido, pero lo emite el mismo
+    // proveedor: el RUC para buscarlo es el de la nota.
+    const afectado = llaveDe({
+      ruc: s.ruc,
+      tipoComprobante: s.modifica.tipo,
+      serie: s.modifica.serie,
+      numero: s.modifica.numero,
+    });
+    if (!afectado) continue;
+
+    const nuestro = mios.get(afectado);
+    if (!nuestro) continue;
+
+    // SUNAT registra las notas de crédito en negativo. Se toma el valor
+    // absoluto para no depender del signo, que no siempre viene igual.
+    const monto = s.total == null ? null : Math.abs(s.total);
+    const original = nuestro.total;
+    const quedaEn = monto == null || original == null
+      ? null
+      : Math.round((original - monto) * 100) / 100;
+
+    salida.push({
+      nuestro,
+      nota: s,
+      quedaEn,
+      // Un céntimo de holgura, igual que al comparar importes: el redondeo
+      // no debería cambiar «anulada» por «rebajada».
+      anulaTodo: quedaEn != null && Math.abs(quedaEn) <= 0.05,
+    });
+  }
+
+  return salida;
 }

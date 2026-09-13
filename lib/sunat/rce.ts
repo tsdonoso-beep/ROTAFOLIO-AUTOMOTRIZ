@@ -36,14 +36,56 @@ export interface FilaRce {
   fechaEmision: string | null;
   total: number | null;
   moneda: string | null;
+
+  /**
+   * Identificador que SUNAT le pone a cada comprobante.
+   *
+   * Es la llave estable para seguir uno a lo largo del tiempo: la serie y el
+   * número los pone el proveedor y se repiten entre proveedores distintos
+   * —E001-100 salió dos veces el mismo mes—, así que no sirven solos.
+   */
+  carSunat: string | null;
+
+  /** Estado del comprobante según SUNAT. Un comprobante anulado lo dice acá. */
+  estado: string | null;
+
+  /**
+   * A qué comprobante modifica este, cuando es una nota de crédito o débito.
+   *
+   * La nota llega como su propia fila apuntando a la factura que corrige. Es
+   * lo que permite avisar «la factura que rendiste ya no vale».
+   */
+  modifica: {
+    tipo: string | null;
+    serie: string | null;
+    numero: string | null;
+    fechaEmision: string | null;
+  } | null;
+
+  /** Tipo de nota (crédito o débito), cuando lo es. */
+  tipoNota: string | null;
+
   /** La fila entera, por si hace falta mirarla. */
   cruda: Record<string, string>;
 }
 
+/**
+ * Las columnas que se saben reconocer.
+ *
+ * Es una lista aparte de la forma de FilaRce a propósito: cuatro de estas
+ * columnas se juntan después en un solo objeto —a qué comprobante modifica
+ * una nota— y atar el mapeo a la forma final obligaba a aplanar la fila.
+ */
+export type Campo =
+  | "ruc" | "razonSocial" | "rucGenerador" | "razonGenerador"
+  | "tipoComprobante" | "serie" | "numero" | "fechaEmision" | "total" | "moneda"
+  | "carSunat" | "estado" | "tipoNota"
+  | "modificaTipo" | "modificaSerie" | "modificaNumero" | "modificaFecha";
+
 export interface LecturaRce {
   filas: FilaRce[];
   /** Títulos que sí se reconocieron, y con qué campo se emparejaron. */
-  mapeo: Array<{ titulo: string; campo: keyof FilaRce }>;
+  mapeo: Array<{ titulo: string; campo: Campo }>;
   /** Títulos que llegaron y no se supo qué eran. */
   sinMapear: string[];
   /**
@@ -55,7 +97,7 @@ export interface LecturaRce {
    * de la propia empresa. Ahora se listan, porque una columna descartada en
    * silencio es un dato perdido que nadie va a buscar.
    */
-  duplicadas: Array<{ titulo: string; campo: keyof FilaRce }>;
+  duplicadas: Array<{ titulo: string; campo: Campo }>;
   /** Los títulos en el orden en que llegaron. */
   titulos: string[];
   /** La primera fila con datos, para ver qué hay en cada columna. */
@@ -75,7 +117,7 @@ export function normalizar(s: string): string {
 
 // Varias formas de llamar a lo mismo. SUNAT no es consistente entre
 // reportes, y estos títulos salen de su documentación y de sus ejemplos.
-const ALIAS: Array<{ campo: keyof FilaRce; titulos: string[] }> = [
+const ALIAS: Array<{ campo: Campo; titulos: string[] }> = [
   // La contraparte va primero en la lista para que gane cuando el archivo
   // trae las dos identidades, que es el caso del RCE completo.
   { campo: "ruc", titulos: [
@@ -112,13 +154,27 @@ const ALIAS: Array<{ campo: keyof FilaRce; titulos: string[] }> = [
   { campo: "moneda", titulos: [
     "moneda", "cod moneda", "codigo moneda", "tipo moneda",
   ] },
+  { campo: "carSunat", titulos: ["car sunat", "car", "codigo car"] },
+  { campo: "estado", titulos: [
+    "est comp", "estado comprobante", "estado del comprobante", "est cp",
+  ] },
+  { campo: "tipoNota", titulos: ["tipo de nota", "tipo nota"] },
+  // Las del comprobante que una nota modifica. Antes caían como duplicadas
+  // de los campos del comprobante en sí, que era correcto no usarlas para el
+  // cruce pero significaba tirarlas.
+  { campo: "modificaTipo", titulos: ["tipo cp modificado", "tipo cp modificado ref"] },
+  { campo: "modificaSerie", titulos: ["serie cp modificado"] },
+  { campo: "modificaNumero", titulos: ["nro cp modificado", "numero cp modificado"] },
+  { campo: "modificaFecha", titulos: [
+    "fecha emision doc modificado", "fecha emision cp modificado",
+  ] },
 ];
 
-const ESPERADOS: Array<keyof FilaRce> = [
+const ESPERADOS: Array<Campo> = [
   "ruc", "tipoComprobante", "serie", "numero", "fechaEmision", "total",
 ];
 
-function campoDe(titulo: string): keyof FilaRce | null {
+function campoDe(titulo: string): Campo | null {
   const n = normalizar(titulo);
   if (!n) return null;
   for (const a of ALIAS) {
@@ -222,6 +278,24 @@ export function normalizarNumero(v: string | null): string | null {
 }
 
 /**
+ * A qué comprobante apunta una nota, si es que apunta a alguno.
+ *
+ * Devuelve null cuando no hay nada: una factura normal trae estas columnas
+ * vacías, y un objeto con cuatro nulos dentro se lee como «modifica algo»
+ * cuando no modifica nada.
+ */
+function modificaDe(
+  celdas: string[], dame: (c: string[], campo: Campo) => string
+): FilaRce["modifica"] {
+  const tipo = codigoTipo(dame(celdas, "modificaTipo"));
+  const serie = dame(celdas, "modificaSerie").trim().toUpperCase() || null;
+  const numero = normalizarNumero(dame(celdas, "modificaNumero"));
+  const fechaEmision = aFecha(dame(celdas, "modificaFecha"));
+  if (!tipo && !serie && !numero && !fechaEmision) return null;
+  return { tipo, serie, numero, fechaEmision };
+}
+
+/**
  * Lee el CSV de la propuesta.
  *
  * No lanza si el archivo viene raro: devuelve qué entendió y qué no, para
@@ -244,7 +318,7 @@ export function leerPropuestaRce(texto: string): LecturaRce {
 
   const mapeo: LecturaRce["mapeo"] = [];
   const sinMapear: string[] = [];
-  const porCampo = new Map<keyof FilaRce, number>();
+  const porCampo = new Map<Campo, number>();
 
   const duplicadas: LecturaRce["duplicadas"] = [];
 
@@ -262,7 +336,7 @@ export function leerPropuestaRce(texto: string): LecturaRce {
     }
   });
 
-  const dame = (celdas: string[], campo: keyof FilaRce): string => {
+  const dame = (celdas: string[], campo: Campo): string => {
     const i = porCampo.get(campo);
     return i == null ? "" : (celdas[i] ?? "");
   };
@@ -289,6 +363,10 @@ export function leerPropuestaRce(texto: string): LecturaRce {
       total: aNumero(dame(celdas, "total")),
       cruda,
       moneda: dame(celdas, "moneda").trim().toUpperCase() || null,
+      carSunat: dame(celdas, "carSunat").trim() || null,
+      estado: dame(celdas, "estado").trim() || null,
+      tipoNota: dame(celdas, "tipoNota").trim() || null,
+      modifica: modificaDe(celdas, dame),
     };
 
     // Una fila sin RUC y sin número no sirve para cruzar contra nada. Suele

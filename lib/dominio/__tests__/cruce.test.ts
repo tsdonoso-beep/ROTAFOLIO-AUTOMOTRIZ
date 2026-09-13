@@ -1,7 +1,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
-  cruzar, llaveDe, razonDeNoComparable,
+  cruzar, llaveDe, razonDeNoComparable, notasSobreLoRendido,
   type ComprobanteNuestro, type ComprobanteSunat,
 } from "../cruce.ts";
 
@@ -157,5 +157,86 @@ describe("cruzar", () => {
     assert.equal(c.resumen.noComparables, 4);
     assert.equal(c.resumen.cuadran, 0);
     assert.equal(c.resumen.noEstanEnSunat, 0);
+  });
+});
+
+describe("notasSobreLoRendido", () => {
+  const rendido = (p: Partial<ComprobanteNuestro> = {}): ComprobanteNuestro => ({
+    id: "g1", ruc: "20100055237", tipoComprobante: "01", serie: "E001",
+    numero: "500", fechaEmision: "2026-08-05", total: 118,
+    proveedorNombre: "FERRETERIA EL SOL", ...p,
+  });
+
+  const notaDe = (p: Partial<ComprobanteSunat> = {}): ComprobanteSunat => ({
+    ruc: "20100055237", tipoComprobante: "07", serie: "E001", numero: "9",
+    fechaEmision: "2026-08-20", total: -118, razonSocial: "FERRETERIA EL SOL",
+    modifica: { tipo: "01", serie: "E001", numero: "500" }, ...p,
+  });
+
+  test("encuentra la nota que cae sobre algo que sí se rindió", () => {
+    const r = notasSobreLoRendido([rendido()], [notaDe()]);
+    assert.equal(r.length, 1);
+    assert.equal(r[0].nuestro.id, "g1");
+  });
+
+  test("una nota por el total entero anula el gasto", () => {
+    const r = notasSobreLoRendido([rendido()], [notaDe()]);
+    assert.equal(r[0].anulaTodo, true);
+    assert.equal(r[0].quedaEn, 0);
+  });
+
+  test("una nota parcial dice en cuánto queda", () => {
+    const r = notasSobreLoRendido([rendido()], [notaDe({ total: -18 })]);
+    assert.equal(r[0].anulaTodo, false);
+    assert.equal(r[0].quedaEn, 100);
+  });
+
+  // SUNAT no siempre manda el signo igual; el valor absoluto lo hace parejo.
+  test("da igual si la nota viene en positivo o en negativo", () => {
+    const conSigno = notasSobreLoRendido([rendido()], [notaDe({ total: -118 })]);
+    const sinSigno = notasSobreLoRendido([rendido()], [notaDe({ total: 118 })]);
+    assert.equal(conSigno[0].quedaEn, sinSigno[0].quedaEn);
+  });
+
+  test("los ceros a la izquierda no impiden encontrar la factura", () => {
+    const r = notasSobreLoRendido(
+      [rendido({ numero: "500" })],
+      [notaDe({ modifica: { tipo: "01", serie: "E001", numero: "00000500" } })],
+    );
+    assert.equal(r.length, 1);
+  });
+
+  // El punto: una nota sobre algo que nadie rindió es asunto de Contabilidad.
+  // Devolverla ahogaría el aviso que sí tiene destinatario.
+  test("ignora las notas sobre comprobantes que nadie rindió", () => {
+    const r = notasSobreLoRendido([], [notaDe()]);
+    assert.equal(r.length, 0);
+  });
+
+  test("ignora la nota que apunta a otra factura del mismo proveedor", () => {
+    const r = notasSobreLoRendido(
+      [rendido({ numero: "500" })],
+      [notaDe({ modifica: { tipo: "01", serie: "E001", numero: "999" } })],
+    );
+    assert.equal(r.length, 0);
+  });
+
+  test("una factura normal no se confunde con una nota", () => {
+    const r = notasSobreLoRendido([rendido()], [
+      { ...notaDe(), tipoComprobante: "01", modifica: null },
+    ]);
+    assert.equal(r.length, 0);
+  });
+
+  test("una nota de débito también cuenta", () => {
+    const r = notasSobreLoRendido([rendido()], [notaDe({ tipoComprobante: "08", total: 20 })]);
+    assert.equal(r.length, 1);
+    assert.equal(r[0].quedaEn, 98);
+  });
+
+  test("sin importe no inventa en cuánto queda", () => {
+    const r = notasSobreLoRendido([rendido()], [notaDe({ total: null })]);
+    assert.equal(r[0].quedaEn, null);
+    assert.equal(r[0].anulaTodo, false);
   });
 });

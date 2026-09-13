@@ -260,6 +260,7 @@ describe("revisarIdentidad", () => {
     ruc, razonSocial: "X", rucGenerador: "20512201611", razonGenerador: "INROPRIN",
     tipoComprobante: "01", serie: "E001", numero: "1",
     fechaEmision: "2026-08-05", total: 10, moneda: "PEN", cruda: {},
+    carSunat: null, estado: "1", tipoNota: null, modifica: null,
   });
 
   // Lo que pasó con el período 202608 antes de separar las dos identidades.
@@ -286,5 +287,67 @@ describe("revisarIdentidad", () => {
   test("sin filas no inventa un problema", () => {
     assert.equal(revisarIdentidad([], "20512201611").ok, true);
     assert.equal(revisarIdentidad([fila(null)], "20512201611").ok, true);
+  });
+});
+
+// Lo que hace falta para avisar «la factura que rendiste ya no vale».
+describe("notas de crédito y estado del comprobante", () => {
+  const cabecera = [
+    "Periodo", "CAR SUNAT", "RUC", "Apellidos y Nombres o Razón social",
+    "Fecha de emisión", "Tipo CP/Doc.", "Serie del CDP",
+    "Nro CP o Doc. Nro Inicial (Rango)", "Nro Doc Identidad",
+    "Apellidos Nombres/ Razón Social", "Total CP", "Moneda", "Tipo de Nota",
+    "Fecha Emisión Doc Modificado", "Tipo CP Modificado", "Serie CP Modificado",
+    "Nro CP Modificado", "Est. Comp.",
+  ].join(";");
+
+  const factura = [
+    "202608", "CAR-100", "20512201611", "INROPRIN", "05/08/2026", "01", "E001",
+    "500", "20100055237", "FERRETERIA EL SOL", "118.00", "PEN", "", "", "", "", "", "1",
+  ].join(";");
+
+  const nota = [
+    "202608", "CAR-200", "20512201611", "INROPRIN", "20/08/2026", "07", "E001",
+    "9", "20100055237", "FERRETERIA EL SOL", "-118.00", "PEN", "01",
+    "05/08/2026", "01", "E001", "00000500", "1",
+  ].join(";");
+
+  const r = leerPropuestaRce([cabecera, factura, nota].join("\n"));
+
+  test("una factura normal no dice que modifica nada", () => {
+    assert.equal(r.filas[0].modifica, null);
+    assert.equal(r.filas[0].tipoNota, null);
+  });
+
+  test("la nota de crédito apunta a la factura que corrige", () => {
+    const n = r.filas[1];
+    assert.equal(n.tipoComprobante, "07");
+    assert.deepEqual(n.modifica, {
+      tipo: "01", serie: "E001", numero: "500", fechaEmision: "2026-08-05",
+    });
+  });
+
+  // El número llega con ceros de un lado y sin ellos del otro: si no se
+  // normaliza, la nota nunca encuentra su factura.
+  test("el número de la factura modificada queda comparable con el de la factura", () => {
+    assert.equal(r.filas[1].modifica?.numero, r.filas[0].numero);
+  });
+
+  test("guarda el identificador que SUNAT le pone a cada comprobante", () => {
+    assert.equal(r.filas[0].carSunat, "CAR-100");
+    assert.equal(r.filas[1].carSunat, "CAR-200");
+  });
+
+  test("guarda el estado del comprobante", () => {
+    assert.equal(r.filas[0].estado, "1");
+  });
+
+  test("las columnas de la nota ya no se descartan como duplicadas", () => {
+    assert.deepEqual(r.duplicadas, []);
+    const campos = r.mapeo.map(m => m.campo);
+    for (const c of ["carSunat", "estado", "tipoNota", "modificaTipo",
+                     "modificaSerie", "modificaNumero", "modificaFecha"]) {
+      assert.ok(campos.includes(c as never), `falta ${c}`);
+    }
   });
 });

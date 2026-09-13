@@ -16,7 +16,10 @@ import { pedirExportacion, consultarTicket, bajarArchivo, type ArchivoDelTicket 
 import { validarPeriodo } from "@/lib/sunat/periodo";
 import { leerZip } from "@/lib/sunat/zip";
 import { leerPropuestaRce, revisarIdentidad, type LecturaRce } from "@/lib/sunat/rce";
-import { cruzar, type Cruce, type ComprobanteNuestro } from "@/lib/dominio/cruce";
+import {
+  cruzar, notasSobreLoRendido,
+  type Cruce, type ComprobanteNuestro, type ComprobanteSunat, type NotaSobreLoRendido,
+} from "@/lib/dominio/cruce";
 
 /**
  * Lo que hay que saber cuando la descarga falla.
@@ -50,6 +53,8 @@ export interface Resultado {
    * proveedor. Si aparece, los conteos no valen.
    */
   identidadSospechosa: string | null;
+  /** Notas de crédito o débito que caen sobre algo que alguien rindió. */
+  notas: NotaSobreLoRendido[];
 }
 
 /** Todo lo de aquí es de Administración del sistema. */
@@ -208,17 +213,20 @@ export async function traerYCruzar(
       proveedorNombre: g.proveedor_nombre,
     }));
 
+    const deSunat: ComprobanteSunat[] = filas.map(f => ({
+      ruc: f.ruc, tipoComprobante: f.tipoComprobante, serie: f.serie,
+      numero: f.numero, fechaEmision: f.fechaEmision, total: f.total,
+      razonSocial: f.razonSocial, modifica: f.modifica, estado: f.estado,
+    }));
+
     const resultado: Resultado = {
       periodo: p.periodo,
       archivo: reporte.nombre,
-      cruce: cruzar(nuestros, filas.map(f => ({
-        ruc: f.ruc, tipoComprobante: f.tipoComprobante, serie: f.serie,
-        numero: f.numero, fechaEmision: f.fechaEmision, total: f.total,
-        razonSocial: f.razonSocial,
-      }))),
+      cruce: cruzar(nuestros, deSunat),
       lectura,
       nuestros: nuestros.length,
       identidadSospechosa: identidad.ok ? null : identidad.motivo,
+      notas: notasSobreLoRendido(nuestros, deSunat),
     };
 
     // La constancia se deja después de tener el resultado, y su fallo no
