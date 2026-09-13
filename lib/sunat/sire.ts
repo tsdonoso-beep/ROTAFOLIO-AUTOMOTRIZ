@@ -148,3 +148,49 @@ export async function descargarPropuestaRce(
   const res3 = await pedir(urlArchivo(ticket.archivo.nombre, ticket.archivo.tipo), token, traer);
   return { ticket: numTicket, nombre: ticket.archivo.nombre, contenido: await res3.arrayBuffer() };
 }
+
+// ════════════════════════════════════════════════════════════════
+// Los tres pasos por separado
+//
+// `descargarPropuestaRce` espera hasta que el ticket termine, lo que sirve
+// desde un script pero no desde la aplicación: cada petición al servidor
+// tiene un minuto de vida y el ticket puede tardar más. Desde la pantalla se
+// llama a un paso por vez y es el navegador el que vuelve a preguntar.
+
+export interface OpcionesPaso {
+  fetch?: typeof globalThis.fetch;
+}
+
+/** Paso 1: encola la exportación y devuelve el número de ticket. */
+export async function pedirExportacion(
+  cred: CredencialesSunat, periodo: string, tipo: TipoArchivo = "csv", o: OpcionesPaso = {}
+): Promise<string> {
+  const traer = o.fetch ?? globalThis.fetch;
+  const { valor: token } = await obtenerToken(cred, { fetch: traer });
+  const res = await pedir(urlExportarPropuesta(periodo, tipo), token, traer);
+  const j = await res.json() as { numTicket?: string };
+  if (!j.numTicket) {
+    throw new Error(`SUNAT aceptó el pedido pero no devolvió ticket: ${JSON.stringify(j).slice(0, 300)}`);
+  }
+  return j.numTicket;
+}
+
+/** Paso 2: pregunta en qué va el ticket. Una sola vez, sin esperar. */
+export async function consultarTicket(
+  cred: CredencialesSunat, periodo: string, numTicket: string, o: OpcionesPaso = {}
+): Promise<Ticket | null> {
+  const traer = o.fetch ?? globalThis.fetch;
+  const { valor: token } = await obtenerToken(cred, { fetch: traer });
+  const res = await pedir(urlEstadoTicket(periodo, numTicket), token, traer);
+  return leerTicket(await res.json());
+}
+
+/** Paso 3: baja el archivo que dejó listo el ticket. */
+export async function bajarArchivo(
+  cred: CredencialesSunat, archivo: { nombre: string; tipo: string }, o: OpcionesPaso = {}
+): Promise<ArrayBuffer> {
+  const traer = o.fetch ?? globalThis.fetch;
+  const { valor: token } = await obtenerToken(cred, { fetch: traer });
+  const res = await pedir(urlArchivo(archivo.nombre, archivo.tipo), token, traer);
+  return res.arrayBuffer();
+}

@@ -5,6 +5,7 @@ import { autoriza } from "@/lib/dominio/permisos";
 import { Encabezado, Tarjeta } from "@/components/v2/Encabezado";
 import { IconoAtras } from "@/components/v2/Iconos";
 import PanelSunat from "@/components/v2/PanelSunat";
+import CruceSunat from "@/components/v2/CruceSunat";
 import { estadoDeCredenciales } from "@/app/acciones/sunat";
 
 export default async function CredencialesSunat() {
@@ -30,6 +31,14 @@ export default async function CredencialesSunat() {
       />
 
       <PanelSunat empresas={empresas} />
+
+      {/* El cruce solo se ofrece para las empresas que ya tienen sus cuatro
+          variables: sin credenciales el botón llevaría a un error seguro. */}
+      {empresas.filter(e => e.variables.every(v => v.puesta)).map(e => (
+        <div key={e.empresa} style={{ marginTop: 16 }}>
+          <CruceSunat empresa={e.empresa} />
+        </div>
+      ))}
 
       <Tarjeta style={{ marginTop: 16 }}>
         <p className="rotulo" style={{ marginBottom: 8 }}>Qué resuelve esto y qué no</p>

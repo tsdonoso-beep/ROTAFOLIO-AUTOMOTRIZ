@@ -1,0 +1,162 @@
+"use server";
+// Cruzar un período contra SUNAT, desde la pantalla
+//
+// SUNAT no contesta al momento: encola el pedido y devuelve un ticket. Y
+// cada petición a este servidor tiene un minuto de vida. Las dos cosas
+// juntas obligan a partirlo en pasos: la pantalla pide, pregunta, y cuando
+// el ticket está listo, baja y cruza. El número de ticket viaja al navegador
+// y vuelve, así no hace falta guardarlo en ningún lado.
+//
+// Nada de esto escribe en la base. Es una consulta: se mira y se cierra.
+
+import { solicitanteActual, clienteServidor } from "@/lib/supabase/servidor";
+import { autoriza } from "@/lib/dominio/permisos";
+import { credencialesDe, type CredencialesSunat } from "@/lib/sunat/credenciales";
+import { pedirExportacion, consultarTicket, bajarArchivo } from "@/lib/sunat/sire";
+import { validarPeriodo } from "@/lib/sunat/periodo";
+import { leerZip } from "@/lib/sunat/zip";
+import { leerPropuestaRce, type LecturaRce } from "@/lib/sunat/rce";
+import { cruzar, type Cruce, type ComprobanteNuestro } from "@/lib/dominio/cruce";
+
+export type Paso =
+  | { tipo: "error"; motivo: string }
+  | { tipo: "encolado"; ticket: string; periodo: string }
+  | { tipo: "esperando"; ticket: string; periodo: string; estado: string }
+  | { tipo: "listo"; ticket: string; periodo: string; archivo: { nombre: string; tipo: string } };
+
+export interface Resultado {
+  periodo: string;
+  archivo: string;
+  cruce: Cruce;
+  /** Qué columnas entendió del archivo de SUNAT y cuáles no. */
+  lectura: Omit<LecturaRce, "filas">;
+  /** Cuántos comprobantes nuestros del período entraron al cruce. */
+  nuestros: number;
+}
+
+/** Todo lo de aquí es de Administración del sistema. */
+async function credenciales(
+  abreviatura: string
+): Promise<{ ok: true; cred: CredencialesSunat } | { ok: false; motivo: string }> {
+  const solicitante = await solicitanteActual();
+  if (!solicitante) return { ok: false, motivo: "Sesión no válida." };
+  if (!autoriza(solicitante, "editar_catalogos").ok) {
+    return { ok: false, motivo: "Solo Administración del sistema puede consultar a SUNAT." };
+  }
+
+  const sb = await clienteServidor();
+  const { data: empresa } = await sb
+    .from("empresas").select("ruc, abreviatura").eq("abreviatura", abreviatura).single();
+  if (!empresa) return { ok: false, motivo: "Esa empresa no existe." };
+
+  const c = credencialesDe(empresa.abreviatura, empresa.ruc, process.env);
+  return c.ok ? { ok: true, cred: c.cred } : { ok: false, motivo: c.motivo };
+}
+
+function comoError(e: unknown): { tipo: "error"; motivo: string } {
+  return { tipo: "error", motivo: e instanceof Error ? e.message : String(e) };
+}
+
+/** Paso 1. Le pide a SUNAT que prepare el período. */
+export async function pedirPropuesta(abreviatura: string, periodo: string): Promise<Paso> {
+  const p = validarPeriodo(periodo, new Date());
+  if (!p.ok) return { tipo: "error", motivo: p.motivo };
+
+  const c = await credenciales(abreviatura);
+  if (!c.ok) return { tipo: "error", motivo: c.motivo };
+
+  try {
+    const ticket = await pedirExportacion(c.cred, p.periodo, "csv");
+    return { tipo: "encolado", ticket, periodo: p.periodo };
+  } catch (e) {
+    return comoError(e);
+  }
+}
+
+/** Paso 2. Pregunta una vez en qué va. La pantalla decide si vuelve a preguntar. */
+export async function verTicket(abreviatura: string, periodo: string, ticket: string): Promise<Paso> {
+  const c = await credenciales(abreviatura);
+  if (!c.ok) return { tipo: "error", motivo: c.motivo };
+
+  try {
+    const t = await consultarTicket(c.cred, periodo, ticket);
+    if (!t) return { tipo: "esperando", ticket, periodo, estado: "SUNAT todavía no sabe nada del ticket" };
+    if (t.fallado) return { tipo: "error", motivo: `SUNAT rechazó el proceso: ${t.descripcion}` };
+    if (t.terminado && t.archivo) return { tipo: "listo", ticket, periodo, archivo: t.archivo };
+    return { tipo: "esperando", ticket, periodo, estado: t.descripcion || t.estado || "en cola" };
+  } catch (e) {
+    return comoError(e);
+  }
+}
+
+/**
+ * Paso 3. Baja el archivo, lo lee y lo cruza contra lo nuestro.
+ *
+ * Se compara contra los comprobantes cuya fecha de emisión cae en el
+ * período, que es el criterio de SUNAT. No se filtra por estado: un gasto
+ * capturado y todavía sin presentar también cuenta como rendido, y dejarlo
+ * fuera lo haría aparecer como una factura que nadie reportó.
+ */
+export async function traerYCruzar(
+  abreviatura: string, periodo: string, archivo: { nombre: string; tipo: string }
+): Promise<{ tipo: "error"; motivo: string } | { tipo: "ok"; resultado: Resultado }> {
+  const c = await credenciales(abreviatura);
+  if (!c.ok) return { tipo: "error", motivo: c.motivo };
+
+  const p = validarPeriodo(periodo, new Date());
+  if (!p.ok) return { tipo: "error", motivo: p.motivo };
+
+  try {
+    const bruto = await bajarArchivo(c.cred, archivo);
+    const dentro = leerZip(bruto);
+    if (dentro.length === 0) {
+      return { tipo: "error", motivo: "El archivo de SUNAT vino vacío." };
+    }
+
+    // Si trae varios, el reporte es el más grande: los otros suelen ser
+    // avisos de una línea.
+    const reporte = dentro.reduce((a, b) => (b.contenido.length > a.contenido.length ? b : a));
+    const { filas, ...lectura } = leerPropuestaRce(reporte.contenido.toString("utf8"));
+
+    const desde = `${p.anio}-${String(p.mes).padStart(2, "0")}-01`;
+    const hasta = new Date(Date.UTC(p.anio, p.mes, 0)).toISOString().slice(0, 10);
+
+    const sb = await clienteServidor();
+    const { data: gastos, error } = await sb
+      .from("gastos")
+      .select("id, proveedor_ruc, proveedor_nombre, tipo_comprobante, serie, numero, fecha_emision, total")
+      .eq("clase", "COMPROBANTE")
+      .gte("fecha_emision", desde)
+      .lte("fecha_emision", hasta);
+
+    if (error) return { tipo: "error", motivo: `No se pudieron leer los gastos: ${error.message}` };
+
+    const nuestros: ComprobanteNuestro[] = (gastos ?? []).map(g => ({
+      id: g.id,
+      ruc: g.proveedor_ruc,
+      tipoComprobante: g.tipo_comprobante,
+      serie: g.serie,
+      numero: g.numero,
+      fechaEmision: g.fecha_emision,
+      total: g.total == null ? null : Number(g.total),
+      proveedorNombre: g.proveedor_nombre,
+    }));
+
+    return {
+      tipo: "ok",
+      resultado: {
+        periodo: p.periodo,
+        archivo: reporte.nombre,
+        cruce: cruzar(nuestros, filas.map(f => ({
+          ruc: f.ruc, tipoComprobante: f.tipoComprobante, serie: f.serie,
+          numero: f.numero, fechaEmision: f.fechaEmision, total: f.total,
+          razonSocial: f.razonSocial,
+        }))),
+        lectura,
+        nuestros: nuestros.length,
+      },
+    };
+  } catch (e) {
+    return comoError(e);
+  }
+}
