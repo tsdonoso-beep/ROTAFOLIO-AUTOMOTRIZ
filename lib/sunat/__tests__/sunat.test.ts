@@ -174,6 +174,12 @@ describe("rutas del SIRE", () => {
     assert.match(u, /codTipoArchivo=1/);
   });
 
+  // Sin esto SUNAT responde 422 con el código 1061, que dice que el campo
+  // está vacío pero no cuál es el valor que espera.
+  test("exportar declara el origen del envío, que es obligatorio", () => {
+    assert.match(urlExportarPropuesta("202607", "csv"), /codOrigenEnvio=2/);
+  });
+
   test("txt y csv tienen códigos distintos", () => {
     assert.match(urlExportarPropuesta("202607", "txt"), /codTipoArchivo=0/);
   });
@@ -184,8 +190,31 @@ describe("rutas del SIRE", () => {
     assert.match(u, /numTicket=20260000123/);
   });
 
+  test("el estado del ticket lleva el libro y el origen que exige el manual", () => {
+    const u = urlEstadoTicket("202607", "20260000123");
+    assert.match(u, /codLibro=080000/);
+    assert.match(u, /codOrigenEnvio=2/);
+  });
+
   test("el nombre del archivo se escapa", () => {
-    assert.match(urlArchivo("RCE 2026/07.zip", "1"), /nomArchivoReporte=RCE\+2026%2F07\.zip/);
+    const u = urlArchivo({
+      nombre: "RCE 2026/07.zip", tipo: "1", periodo: "202607",
+      codProceso: "1", numTicket: "20260000123",
+    });
+    assert.match(u, /nomArchivoReporte=RCE\+2026%2F07\.zip/);
+  });
+
+  // Los seis que exige el manual. El 422 solo nombró uno: los otros habrían
+  // aparecido de a uno, una vuelta cada uno.
+  test("bajar el archivo lleva los seis parámetros obligatorios", () => {
+    const u = urlArchivo({
+      nombre: "a.zip", tipo: "1", periodo: "202607",
+      codProceso: "1", numTicket: "20260000123",
+    });
+    for (const p of [
+      "nomArchivoReporte=a.zip", "codTipoArchivoReporte=1", "codLibro=080000",
+      "perTributario=202607", "codProceso=1", "numTicket=20260000123",
+    ]) assert.ok(u.includes(p), `falta ${p} en ${u}`);
   });
 });
 
@@ -193,15 +222,30 @@ describe("leerTicket", () => {
   const conArchivo = {
     registros: [{
       numTicket: "20260000123", codEstadoProceso: "06", desEstadoProceso: "Terminado",
+      perTributario: "202607", codProceso: "1",
       detalleTicket: [{ nomArchivoReporte: "LE20512201611.zip", codTipoArchivoReporte: "1" }],
     }],
   };
 
-  test("un ticket terminado trae su archivo", () => {
+  test("un ticket terminado trae todo lo que hace falta para bajarlo", () => {
     const t = leerTicket(conArchivo)!;
     assert.equal(t.terminado, true);
     assert.equal(t.fallado, false);
-    assert.deepEqual(t.archivo, { nombre: "LE20512201611.zip", tipo: "1" });
+    assert.deepEqual(t.archivo, {
+      nombre: "LE20512201611.zip", tipo: "1",
+      periodo: "202607", codProceso: "1", numTicket: "20260000123",
+    });
+  });
+
+  test("también lee el nombre cuando viene en archivoReporte", () => {
+    const t = leerTicket({
+      registros: [{
+        numTicket: "20260000124", desEstadoProceso: "Terminado", perTributario: "202607",
+        codProceso: "1",
+        archivoReporte: [{ nomArchivoReporte: "otro.zip", codTipoArchivoReporte: "1" }],
+      }],
+    })!;
+    assert.equal(t.archivo?.nombre, "otro.zip");
   });
 
   test("sin archivo todavía no está terminado", () => {

@@ -25,33 +25,73 @@ const MASIVO = `${BASE}/rvierce/gestionprocesosmasivos/web/masivo`;
 export type TipoArchivo = "txt" | "csv";
 const CODIGO_ARCHIVO: Record<TipoArchivo, string> = { txt: "0", csv: "1" };
 
+/** Código del RCE en el catálogo de libros de SUNAT. */
+const LIBRO_RCE = "080000";
+
+/**
+ * Origen del pedido. El manual lo llama «2 Servicio API» y lo marca
+ * obligatorio en los tres servicios. Sin él, SUNAT responde 422 con el
+ * código 1061 y no dice cuál es el valor que espera.
+ */
+const ORIGEN_API = "2";
+
+/**
+ * Lo que hace falta para bajar el archivo de un ticket.
+ *
+ * No basta el nombre: `archivoreporte` exige además el período, el proceso y
+ * el ticket, y todos salen de la misma respuesta que dio el nombre. Van
+ * juntos en un objeto para que no se pueda intentar la descarga con la mitad
+ * de los datos.
+ */
+export interface ArchivoDelTicket {
+  nombre: string;
+  tipo: string;
+  periodo: string;
+  codProceso: string;
+  numTicket: string;
+}
+
 export interface Ticket {
   numTicket: string;
   estado: string;
   descripcion: string;
   terminado: boolean;
   fallado: boolean;
-  archivo: { nombre: string; tipo: string } | null;
+  archivo: ArchivoDelTicket | null;
 }
 
 // ════════════════════════════════════════════════════════════════
 // Las partes que se pueden razonar sin red
 
 export function urlExportarPropuesta(periodo: string, tipo: TipoArchivo = "csv"): string {
-  return `${BASE}/rce/propuesta/web/propuesta/${periodo}/exportacioncomprobantepropuesta`
-    + `?codTipoArchivo=${CODIGO_ARCHIVO[tipo]}`;
+  // El manual marca numSerieCDP y numCDP como obligatorios, pero los
+  // describe como filtros para hallar UN comprobante. Mandarlos vacíos
+  // arriesga que SUNAT filtre por nada y devuelva un archivo vacío, que es
+  // peor que un error. No se mandan; si algún día hicieran falta, el 422
+  // los nombrará.
+  const q = new URLSearchParams({
+    codTipoArchivo: CODIGO_ARCHIVO[tipo],
+    codOrigenEnvio: ORIGEN_API,
+  });
+  return `${BASE}/rce/propuesta/web/propuesta/${periodo}/exportacioncomprobantepropuesta?${q}`;
 }
 
 export function urlEstadoTicket(periodo: string, numTicket: string): string {
   const q = new URLSearchParams({
     perIni: periodo, perFin: periodo, page: "1", perPage: "20", numTicket,
+    codLibro: LIBRO_RCE, codOrigenEnvio: ORIGEN_API,
   });
   return `${MASIVO}/consultaestadotickets?${q}`;
 }
 
-export function urlArchivo(nombre: string, tipo: string): string {
+export function urlArchivo(a: ArchivoDelTicket): string {
   const q = new URLSearchParams({
-    nomArchivoReporte: nombre, codTipoArchivoReporte: tipo,
+    nomArchivoReporte: a.nombre,
+    codTipoArchivoReporte: a.tipo,
+    codLibro: LIBRO_RCE,
+    perTributario: a.periodo,
+    codProceso: a.codProceso,
+    numTicket: a.numTicket,
   });
   return `${MASIVO}/archivoreporte?${q}`;
 }
@@ -70,22 +110,32 @@ export function leerTicket(cuerpo: unknown): Ticket | null {
   if (!r) return null;
 
   const detalle = (r.detalleTicket as Record<string, unknown>[] | undefined)?.[0] ?? {};
-  const nombre = (detalle.nomArchivoReporte ?? r.nomArchivoReporte) as string | undefined;
-  // El manual avisa: si codTipoArchivoReporte viene nulo, se repite el
-  // mismo valor que se pidió al exportar.
-  const tipo = (detalle.codTipoArchivoReporte ?? r.codTipoArchivoReporte ?? null) as string | null;
+  // El nombre puede venir en el detalle o en un arreglo `archivoReporte`,
+  // según el servicio que generó el ticket.
+  const reporte = (r.archivoReporte as Record<string, unknown>[] | undefined)?.[0] ?? {};
+  const nombre = (detalle.nomArchivoReporte ?? reporte.nomArchivoReporte ?? r.nomArchivoReporte) as string | undefined;
+  // El manual avisa: si codTipoArchivoReporte viene nulo, hay que mandar el
+  // mismo valor nulo. Se manda vacío, que es como se representa en una URL.
+  // Es lo único de estas rutas que no está verificado contra el servicio.
+  const tipo = (detalle.codTipoArchivoReporte ?? reporte.codTipoArchivoReporte
+    ?? r.codTipoArchivoReporte ?? null) as string | null;
 
   const estado = String(r.codEstadoProceso ?? "");
   const desc = String(r.desEstadoProceso ?? "");
   const texto = desc.toLowerCase();
+  const numTicket = String(r.numTicket ?? detalle.numTicket ?? "");
+  const periodo = String(r.perTributario ?? "");
+  const codProceso = String(r.codProceso ?? "");
 
   return {
-    numTicket: String(r.numTicket ?? ""),
+    numTicket,
     estado,
     descripcion: desc,
     terminado: !!nombre,
     fallado: /error|rechaz|fall/.test(texto),
-    archivo: nombre ? { nombre, tipo: tipo ?? "" } : null,
+    archivo: nombre
+      ? { nombre, tipo: tipo ?? "", periodo, codProceso, numTicket }
+      : null,
   };
 }
 
@@ -145,7 +195,7 @@ export async function descargarPropuestaRce(
   }
 
   avisar(`bajando ${ticket.archivo.nombre}`);
-  const res3 = await pedir(urlArchivo(ticket.archivo.nombre, ticket.archivo.tipo), token, traer);
+  const res3 = await pedir(urlArchivo(ticket.archivo), token, traer);
   return { ticket: numTicket, nombre: ticket.archivo.nombre, contenido: await res3.arrayBuffer() };
 }
 
@@ -187,10 +237,10 @@ export async function consultarTicket(
 
 /** Paso 3: baja el archivo que dejó listo el ticket. */
 export async function bajarArchivo(
-  cred: CredencialesSunat, archivo: { nombre: string; tipo: string }, o: OpcionesPaso = {}
+  cred: CredencialesSunat, archivo: ArchivoDelTicket, o: OpcionesPaso = {}
 ): Promise<ArrayBuffer> {
   const traer = o.fetch ?? globalThis.fetch;
   const { valor: token } = await obtenerToken(cred, { fetch: traer });
-  const res = await pedir(urlArchivo(archivo.nombre, archivo.tipo), token, traer);
+  const res = await pedir(urlArchivo(archivo), token, traer);
   return res.arrayBuffer();
 }

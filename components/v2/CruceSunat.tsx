@@ -4,6 +4,7 @@ import { Aviso, Tarjeta, Cifra, soles } from "./Encabezado";
 import { IconoAlerta, IconoDescargar, IconoReloj } from "./Iconos";
 import { pedirPropuesta, verTicket, traerYCruzar, type Resultado } from "@/app/acciones/cruce-sunat";
 import type { Emparejado } from "@/lib/dominio/cruce";
+import type { ArchivoDelTicket } from "@/lib/sunat/sire";
 
 /** El período anterior al actual, que es el último que ya está cerrado. */
 function periodoSugerido(): string {
@@ -45,7 +46,7 @@ export default function CruceSunat({ empresa }: { empresa: string }) {
       setPaso(`en cola con el ticket ${p.ticket}…`);
 
       const hasta = Date.now() + LIMITE_MS;
-      let archivo: { nombre: string; tipo: string } | null = null;
+      let archivo: ArchivoDelTicket | null = null;
 
       while (Date.now() < hasta) {
         await new Promise(r => setTimeout(r, CADA_MS));

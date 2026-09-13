@@ -12,7 +12,7 @@
 import { solicitanteActual, clienteServidor } from "@/lib/supabase/servidor";
 import { autoriza } from "@/lib/dominio/permisos";
 import { credencialesDe, type CredencialesSunat } from "@/lib/sunat/credenciales";
-import { pedirExportacion, consultarTicket, bajarArchivo } from "@/lib/sunat/sire";
+import { pedirExportacion, consultarTicket, bajarArchivo, type ArchivoDelTicket } from "@/lib/sunat/sire";
 import { validarPeriodo } from "@/lib/sunat/periodo";
 import { leerZip } from "@/lib/sunat/zip";
 import { leerPropuestaRce, type LecturaRce } from "@/lib/sunat/rce";
@@ -22,7 +22,7 @@ export type Paso =
   | { tipo: "error"; motivo: string }
   | { tipo: "encolado"; ticket: string; periodo: string }
   | { tipo: "esperando"; ticket: string; periodo: string; estado: string }
-  | { tipo: "listo"; ticket: string; periodo: string; archivo: { nombre: string; tipo: string } };
+  | { tipo: "listo"; ticket: string; periodo: string; archivo: ArchivoDelTicket };
 
 export interface Resultado {
   periodo: string;
@@ -82,7 +82,19 @@ export async function verTicket(abreviatura: string, periodo: string, ticket: st
     const t = await consultarTicket(c.cred, periodo, ticket);
     if (!t) return { tipo: "esperando", ticket, periodo, estado: "SUNAT todavía no sabe nada del ticket" };
     if (t.fallado) return { tipo: "error", motivo: `SUNAT rechazó el proceso: ${t.descripcion}` };
-    if (t.terminado && t.archivo) return { tipo: "listo", ticket, periodo, archivo: t.archivo };
+    if (t.terminado && t.archivo) {
+      // Si SUNAT no repitió el período o el ticket en la respuesta, se usan
+      // los que ya conocemos: `archivoreporte` los exige y descubrir que
+      // faltan recién al bajar costaría otra vuelta completa.
+      return {
+        tipo: "listo", ticket, periodo,
+        archivo: {
+          ...t.archivo,
+          periodo: t.archivo.periodo || periodo,
+          numTicket: t.archivo.numTicket || ticket,
+        },
+      };
+    }
     return { tipo: "esperando", ticket, periodo, estado: t.descripcion || t.estado || "en cola" };
   } catch (e) {
     return comoError(e);
@@ -98,7 +110,7 @@ export async function verTicket(abreviatura: string, periodo: string, ticket: st
  * fuera lo haría aparecer como una factura que nadie reportó.
  */
 export async function traerYCruzar(
-  abreviatura: string, periodo: string, archivo: { nombre: string; tipo: string }
+  abreviatura: string, periodo: string, archivo: ArchivoDelTicket
 ): Promise<{ tipo: "error"; motivo: string } | { tipo: "ok"; resultado: Resultado }> {
   const c = await credenciales(abreviatura);
   if (!c.ok) return { tipo: "error", motivo: c.motivo };
