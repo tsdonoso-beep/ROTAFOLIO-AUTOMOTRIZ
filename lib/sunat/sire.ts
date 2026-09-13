@@ -113,21 +113,46 @@ export function urlArchivo(a: ArchivoDelTicket): string {
  * documentados, así que se decide por lo que SÍ es seguro: hay archivo
  * generado o no lo hay, y el texto del estado dice si terminó o falló.
  */
+/**
+ * SUNAT manda unas veces un objeto y otras un arreglo de un elemento para lo
+ * mismo. `detalleTicket` llega como objeto en la propuesta del RCE y como
+ * arreglo en otros servicios; leerlo de una sola forma devuelve vacío sin
+ * avisar.
+ */
+function primero(v: unknown): Record<string, unknown> {
+  if (Array.isArray(v)) return (v[0] ?? {}) as Record<string, unknown>;
+  if (v && typeof v === "object") return v as Record<string, unknown>;
+  return {};
+}
+
+/**
+ * El código de tipo de archivo, que SUNAT escribe mal.
+ *
+ * En la respuesta el campo se llama `codTipoAchivoReporte`, sin la erre de
+ * «Archivo», aunque el parámetro de la URL sí lleva el nombre completo. El
+ * manual usa las dos grafías en páginas distintas. Buscando solo la correcta
+ * el valor salía nulo, se mandaba vacío y `archivoreporte` respondía HTTP
+ * 500 con una página de error que no decía por qué.
+ *
+ * Se aceptan las dos por si alguna vez lo corrigen.
+ */
+function tipoDeArchivo(o: Record<string, unknown>): string | null {
+  const v = o.codTipoAchivoReporte ?? o.codTipoArchivoReporte;
+  return v == null || v === "" ? null : String(v);
+}
+
 export function leerTicket(cuerpo: unknown): Ticket | null {
   const raiz = cuerpo as { registros?: unknown[] } | null;
   const r = (raiz?.registros?.[0] ?? null) as Record<string, unknown> | null;
   if (!r) return null;
 
-  const detalle = (r.detalleTicket as Record<string, unknown>[] | undefined)?.[0] ?? {};
-  // El nombre puede venir en el detalle o en un arreglo `archivoReporte`,
-  // según el servicio que generó el ticket.
-  const reporte = (r.archivoReporte as Record<string, unknown>[] | undefined)?.[0] ?? {};
-  const nombre = (detalle.nomArchivoReporte ?? reporte.nomArchivoReporte ?? r.nomArchivoReporte) as string | undefined;
-  // El manual avisa: si codTipoArchivoReporte viene nulo, hay que mandar el
-  // mismo valor nulo. Se manda vacío, que es como se representa en una URL.
-  // Es lo único de estas rutas que no está verificado contra el servicio.
-  const tipo = (detalle.codTipoArchivoReporte ?? reporte.codTipoArchivoReporte
-    ?? r.codTipoArchivoReporte ?? null) as string | null;
+  const detalle = primero(r.detalleTicket);
+  // El nombre puede venir en el detalle o en `archivoReporte`, según el
+  // servicio que generó el ticket. En la propuesta del RCE el detalle lo
+  // trae en null y el bueno está en archivoReporte.
+  const reporte = primero(r.archivoReporte);
+  const nombre = (reporte.nomArchivoReporte ?? detalle.nomArchivoReporte ?? r.nomArchivoReporte) as string | undefined;
+  const tipo = tipoDeArchivo(reporte) ?? tipoDeArchivo(detalle) ?? tipoDeArchivo(r);
 
   const estado = String(r.codEstadoProceso ?? "");
   const desc = String(r.desEstadoProceso ?? "");

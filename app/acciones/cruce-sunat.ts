@@ -148,6 +148,22 @@ export async function traerYCruzar(
     ticket: ticketCrudo,
   };
 
+  // SUNAT responde a un campo vacío con HTTP 500 y una página de error que no
+  // dice cuál. Ya pasó una vez —el tipo de archivo salía vacío porque SUNAT
+  // lo escribe sin la erre— y costó dos vueltas averiguarlo. Se comprueba
+  // antes de gastar la llamada, para que el mensaje nombre el campo.
+  const enBlanco = Object.entries(diagnostico.enviado)
+    .filter(([, v]) => v === "(vacío)")
+    .map(([k]) => k);
+  if (enBlanco.length) {
+    return {
+      tipo: "error",
+      motivo: `No se puede pedir el archivo: ${enBlanco.join(", ")} vendría vacío. `
+        + "SUNAT no aceptó el ticket con ese campo en blanco.",
+      diagnostico,
+    };
+  }
+
   try {
     const bruto = await bajarArchivo(c.cred, archivo);
     const dentro = leerZip(bruto);

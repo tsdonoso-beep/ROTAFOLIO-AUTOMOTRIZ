@@ -4,6 +4,7 @@ import { periodoCerradoAnterior, periodoDe, validarPeriodo } from "../periodo.ts
 import { credencialesDe, usuarioSol } from "../credenciales.ts";
 import { cuerpoDeToken, olvidarToken, obtenerToken, urlDeToken, vigencia, vigente } from "../token.ts";
 import { leerTicket, resumirFallo, urlArchivo, urlEstadoTicket, urlExportarPropuesta } from "../sire.ts";
+import { TICKET_PROPUESTA_RCE } from "./fixtures/ticket-real.ts";
 
 const HOY = new Date("2026-09-11T00:00:00Z");
 const CRED = {
@@ -300,5 +301,54 @@ describe("resumirFallo", () => {
 
   test("un texto suelto se recorta", () => {
     assert.equal(resumirFallo("algo salió mal"), "algo salió mal");
+  });
+});
+
+// Lo que de verdad devolvió SUNAT. Los ejemplos inventados daban todos en
+// verde mientras la descarga fallaba en producción.
+describe("leerTicket con la respuesta real del SIRE", () => {
+  const t = leerTicket({ registros: [TICKET_PROPUESTA_RCE] })!;
+
+  test("reconoce que terminó", () => {
+    assert.equal(t.terminado, true);
+    assert.equal(t.fallado, false);
+    assert.equal(t.descripcion, "Terminado");
+  });
+
+  test("saca el nombre de archivoReporte, porque el detalle lo trae en null", () => {
+    assert.equal(t.archivo?.nombre, "20512201611-20260912-212509-propuesta.zip");
+  });
+
+  // El fallo que costó dos vueltas: SUNAT escribe el campo sin la erre de
+  // «Archivo», así que buscando la grafía correcta salía vacío.
+  test("lee el tipo aunque SUNAT lo escriba «codTipoAchivoReporte»", () => {
+    assert.equal(t.archivo?.tipo, "00");
+  });
+
+  test("el tipo nunca debe viajar vacío: con vacío SUNAT responde 500", () => {
+    assert.notEqual(t.archivo?.tipo, "");
+  });
+
+  test("trae período, proceso y ticket, que la descarga también exige", () => {
+    assert.equal(t.archivo?.periodo, "202608");
+    assert.equal(t.archivo?.codProceso, "10");
+    assert.equal(t.archivo?.numTicket, "20260300000112");
+  });
+
+  test("la URL de descarga queda completa, sin ningún campo en blanco", () => {
+    const u = new URL(urlArchivo(t.archivo!));
+    for (const [k, v] of u.searchParams) {
+      assert.notEqual(v, "", `${k} viajaría vacío`);
+    }
+    assert.equal(u.searchParams.get("codTipoArchivoReporte"), "00");
+    assert.equal(u.searchParams.get("codProceso"), "10");
+  });
+
+  test("detalleTicket puede venir como objeto o como arreglo", () => {
+    const comoArreglo = leerTicket({
+      registros: [{ ...TICKET_PROPUESTA_RCE, detalleTicket: [TICKET_PROPUESTA_RCE.detalleTicket] }],
+    })!;
+    assert.equal(comoArreglo.archivo?.nombre, t.archivo?.nombre);
+    assert.equal(comoArreglo.archivo?.tipo, "00");
   });
 });
