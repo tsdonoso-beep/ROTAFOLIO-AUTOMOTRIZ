@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { periodoCerradoAnterior, periodoDe, validarPeriodo } from "../periodo.ts";
 import { credencialesDe, usuarioSol } from "../credenciales.ts";
 import { cuerpoDeToken, olvidarToken, obtenerToken, urlDeToken, vigencia, vigente } from "../token.ts";
-import { leerTicket, urlArchivo, urlEstadoTicket, urlExportarPropuesta } from "../sire.ts";
+import { leerTicket, resumirFallo, urlArchivo, urlEstadoTicket, urlExportarPropuesta } from "../sire.ts";
 
 const HOY = new Date("2026-09-11T00:00:00Z");
 const CRED = {
@@ -270,5 +270,35 @@ describe("leerTicket", () => {
     assert.equal(leerTicket({ registros: [] }), null);
     assert.equal(leerTicket(null), null);
     assert.equal(leerTicket({}), null);
+  });
+});
+
+describe("resumirFallo", () => {
+  test("de un JSON deja el cuerpo, que trae el código del campo", () => {
+    const j = `{"cod":422,"errors":[{"cod":1061,"msg":"El campo codOrigenEnvio es nulo o vacio."}]}`;
+    assert.match(resumirFallo(j), /1061/);
+  });
+
+  // La página de error de SUNAT trae el agente de monitoreo incrustado y
+  // ocupa miles de caracteres. Volcarla entera tapa el dato útil.
+  test("de la página de error de SUNAT deja solo el título", () => {
+    const html = '<html> <head> <title>Error 500 Request failed.</title> '
+      + '<script type="text/javascript" src="/ruxitagentjs_ICA7NVfqrux_103432607.js" '
+      + 'data-dtconfig="rid=RID_-800991767|rpid=-1277069840|domain=sunat.gob.pe"></script>'
+      + '</head><body>' + "x".repeat(4000) + '</body></html>';
+    const r = resumirFallo(html);
+    assert.match(r, /Error 500 Request failed\./);
+    assert.match(r, /página de error/);
+    assert.ok(r.length < 200, `quedó largo: ${r.length}`);
+    assert.ok(!r.includes("ruxitagentjs"));
+  });
+
+  test("un cuerpo vacío se dice, no se calla", () => {
+    assert.equal(resumirFallo(""), "(sin cuerpo)");
+    assert.equal(resumirFallo("   "), "(sin cuerpo)");
+  });
+
+  test("un texto suelto se recorta", () => {
+    assert.equal(resumirFallo("algo salió mal"), "algo salió mal");
   });
 });

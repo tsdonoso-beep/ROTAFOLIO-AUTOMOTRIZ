@@ -58,6 +58,15 @@ export interface Ticket {
   terminado: boolean;
   fallado: boolean;
   archivo: ArchivoDelTicket | null;
+  /**
+   * El registro tal como lo mandó SUNAT.
+   *
+   * Se guarda porque `archivoreporte` exige cuatro campos que salen de aquí,
+   * y cuando falla devuelve un HTML de error que no dice cuál está mal. Sin
+   * esto, la única manera de averiguarlo sería probar combinaciones contra
+   * el servicio de producción.
+   */
+  crudo: Record<string, unknown>;
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -136,16 +145,33 @@ export function leerTicket(cuerpo: unknown): Ticket | null {
     archivo: nombre
       ? { nombre, tipo: tipo ?? "", periodo, codProceso, numTicket }
       : null,
+    crudo: r,
   };
 }
 
 // ════════════════════════════════════════════════════════════════
 
+/**
+ * Resume el cuerpo de un error de SUNAT.
+ *
+ * Cuando algo revienta del lado de ellos no devuelven JSON sino la página de
+ * error del portal, con el agente de monitoreo incrustado. Volcarla entera
+ * en el mensaje tapa el dato útil, así que del HTML se rescata solo el
+ * título y del JSON se deja todo, que ahí sí viene el código del campo.
+ */
+export function resumirFallo(cuerpo: string): string {
+  const t = cuerpo.trim();
+  if (!t) return "(sin cuerpo)";
+  if (t.startsWith("{") || t.startsWith("[")) return t.slice(0, 500);
+  const titulo = /<title>([^<]*)<\/title>/i.exec(t)?.[1]?.trim();
+  return titulo ? `${titulo} (SUNAT devolvió una página de error, no una respuesta)` : t.slice(0, 200);
+}
+
 async function pedir(url: string, token: string, traer: typeof globalThis.fetch) {
   const res = await traer(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) {
     const d = await res.text().catch(() => "");
-    throw new Error(`SUNAT respondió HTTP ${res.status} en ${new URL(url).pathname}. ${d.slice(0, 400)}`);
+    throw new Error(`SUNAT respondió HTTP ${res.status} en ${new URL(url).pathname}. ${resumirFallo(d)}`);
   }
   return res;
 }

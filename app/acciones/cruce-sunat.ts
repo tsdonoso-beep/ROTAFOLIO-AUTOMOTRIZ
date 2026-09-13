@@ -18,11 +18,24 @@ import { leerZip } from "@/lib/sunat/zip";
 import { leerPropuestaRce, type LecturaRce } from "@/lib/sunat/rce";
 import { cruzar, type Cruce, type ComprobanteNuestro } from "@/lib/dominio/cruce";
 
+/**
+ * Lo que hay que saber cuando la descarga falla.
+ *
+ * SUNAT contesta el fallo de `archivoreporte` con la página de error del
+ * portal, sin decir qué campo la rompió. Esto viaja a la pantalla para que
+ * se vea qué se mandó y qué había devuelto el ticket, en vez de tener que
+ * probar combinaciones contra el servicio de producción.
+ */
+export interface Diagnostico {
+  enviado: Record<string, string>;
+  ticket: Record<string, unknown>;
+}
+
 export type Paso =
-  | { tipo: "error"; motivo: string }
+  | { tipo: "error"; motivo: string; diagnostico?: Diagnostico }
   | { tipo: "encolado"; ticket: string; periodo: string }
   | { tipo: "esperando"; ticket: string; periodo: string; estado: string }
-  | { tipo: "listo"; ticket: string; periodo: string; archivo: ArchivoDelTicket };
+  | { tipo: "listo"; ticket: string; periodo: string; archivo: ArchivoDelTicket; ticketCrudo: Record<string, unknown> };
 
 export interface Resultado {
   periodo: string;
@@ -93,6 +106,7 @@ export async function verTicket(abreviatura: string, periodo: string, ticket: st
           periodo: t.archivo.periodo || periodo,
           numTicket: t.archivo.numTicket || ticket,
         },
+        ticketCrudo: t.crudo,
       };
     }
     return { tipo: "esperando", ticket, periodo, estado: t.descripcion || t.estado || "en cola" };
@@ -110,13 +124,29 @@ export async function verTicket(abreviatura: string, periodo: string, ticket: st
  * fuera lo haría aparecer como una factura que nadie reportó.
  */
 export async function traerYCruzar(
-  abreviatura: string, periodo: string, archivo: ArchivoDelTicket
-): Promise<{ tipo: "error"; motivo: string } | { tipo: "ok"; resultado: Resultado }> {
+  abreviatura: string, periodo: string, archivo: ArchivoDelTicket,
+  ticketCrudo: Record<string, unknown> = {}
+): Promise<
+  | { tipo: "error"; motivo: string; diagnostico?: Diagnostico }
+  | { tipo: "ok"; resultado: Resultado }
+> {
   const c = await credenciales(abreviatura);
   if (!c.ok) return { tipo: "error", motivo: c.motivo };
 
   const p = validarPeriodo(periodo, new Date());
   if (!p.ok) return { tipo: "error", motivo: p.motivo };
+
+  const diagnostico: Diagnostico = {
+    enviado: {
+      nomArchivoReporte: archivo.nombre,
+      codTipoArchivoReporte: archivo.tipo === "" ? "(vacío)" : archivo.tipo,
+      perTributario: archivo.periodo === "" ? "(vacío)" : archivo.periodo,
+      codProceso: archivo.codProceso === "" ? "(vacío)" : archivo.codProceso,
+      numTicket: archivo.numTicket === "" ? "(vacío)" : archivo.numTicket,
+      codLibro: "080000",
+    },
+    ticket: ticketCrudo,
+  };
 
   try {
     const bruto = await bajarArchivo(c.cred, archivo);
@@ -169,6 +199,6 @@ export async function traerYCruzar(
       },
     };
   } catch (e) {
-    return comoError(e);
+    return { ...comoError(e), diagnostico };
   }
 }

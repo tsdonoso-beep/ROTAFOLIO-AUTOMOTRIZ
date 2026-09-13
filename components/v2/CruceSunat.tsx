@@ -2,9 +2,11 @@
 import { useRef, useState } from "react";
 import { Aviso, Tarjeta, Cifra, soles } from "./Encabezado";
 import { IconoAlerta, IconoDescargar, IconoReloj } from "./Iconos";
-import { pedirPropuesta, verTicket, traerYCruzar, type Resultado } from "@/app/acciones/cruce-sunat";
+import { pedirPropuesta, verTicket, traerYCruzar, type Resultado, type Diagnostico } from "@/app/acciones/cruce-sunat";
 import type { Emparejado } from "@/lib/dominio/cruce";
 import type { ArchivoDelTicket } from "@/lib/sunat/sire";
+
+type DiagnosticoTipo = Diagnostico;
 
 /** El período anterior al actual, que es el último que ya está cerrado. */
 function periodoSugerido(): string {
@@ -28,6 +30,7 @@ export default function CruceSunat({ empresa }: { empresa: string }) {
   const [periodo, setPeriodo] = useState(periodoSugerido());
   const [paso, setPaso] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [diag, setDiag] = useState<Diagnostico | null>(null);
   const [res, setRes] = useState<Resultado | null>(null);
   const corriendo = useRef(false);
 
@@ -36,7 +39,7 @@ export default function CruceSunat({ empresa }: { empresa: string }) {
   async function correr() {
     if (corriendo.current) return;
     corriendo.current = true;
-    setError(null); setRes(null); setPaso("pidiéndole el período a SUNAT…");
+    setError(null); setDiag(null); setRes(null); setPaso("pidiéndole el período a SUNAT…");
 
     try {
       const p = await pedirPropuesta(empresa, periodo);
@@ -47,12 +50,13 @@ export default function CruceSunat({ empresa }: { empresa: string }) {
 
       const hasta = Date.now() + LIMITE_MS;
       let archivo: ArchivoDelTicket | null = null;
+      let crudo: Record<string, unknown> = {};
 
       while (Date.now() < hasta) {
         await new Promise(r => setTimeout(r, CADA_MS));
         const t = await verTicket(empresa, p.periodo, p.ticket);
         if (t.tipo === "error") { setError(t.motivo); return; }
-        if (t.tipo === "listo") { archivo = t.archivo; break; }
+        if (t.tipo === "listo") { archivo = t.archivo; crudo = t.ticketCrudo; break; }
         if (t.tipo === "esperando") setPaso(`${t.estado}…`);
       }
 
@@ -62,8 +66,12 @@ export default function CruceSunat({ empresa }: { empresa: string }) {
       }
 
       setPaso("bajando el archivo y cruzando…");
-      const fin = await traerYCruzar(empresa, p.periodo, archivo);
-      if (fin.tipo === "error") { setError(fin.motivo); return; }
+      const fin = await traerYCruzar(empresa, p.periodo, archivo, crudo);
+      if (fin.tipo === "error") {
+        setError(fin.motivo);
+        setDiag(fin.diagnostico ?? null);
+        return;
+      }
       setRes(fin.resultado);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -115,6 +123,8 @@ export default function CruceSunat({ empresa }: { empresa: string }) {
       {error && !paso && (
         <Aviso tono="error" icono={<IconoAlerta size={16} />}>{error}</Aviso>
       )}
+
+      {diag && !paso && <Diagnostico diag={diag} />}
 
       {res && !paso && <Informe res={res} />}
     </Tarjeta>
@@ -322,5 +332,47 @@ function Procedencia({ res }: { res: Resultado }) {
         )}
       </div>
     </details>
+  );
+}
+
+/**
+ * Qué se le mandó a SUNAT y qué había dicho el ticket.
+ *
+ * Aparece solo cuando la descarga falla. SUNAT contesta ese fallo con la
+ * página de error de su portal, sin nombrar el campo que la rompió, así que
+ * sin esto la única salida sería probar combinaciones contra producción.
+ */
+function Diagnostico({ diag }: { diag: DiagnosticoTipo }) {
+  return (
+    <div style={{ marginTop: 12 }}>
+      <p className="rotulo" style={{ marginBottom: 7 }}>Qué se le mandó a SUNAT</p>
+      <div style={{ overflowX: "auto", marginBottom: 12 }}>
+        <table style={{ borderCollapse: "collapse", fontSize: 11.5, width: "100%" }}>
+          <tbody>
+            {Object.entries(diag.enviado).map(([k, v]) => (
+              <tr key={k} style={{ borderBottom: "1px solid var(--borde)" }}>
+                <td className="mono" style={{ padding: "5px 12px 5px 0", color: "var(--text3)", whiteSpace: "nowrap" }}>{k}</td>
+                <td className="mono" style={{
+                  padding: "5px 0", wordBreak: "break-all",
+                  color: v === "(vacío)" ? "var(--warn)" : "var(--text)",
+                }}>{v}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="rotulo" style={{ marginBottom: 7 }}>Lo que SUNAT devolvió del ticket</p>
+      <pre className="mono" style={{
+        fontSize: 10.5, lineHeight: 1.5, color: "var(--text3)", margin: 0,
+        padding: 11, borderRadius: "var(--radio-s)", background: "var(--fondo2, var(--borde))",
+        overflowX: "auto", whiteSpace: "pre-wrap", wordBreak: "break-word",
+        maxHeight: 320, overflowY: "auto",
+      }}>{JSON.stringify(diag.ticket, null, 2)}</pre>
+      <p style={{ marginTop: 7, fontSize: 11, color: "var(--text3)", lineHeight: 1.45 }}>
+        Copia esto tal cual: con estos dos bloques se ubica el campo en el manual
+        del SIRE sin tener que adivinar.
+      </p>
+    </div>
   );
 }
