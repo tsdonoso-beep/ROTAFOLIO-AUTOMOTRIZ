@@ -55,6 +55,8 @@ export interface Resultado {
   identidadSospechosa: string | null;
   /** Notas de crédito o débito que caen sobre algo que alguien rindió. */
   notas: NotaSobreLoRendido[];
+  /** Qué dejó esta consulta en el archivo histórico. */
+  guardado: { nuevos: number; cambiados: number } | null;
 }
 
 /** Todo lo de aquí es de Administración del sistema. */
@@ -227,7 +229,24 @@ export async function traerYCruzar(
       nuestros: nuestros.length,
       identidadSospechosa: identidad.ok ? null : identidad.motivo,
       notas: notasSobreLoRendido(nuestros, deSunat),
+      guardado: null,
     };
+
+    // Se guardan los comprobantes antes de anotar la consulta, porque el
+    // conteo de cambios es parte de lo que se anota. Un fallo acá no tumba el
+    // informe: la consulta ya se hizo y lo caro fue llamar a SUNAT.
+    let guardado: Resultado["guardado"] = null;
+    const { data: guardadoCrudo, error: errorGuardar } = await sb.rpc(
+      "guardar_comprobantes_sunat",
+      { p_empresa_ruc: c.cred.ruc, p_periodo: p.periodo, p_filas: filas },
+    );
+    if (errorGuardar) {
+      console.error("No se pudieron guardar los comprobantes:", errorGuardar.message);
+    } else {
+      const g = Array.isArray(guardadoCrudo) ? guardadoCrudo[0] : guardadoCrudo;
+      guardado = g ? { nuevos: g.nuevos ?? 0, cambiados: g.cambiados ?? 0 } : null;
+    }
+    resultado.guardado = guardado;
 
     // La constancia se deja después de tener el resultado, y su fallo no
     // tumba la consulta: quedarse sin el informe por no poder anotarlo sería

@@ -9,15 +9,18 @@ import CruceSunat from "@/components/v2/CruceSunat";
 import { estadoDeCredenciales } from "@/app/acciones/sunat";
 import BitacoraSunat from "@/components/v2/BitacoraSunat";
 import { ultimasConsultas } from "@/lib/datos/consultas-sunat";
+import HistoricoSunat from "@/components/v2/HistoricoSunat";
+import { periodosGuardados } from "@/app/acciones/historico-sunat";
 
 export default async function CredencialesSunat() {
   const solicitante = await solicitanteActual();
   if (!solicitante) redirect("/ingresar");
   if (!autoriza(solicitante, "editar_catalogos").ok) redirect("/");
 
-  const [empresas, consultas] = await Promise.all([
+  const [empresas, consultas, periodos] = await Promise.all([
     estadoDeCredenciales(),
     ultimasConsultas(),
+    periodosGuardados(),
   ]);
 
   return (
@@ -44,6 +47,10 @@ export default async function CredencialesSunat() {
           <CruceSunat empresa={e.empresa} />
         </div>
       ))}
+
+      <div style={{ marginTop: 16 }}>
+        <HistoricoSunat periodos={periodos} />
+      </div>
 
       <div style={{ marginTop: 16 }}>
         <BitacoraSunat consultas={consultas} />
