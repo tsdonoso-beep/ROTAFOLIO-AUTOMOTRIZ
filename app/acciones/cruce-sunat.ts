@@ -169,6 +169,8 @@ export async function traerYCruzar(
     };
   }
 
+  const arranque = Date.now();
+
   try {
     const bruto = await bajarArchivo(c.cred, archivo);
     const dentro = leerZip(bruto);
@@ -206,21 +208,45 @@ export async function traerYCruzar(
       proveedorNombre: g.proveedor_nombre,
     }));
 
-    return {
-      tipo: "ok",
-      resultado: {
-        periodo: p.periodo,
-        archivo: reporte.nombre,
-        cruce: cruzar(nuestros, filas.map(f => ({
-          ruc: f.ruc, tipoComprobante: f.tipoComprobante, serie: f.serie,
-          numero: f.numero, fechaEmision: f.fechaEmision, total: f.total,
-          razonSocial: f.razonSocial,
-        }))),
-        lectura,
-        nuestros: nuestros.length,
-        identidadSospechosa: identidad.ok ? null : identidad.motivo,
-      },
+    const resultado: Resultado = {
+      periodo: p.periodo,
+      archivo: reporte.nombre,
+      cruce: cruzar(nuestros, filas.map(f => ({
+        ruc: f.ruc, tipoComprobante: f.tipoComprobante, serie: f.serie,
+        numero: f.numero, fechaEmision: f.fechaEmision, total: f.total,
+        razonSocial: f.razonSocial,
+      }))),
+      lectura,
+      nuestros: nuestros.length,
+      identidadSospechosa: identidad.ok ? null : identidad.motivo,
     };
+
+    // La constancia se deja después de tener el resultado, y su fallo no
+    // tumba la consulta: quedarse sin el informe por no poder anotarlo sería
+    // perder lo caro —la llamada a SUNAT— por lo barato.
+    const r = resultado.cruce.resumen;
+    const { error: errorBitacora } = await sb.rpc("registrar_consulta_sunat", {
+      p_empresa_ruc: c.cred.ruc,
+      p_periodo: p.periodo,
+      p_ticket: archivo.numTicket,
+      p_archivo: reporte.nombre,
+      p_comprobantes_sunat: filas.length,
+      p_comprobantes_nuestros: nuestros.length,
+      p_cuadran: r.cuadran,
+      p_monto_distinto: r.montoDistinto,
+      p_no_estan_en_sunat: r.noEstanEnSunat,
+      p_no_comparables: r.noComparables,
+      p_solo_en_sunat: r.soloEnSunat,
+      p_monto_solo_en_sunat: r.montoSoloEnSunat,
+      p_columnas_faltantes: lectura.faltantes,
+      p_identidad_sospechosa: resultado.identidadSospechosa,
+      p_segundos: Math.round((Date.now() - arranque) / 1000),
+    });
+    if (errorBitacora) {
+      console.error("No se pudo anotar la consulta a SUNAT:", errorBitacora.message);
+    }
+
+    return { tipo: "ok", resultado };
   } catch (e) {
     return { ...comoError(e), diagnostico };
   }

@@ -7,13 +7,18 @@ import { IconoAtras } from "@/components/v2/Iconos";
 import PanelSunat from "@/components/v2/PanelSunat";
 import CruceSunat from "@/components/v2/CruceSunat";
 import { estadoDeCredenciales } from "@/app/acciones/sunat";
+import BitacoraSunat from "@/components/v2/BitacoraSunat";
+import { ultimasConsultas } from "@/lib/datos/consultas-sunat";
 
 export default async function CredencialesSunat() {
   const solicitante = await solicitanteActual();
   if (!solicitante) redirect("/ingresar");
   if (!autoriza(solicitante, "editar_catalogos").ok) redirect("/");
 
-  const empresas = await estadoDeCredenciales();
+  const [empresas, consultas] = await Promise.all([
+    estadoDeCredenciales(),
+    ultimasConsultas(),
+  ]);
 
   return (
     <>
@@ -39,6 +44,10 @@ export default async function CredencialesSunat() {
           <CruceSunat empresa={e.empresa} />
         </div>
       ))}
+
+      <div style={{ marginTop: 16 }}>
+        <BitacoraSunat consultas={consultas} />
+      </div>
 
       <Tarjeta style={{ marginTop: 16 }}>
         <p className="rotulo" style={{ marginBottom: 8 }}>Qué resuelve esto y qué no</p>
