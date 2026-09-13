@@ -192,10 +192,43 @@ export function resumirFallo(cuerpo: string): string {
   return titulo ? `${titulo} (SUNAT devolvió una página de error, no una respuesta)` : t.slice(0, 200);
 }
 
+/**
+ * Traduce los códigos que SUNAT devuelve sin explicar.
+ *
+ * El 429 apareció pidiendo seis períodos seguidos: SUNAT limita cuántas
+ * exportaciones se encolan en poco rato. Como contesta con la página de error
+ * de su portal, sin el 429 a la vista el mensaje quedaba en «SUNAT devolvió
+ * una página de error», que no dice qué hacer. Este sí: esperar.
+ */
+export function mensajeDeEstado(estado: number, esperarSegundos?: number | null): string | null {
+  if (estado === 429) {
+    const espera = esperarSegundos
+      ? `Vuelve a intentarlo en ${Math.ceil(esperarSegundos / 60)} minutos.`
+      : "Espera unos minutos antes de pedir otro período.";
+    return `SUNAT frenó el pedido por pedirle demasiado seguido. ${espera} `
+      + "Lo que ya se trajo está guardado; no hace falta repetirlo.";
+  }
+  if (estado === 401 || estado === 403) {
+    return "SUNAT rechazó las credenciales. Comprueba la conexión antes de volver a intentar.";
+  }
+  if (estado >= 500) {
+    return "SUNAT tuvo un problema de su lado. Suele resolverse solo; inténtalo más tarde.";
+  }
+  return null;
+}
+
 async function pedir(url: string, token: string, traer: typeof globalThis.fetch) {
   const res = await traer(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) {
     const d = await res.text().catch(() => "");
+
+    // Cuando el código ya lo explica, se dice eso y no el volcado del cuerpo:
+    // la página de error de SUNAT solo agrega ruido a un mensaje que ya está
+    // claro.
+    const espera = Number(res.headers.get("retry-after"));
+    const humano = mensajeDeEstado(res.status, Number.isFinite(espera) ? espera : null);
+    if (humano) throw new Error(humano);
+
     throw new Error(`SUNAT respondió HTTP ${res.status} en ${new URL(url).pathname}. ${resumirFallo(d)}`);
   }
   return res;

@@ -61,3 +61,57 @@ export async function ultimasConsultas(cuantas = 25): Promise<ConsultaSunat[]> {
     };
   });
 }
+
+/** Un comprobante que llegó distinto de como estaba. */
+export interface CambioDetectado {
+  id: string;
+  notadoEn: string;
+  campo: string;
+  antes: string | null;
+  despues: string | null;
+  periodo: string;
+  proveedorNombre: string | null;
+  proveedorRuc: string | null;
+  comprobante: string;
+  tipoComprobante: string | null;
+}
+
+/**
+ * Los comprobantes que cambiaron desde que los vimos por primera vez.
+ *
+ * Es la respuesta a «esta factura ahora está anulada». Sin mostrarlo, la
+ * detección queda guardada y no la mira nadie, que es lo mismo que no
+ * detectarla.
+ */
+export async function ultimosCambios(cuantos = 30): Promise<CambioDetectado[]> {
+  const sb = await clienteServidor();
+  const { data } = await sb
+    .from("cambios_comprobante_sunat")
+    .select(`
+      id, notado_en, campo, antes, despues,
+      comprobantes_sunat!inner (
+        periodo, proveedor_nombre, proveedor_ruc, serie, numero, tipo_comprobante
+      )
+    `)
+    .order("notado_en", { ascending: false })
+    .limit(cuantos);
+
+  return (data ?? []).map(c => {
+    const s = c.comprobantes_sunat as unknown as {
+      periodo: string; proveedor_nombre: string | null; proveedor_ruc: string | null;
+      serie: string | null; numero: string | null; tipo_comprobante: string | null;
+    };
+    return {
+      id: c.id,
+      notadoEn: c.notado_en,
+      campo: c.campo,
+      antes: c.antes,
+      despues: c.despues,
+      periodo: s.periodo,
+      proveedorNombre: s.proveedor_nombre,
+      proveedorRuc: s.proveedor_ruc,
+      comprobante: [s.serie, s.numero].filter(Boolean).join("-"),
+      tipoComprobante: s.tipo_comprobante,
+    };
+  });
+}

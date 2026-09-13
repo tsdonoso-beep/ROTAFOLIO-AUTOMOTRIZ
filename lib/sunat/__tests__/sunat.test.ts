@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import { periodoCerradoAnterior, periodoDe, validarPeriodo } from "../periodo.ts";
 import { credencialesDe, usuarioSol } from "../credenciales.ts";
 import { cuerpoDeToken, olvidarToken, obtenerToken, urlDeToken, vigencia, vigente } from "../token.ts";
-import { leerTicket, resumirFallo, urlArchivo, urlEstadoTicket, urlExportarPropuesta } from "../sire.ts";
+import {
+  leerTicket, mensajeDeEstado, resumirFallo, urlArchivo, urlEstadoTicket, urlExportarPropuesta,
+} from "../sire.ts";
 import { TICKET_PROPUESTA_RCE } from "./fixtures/ticket-real.ts";
 
 const HOY = new Date("2026-09-11T00:00:00Z");
@@ -350,5 +352,39 @@ describe("leerTicket con la respuesta real del SIRE", () => {
     })!;
     assert.equal(comoArreglo.archivo?.nombre, t.archivo?.nombre);
     assert.equal(comoArreglo.archivo?.tipo, "00");
+  });
+});
+
+// El 429 salió pidiendo seis períodos seguidos. Sin traducirlo, el mensaje
+// quedaba en «SUNAT devolvió una página de error», que no dice qué hacer.
+describe("mensajeDeEstado", () => {
+  test("el 429 dice que espere y que lo traído está a salvo", () => {
+    const m = mensajeDeEstado(429)!;
+    assert.match(m, /demasiado seguido/);
+    assert.match(m, /Espera unos minutos/);
+    assert.match(m, /ya se trajo está guardado/);
+  });
+
+  test("si SUNAT dice cuánto esperar, se repite en minutos", () => {
+    assert.match(mensajeDeEstado(429, 600)!, /10 minutos/);
+    // Medio minuto sigue siendo «1 minuto», no «0».
+    assert.match(mensajeDeEstado(429, 30)!, /1 minutos?/);
+  });
+
+  test("credenciales rechazadas se distinguen de un límite", () => {
+    assert.match(mensajeDeEstado(401)!, /credenciales/);
+    assert.match(mensajeDeEstado(403)!, /credenciales/);
+  });
+
+  test("un fallo del lado de SUNAT dice que no es nuestro", () => {
+    assert.match(mensajeDeEstado(500)!, /de su lado/);
+    assert.match(mensajeDeEstado(503)!, /de su lado/);
+  });
+
+  // Un 422 nombra el campo en el cuerpo; taparlo con un texto genérico
+  // perdería justamente el dato útil.
+  test("el 422 no se traduce: su cuerpo dice más", () => {
+    assert.equal(mensajeDeEstado(422), null);
+    assert.equal(mensajeDeEstado(404), null);
   });
 });
