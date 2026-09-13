@@ -1,5 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Aviso, Tarjeta, Cifra, soles } from "./Encabezado";
 import { IconoAlerta, IconoDescargar, IconoReloj } from "./Iconos";
 import { pedirPropuesta, verTicket, traerYCruzar, type Resultado, type Diagnostico } from "@/app/acciones/cruce-sunat";
@@ -33,6 +34,7 @@ export default function CruceSunat({ empresa }: { empresa: string }) {
   const [diag, setDiag] = useState<Diagnostico | null>(null);
   const [res, setRes] = useState<Resultado | null>(null);
   const corriendo = useRef(false);
+  const router = useRouter();
 
   const trabajando = paso !== null;
 
@@ -73,6 +75,12 @@ export default function CruceSunat({ empresa }: { empresa: string }) {
         return;
       }
       setRes(fin.resultado);
+
+      // El histórico y la bitácora se dibujan al cargar la página, así que
+      // sin esto siguen diciendo «todavía no hay nada» justo después de una
+      // consulta que sí guardó. Una pantalla que desmiente lo que acaba de
+      // pasar hace dudar de todo lo demás.
+      router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -203,6 +211,17 @@ function Informe({ res }: { res: Resultado }) {
         <NoComparables
           filas={res.cruce.emparejados.filter(e => e.veredicto === "NO_COMPARABLE")}
         />
+      )}
+
+      {res.guardado && (
+        <p style={{ marginBottom: 10, fontSize: 11.5, color: "var(--text3)", lineHeight: 1.5 }}>
+          {res.guardado.nuevos === 0 && res.guardado.cambiados === 0
+            ? "Ningún comprobante llegó distinto de la última vez."
+            : [
+                res.guardado.nuevos > 0 && `${res.guardado.nuevos} comprobantes nuevos al histórico`,
+                res.guardado.cambiados > 0 && `${res.guardado.cambiados} llegaron distintos de la última vez`,
+              ].filter(Boolean).join(" · ") + "."}
+        </p>
       )}
 
       <Procedencia res={res} />

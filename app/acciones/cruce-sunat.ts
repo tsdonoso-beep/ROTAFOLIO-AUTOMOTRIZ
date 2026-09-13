@@ -82,6 +82,39 @@ function comoError(e: unknown): { tipo: "error"; motivo: string } {
   return { tipo: "error", motivo: e instanceof Error ? e.message : String(e) };
 }
 
+/**
+ * Los comprobantes que nuestra gente rindió y que alguna nota podría estar
+ * corrigiendo, sin importar de qué mes sean.
+ *
+ * Se acota por los RUC de los proveedores que emitieron notas —unas pocas
+ * decenas— en vez de traer todos los gastos de la historia.
+ */
+async function rendidosDe(
+  sb: Awaited<ReturnType<typeof clienteServidor>>, deSunat: ComprobanteSunat[]
+): Promise<ComprobanteNuestro[]> {
+  const rucs = [...new Set(
+    deSunat.filter(s => s.modifica && s.ruc).map(s => s.ruc as string)
+  )];
+  if (rucs.length === 0) return [];
+
+  const { data } = await sb
+    .from("gastos")
+    .select("id, proveedor_ruc, proveedor_nombre, tipo_comprobante, serie, numero, fecha_emision, total")
+    .eq("clase", "COMPROBANTE")
+    .in("proveedor_ruc", rucs);
+
+  return (data ?? []).map(g => ({
+    id: g.id,
+    ruc: g.proveedor_ruc,
+    tipoComprobante: g.tipo_comprobante,
+    serie: g.serie,
+    numero: g.numero,
+    fechaEmision: g.fecha_emision,
+    total: g.total == null ? null : Number(g.total),
+    proveedorNombre: g.proveedor_nombre,
+  }));
+}
+
 /** Paso 1. Le pide a SUNAT que prepare el período. */
 export async function pedirPropuesta(abreviatura: string, periodo: string): Promise<Paso> {
   const p = validarPeriodo(periodo, new Date());
@@ -228,7 +261,12 @@ export async function traerYCruzar(
       lectura,
       nuestros: nuestros.length,
       identidadSospechosa: identidad.ok ? null : identidad.motivo,
-      notas: notasSobreLoRendido(nuestros, deSunat),
+      // Las notas se buscan contra TODO lo rendido, no solo contra el mes
+      // consultado. En agosto de 2026, 6 de las 37 notas corregían facturas
+      // de meses anteriores —una de enero, siete meses atrás—. Mirando solo
+      // el período, ese caso no se detecta nunca, y es justo el que importa:
+      // la factura ya se rindió, se aprobó y quizá ya se pagó.
+      notas: notasSobreLoRendido(await rendidosDe(sb, deSunat), deSunat),
       guardado: null,
     };
 

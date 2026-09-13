@@ -228,6 +228,21 @@ describe("notasSobreLoRendido", () => {
     assert.equal(r.length, 0);
   });
 
+  // Caso real de agosto de 2026: 6 de las 37 notas del mes corregían
+  // facturas de meses anteriores, una de siete meses atrás. La búsqueda no
+  // debe mirar fechas: el gasto ya se rindió, se aprobó y quizá se pagó.
+  test("encuentra la nota aunque corrija una factura de otro mes", () => {
+    const r = notasSobreLoRendido(
+      [rendido({ fechaEmision: "2026-01-28", numero: "965" })],
+      [notaDe({
+        fechaEmision: "2026-08-18",
+        modifica: { tipo: "01", serie: "E001", numero: "965" },
+      })],
+    );
+    assert.equal(r.length, 1);
+    assert.equal(r[0].nuestro.fechaEmision, "2026-01-28");
+  });
+
   test("una nota de débito también cuenta", () => {
     const r = notasSobreLoRendido([rendido()], [notaDe({ tipoComprobante: "08", total: 20 })]);
     assert.equal(r.length, 1);
