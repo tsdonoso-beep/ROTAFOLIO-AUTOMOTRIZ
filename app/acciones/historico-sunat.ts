@@ -28,15 +28,33 @@ export async function periodosGuardados(): Promise<Array<{ periodo: string; cuan
   const solicitante = await solicitanteActual();
   if (!solicitante || !autoriza(solicitante, "exportar").ok) return [];
 
+  // Por función y no leyendo la tabla: PostgREST corta toda lectura en 1000
+  // filas sin avisar, y con 13 000 comprobantes la pantalla mostraba «1000
+  // comprobantes, 2 períodos» como si fuera todo lo que hay.
   const sb = await clienteServidor();
-  const { data } = await sb.from("comprobantes_sunat").select("periodo");
+  const { data, error } = await sb.rpc("periodos_de_comprobantes_sunat");
+  if (error || !Array.isArray(data)) return [];
+  return data as Array<{ periodo: string; cuantos: number }>;
+}
 
-  const cuenta = new Map<string, number>();
-  for (const c of data ?? []) cuenta.set(c.periodo, (cuenta.get(c.periodo) ?? 0) + 1);
-
-  return [...cuenta.entries()]
-    .map(([periodo, cuantos]) => ({ periodo, cuantos }))
-    .sort((a, b) => b.periodo.localeCompare(a.periodo));
+/**
+ * Trae todas las filas de una consulta, no las primeras mil.
+ *
+ * El límite de PostgREST no da error: devuelve 200 y mil filas. Se pagina
+ * hasta que una página llegue incompleta, que es la señal de que se acabó.
+ */
+async function todasLasFilas<T>(
+  hacer: (desde: number, hasta: number) => PromiseLike<{ data: T[] | null; error: unknown }>
+): Promise<T[]> {
+  const TAMANO = 1000;
+  const salida: T[] = [];
+  for (let desde = 0; ; desde += TAMANO) {
+    const { data, error } = await hacer(desde, desde + TAMANO - 1);
+    if (error || !data) break;
+    salida.push(...data);
+    if (data.length < TAMANO) break;
+  }
+  return salida;
 }
 
 /**
@@ -52,65 +70,46 @@ export async function hojaDelHistorico(periodo?: string): Promise<HojaHistorico 
 
   const sb = await clienteServidor();
 
-  let consulta = sb
-    .from("comprobantes_sunat")
-    .select(`
-      periodo, proveedor_ruc, proveedor_nombre, tipo_comprobante, serie, numero,
-      fecha_emision, total, moneda, estado, tipo_nota,
-      modifica_tipo, modifica_serie, modifica_numero, car_sunat,
-      primera_vez, ultima_vez,
-      cambios_comprobante_sunat ( id )
-    `)
-    .order("fecha_emision", { ascending: true })
-    .order("numero", { ascending: true });
-
-  if (periodo) consulta = consulta.eq("periodo", periodo);
-
-  const { data, error } = await consulta;
-  if (error || !data) return null;
+  // Por función: son trece mil filas, y leyendo la tabla llegarían mil. La
+  // función también cuenta los cambios de cada comprobante de una vez; pedir
+  // ese conteo anidado desde PostgREST expiraba por tiempo.
+  const { data, error } = await sb.rpc("historico_comprobantes_sunat", {
+    p_periodo: periodo ?? null,
+  });
+  if (error || !Array.isArray(data)) return null;
 
   // Quién rindió cada comprobante. Se traen los gastos de una vez y se
-  // emparejan en memoria: una consulta por comprobante serían miles.
-  const { data: gastos } = await sb
-    .from("gastos")
-    .select("proveedor_ruc, tipo_comprobante, serie, numero, usuarios:usuario_id ( nombre )")
-    .eq("clase", "COMPROBANTE")
-    .not("numero", "is", null);
+  // emparejan en memoria: una consulta por comprobante serían trece mil.
+  const gastos = await todasLasFilas<{
+    proveedor_ruc: string | null; tipo_comprobante: string | null;
+    serie: string | null; numero: string | null;
+    usuarios: { nombre?: string } | null;
+  }>((desde, hasta) =>
+    sb.from("gastos")
+      .select("proveedor_ruc, tipo_comprobante, serie, numero, usuarios:usuario_id ( nombre )")
+      .eq("clase", "COMPROBANTE")
+      .not("numero", "is", null)
+      .range(desde, hasta) as never
+  );
 
   const sinCeros = (v: string | null) => (v ?? "").replace(/^0+/, "") || null;
   const llave = (ruc: string | null, tipo: string | null, serie: string | null, numero: string | null) =>
     [ruc ?? "", tipo ?? "", (serie ?? "").toUpperCase(), sinCeros(numero) ?? ""].join("|");
 
   const quienRindio = new Map<string, string>();
-  for (const g of gastos ?? []) {
+  for (const g of gastos) {
     const u = g.usuarios as unknown as { nombre?: string } | null;
     if (u?.nombre) {
       quienRindio.set(llave(g.proveedor_ruc, g.tipo_comprobante, g.serie, g.numero), u.nombre);
     }
   }
 
-  const historico: ComprobanteHistorico[] = data.map(c => ({
-    periodo: c.periodo,
-    proveedorRuc: c.proveedor_ruc,
-    proveedorNombre: c.proveedor_nombre,
-    tipoComprobante: c.tipo_comprobante,
-    serie: c.serie,
-    numero: c.numero,
-    fechaEmision: c.fecha_emision,
+  const historico: ComprobanteHistorico[] = (data as ComprobanteHistorico[]).map(c => ({
+    ...c,
     total: c.total == null ? null : Number(c.total),
-    moneda: c.moneda,
-    estado: c.estado,
-    tipoNota: c.tipo_nota,
-    modificaTipo: c.modifica_tipo,
-    modificaSerie: c.modifica_serie,
-    modificaNumero: c.modifica_numero,
-    carSunat: c.car_sunat,
-    primeraVez: c.primera_vez,
-    ultimaVez: c.ultima_vez,
     rendidoPor: quienRindio.get(
-      llave(c.proveedor_ruc, c.tipo_comprobante, c.serie, c.numero)
+      llave(c.proveedorRuc, c.tipoComprobante, c.serie, c.numero)
     ) ?? null,
-    cambios: (c.cambios_comprobante_sunat as unknown as unknown[] | null)?.length ?? 0,
   }));
 
   return {
@@ -119,7 +118,6 @@ export async function hojaDelHistorico(periodo?: string): Promise<HojaHistorico 
     cuantos: historico.length,
   };
 }
-
 
 /**
  * Deja el histórico como hoja de Google, para Contabilidad.
