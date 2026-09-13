@@ -13,6 +13,8 @@ import { autoriza } from "@/lib/dominio/permisos";
 import {
   filasComprobantesSunat, nombreArchivoSunat, type ComprobanteHistorico,
 } from "@/lib/export/comprobantes-sunat";
+import { aCsv } from "@/lib/export/csv";
+import { publicarHoja, explicarFallo } from "@/lib/drive/servidor";
 
 export interface HojaHistorico {
   nombre: string;
@@ -116,4 +118,34 @@ export async function hojaDelHistorico(periodo?: string): Promise<HojaHistorico 
     filas: filasComprobantesSunat(historico),
     cuantos: historico.length,
   };
+}
+
+
+/**
+ * Deja el histórico como hoja de Google, para Contabilidad.
+ *
+ * Se publica siempre con el mismo nombre en la misma carpeta, así el enlace
+ * se reparte una vez y sirve para siempre. Reescribir pisa lo que se haya
+ * anotado encima: esta hoja es la fuente, y quien quiera trabajar sobre ella
+ * que la traiga a la suya con IMPORTRANGE.
+ */
+export async function publicarHistoricoEnDrive(): Promise<
+  { ok: true; url: string; cuantos: number; reemplazada: boolean } | { ok: false; motivo: string }
+> {
+  const hoja = await hojaDelHistorico();
+  if (!hoja) return { ok: false, motivo: "No se pudo armar la hoja. ¿Sigue abierta la sesión?" };
+  if (hoja.cuantos === 0) {
+    return { ok: false, motivo: "No hay comprobantes guardados todavía. Consulta un período primero." };
+  }
+
+  try {
+    const r = await publicarHoja({
+      csv: aCsv(hoja.filas),
+      nombre: "COMPROBANTES SUNAT",
+      carpetas: ["SUNAT"],
+    });
+    return { ok: true, url: r.url, cuantos: hoja.cuantos, reemplazada: r.reemplazada };
+  } catch (e) {
+    return { ok: false, motivo: explicarFallo(e) };
+  }
 }

@@ -107,6 +107,53 @@ export async function subir(p: {
   return { id: nuevo.data.id!, url: nuevo.data.webViewLink!, reemplazado: false };
 }
 
+/** Lo que Drive llama a una hoja nativa de Google. */
+export const HOJA_DE_CALCULO = "application/vnd.google-apps.spreadsheet";
+
+/**
+ * Publica un CSV como hoja nativa de Google, no como archivo adjunto.
+ *
+ * Drive hace la conversión si se le pide ese mimeType al crear; alcanza con
+ * el permiso de Drive que ya tiene la cuenta de servicio, sin sumar el de
+ * Sheets.
+ *
+ * Reescribe siempre el mismo archivo cuando ya existe. Es la diferencia
+ * entre un enlace que Contabilidad guarda una vez y otro que cambia cada mes
+ * y hay que volver a repartir. Verificado: el identificador y el enlace
+ * sobreviven a la reescritura.
+ *
+ * La contrapartida de reescribir es que se pisa lo que alguien haya escrito
+ * encima. Por eso esta hoja es la fuente y no el cuaderno de trabajo: quien
+ * quiera anotar sobre ella que la traiga con IMPORTRANGE a la suya.
+ */
+export async function publicarHoja(p: {
+  csv: string;
+  nombre: string;
+  carpetas: string[];
+}): Promise<{ id: string; url: string; reemplazada: boolean }> {
+  const { drive, raiz } = conectarDrive();
+  const destino = await asegurarRuta(drive, p.carpetas, raiz);
+  // El BOM es lo que hace que Drive lea las tildes como UTF-8.
+  const cuerpo = () => Readable.from(Buffer.from("\uFEFF" + p.csv, "utf8"));
+
+  const previo = await buscarPorNombre(drive, p.nombre, destino);
+  if (previo) {
+    const act = await drive.files.update({
+      fileId: previo,
+      media: { mimeType: "text/csv", body: cuerpo() },
+      fields: "id,webViewLink", ...DRIVES,
+    });
+    return { id: act.data.id!, url: act.data.webViewLink!, reemplazada: true };
+  }
+
+  const nueva = await drive.files.create({
+    requestBody: { name: p.nombre, parents: [destino], mimeType: HOJA_DE_CALCULO },
+    media: { mimeType: "text/csv", body: cuerpo() },
+    fields: "id,webViewLink", ...DRIVES,
+  });
+  return { id: nueva.data.id!, url: nueva.data.webViewLink!, reemplazada: false };
+}
+
 /** Traduce los fallos de Drive a algo que quien lo lea pueda accionar. */
 export function explicarFallo(e: unknown): string {
   const msg = e instanceof Error ? e.message : String(e);

@@ -1,9 +1,9 @@
 "use client";
 import { useState, useTransition } from "react";
 import { Tarjeta, Aviso, Cifra } from "./Encabezado";
-import { IconoAlerta, IconoDescargar } from "./Iconos";
+import { IconoAlerta, IconoCheck, IconoDescargar, IconoEnlace } from "./Iconos";
 import { descargarCsv } from "@/lib/export/csv";
-import { hojaDelHistorico } from "@/app/acciones/historico-sunat";
+import { hojaDelHistorico, publicarHistoricoEnDrive } from "@/app/acciones/historico-sunat";
 
 /**
  * Descarga del histórico de comprobantes.
@@ -17,11 +17,19 @@ export default function HistoricoSunat({ periodos }: {
 }) {
   const [pendiente, iniciar] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [hoja, setHoja] = useState<{ url: string; cuantos: number } | null>(null);
 
   const total = periodos.reduce((a, p) => a + p.cuantos, 0);
 
+  const publicar = () => iniciar(async () => {
+    setError(null); setHoja(null);
+    const r = await publicarHistoricoEnDrive();
+    if (!r.ok) { setError(r.motivo); return; }
+    setHoja({ url: r.url, cuantos: r.cuantos });
+  });
+
   const bajar = (periodo?: string) => iniciar(async () => {
-    setError(null);
+    setError(null); setHoja(null);
     const hoja = await hojaDelHistorico(periodo);
     if (!hoja) { setError("No se pudo armar la hoja. ¿Sigue abierta la sesión?"); return; }
     if (hoja.cuantos === 0) { setError("No hay comprobantes guardados de ese período."); return; }
@@ -64,11 +72,33 @@ export default function HistoricoSunat({ periodos }: {
         </div>
       )}
 
-      <button className="btn-ghost" onClick={() => bajar()} disabled={pendiente}
-        style={{ width: "100%", justifyContent: "center", marginBottom: 10 }}>
-        <IconoDescargar size={15} />
-        {pendiente ? "Armando la hoja…" : `Bajar todo (${total.toLocaleString("es-PE")} comprobantes)`}
-      </button>
+      {hoja && (
+        <div style={{ marginBottom: 12 }}>
+          <Aviso tono="ok" icono={<IconoCheck size={16} />}>
+            Hoja publicada en Drive con {hoja.cuantos.toLocaleString("es-PE")} comprobantes.{" "}
+            <a href={hoja.url} target="_blank" rel="noreferrer"
+               style={{ color: "inherit", textDecoration: "underline" }}>
+              Abrirla
+            </a>
+            <span style={{ display: "block", marginTop: 4, fontSize: 11.5, opacity: 0.9 }}>
+              El enlace no cambia: se reparte una vez y cada publicación actualiza la misma hoja.
+            </span>
+          </Aviso>
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+        <button className="btn-ghost" onClick={publicar} disabled={pendiente}
+          style={{ flex: "1 1 220px", justifyContent: "center" }}>
+          <IconoEnlace size={15} />
+          {pendiente ? "Trabajando…" : "Publicar como hoja de Google"}
+        </button>
+        <button className="btn-ghost" onClick={() => bajar()} disabled={pendiente}
+          style={{ flex: "1 1 220px", justifyContent: "center" }}>
+          <IconoDescargar size={15} />
+          {pendiente ? "Trabajando…" : `Bajar CSV (${total.toLocaleString("es-PE")})`}
+        </button>
+      </div>
 
       <p className="rotulo" style={{ marginBottom: 7 }}>O un período suelto</p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
