@@ -17,6 +17,9 @@ import { pedirExportacion, consultarTicket, bajarArchivo } from "../lib/sunat/si
 import { periodoDe, periodoCerradoAnterior, validarPeriodo } from "../lib/sunat/periodo.ts";
 import { leerZip } from "../lib/sunat/zip.ts";
 import { leerPropuestaRce, revisarIdentidad } from "../lib/sunat/rce.ts";
+import { filasComprobantesSunat, type ComprobanteHistorico } from "../lib/export/comprobantes-sunat.ts";
+import { aCsv } from "../lib/export/csv.ts";
+import { publicarHoja } from "../lib/drive/servidor.ts";
 
 const EMPRESA = process.env.SUNAT_EMPRESA ?? "INROPRIN";
 const RUC     = process.env.SUNAT_RUC ?? "20512201611";
@@ -109,6 +112,72 @@ async function consultar(periodo: string): Promise<boolean> {
   return guardado.cambiados > 0;
 }
 
+/**
+ * Deja la hoja de Contabilidad al día.
+ *
+ * Sin esto la hoja se congela hasta que alguien entre a la aplicación y le dé
+ * al botón, que es justo lo que se quería evitar al automatizar la consulta:
+ * quien la mira vería datos viejos sin ninguna señal de que lo son.
+ *
+ * Es opcional: si faltan las credenciales de Drive, la consulta igual sirvió
+ * y los datos quedaron guardados. Se avisa y se sigue.
+ */
+async function publicarLaHoja(): Promise<void> {
+  if (!process.env.GOOGLE_SA_EMAIL || !process.env.GOOGLE_DRIVE_FOLDER_ID) {
+    console.log("\nSin credenciales de Drive: no se actualiza la hoja de Contabilidad.");
+    return;
+  }
+
+  const { data, error } = await sb.rpc("historico_comprobantes_sunat");
+  if (error || !Array.isArray(data)) {
+    console.error("⚠ No se pudo leer el histórico para la hoja:", error?.message);
+    return;
+  }
+
+  // Quién rindió cada comprobante: es la columna que SUNAT no puede dar, y la
+  // que hace que esta hoja valga más que bajar el archivo del portal.
+  const gastos: Array<Record<string, unknown>> = [];
+  for (let desde = 0; ; desde += 1000) {
+    const { data: pagina } = await sb
+      .from("gastos")
+      .select("proveedor_ruc, tipo_comprobante, serie, numero, usuarios:usuario_id ( nombre )")
+      .eq("clase", "COMPROBANTE")
+      .not("numero", "is", null)
+      .range(desde, desde + 999);
+    if (!pagina?.length) break;
+    gastos.push(...pagina);
+    if (pagina.length < 1000) break;
+  }
+
+  const sinCeros = (v: string | null) => (v ?? "").replace(/^0+/, "") || "";
+  const llave = (r: string | null, t: string | null, se: string | null, n: string | null) =>
+    [r ?? "", t ?? "", (se ?? "").toUpperCase(), sinCeros(n)].join("|");
+
+  const quien = new Map<string, string>();
+  for (const g of gastos) {
+    const u = g.usuarios as { nombre?: string } | null;
+    if (u?.nombre) {
+      quien.set(llave(
+        g.proveedor_ruc as string | null, g.tipo_comprobante as string | null,
+        g.serie as string | null, g.numero as string | null,
+      ), u.nombre);
+    }
+  }
+
+  const historico = (data as ComprobanteHistorico[]).map(c => ({
+    ...c,
+    total: c.total == null ? null : Number(c.total),
+    rendidoPor: quien.get(llave(c.proveedorRuc, c.tipoComprobante, c.serie, c.numero)) ?? null,
+  }));
+
+  const r = await publicarHoja({
+    csv: aCsv(filasComprobantesSunat(historico)),
+    nombre: "COMPROBANTES SUNAT",
+    carpetas: ["SUNAT"],
+  });
+  console.log(`\nHoja al día: ${historico.length} comprobantes · ${r.url}`);
+}
+
 const hoy = new Date();
 const periodos = [periodoDe(hoy), periodoCerradoAnterior(hoy)]
   .filter(p => validarPeriodo(p, hoy).ok);
@@ -130,6 +199,14 @@ for (const p of periodos) {
 }
 
 console.log(`\n${hubo ? "⚠ Hubo comprobantes que cambiaron." : "Sin cambios."}`);
+
+// La hoja se actualiza aunque algún período haya fallado: lo que sí entró
+// merece quedar visible.
+try {
+  await publicarLaHoja();
+} catch (e) {
+  console.error("⚠ No se pudo actualizar la hoja:", e instanceof Error ? e.message : String(e));
+}
 
 if (fallaron.length === periodos.length) {
   console.error("\n✗ Fallaron todos los períodos.");

@@ -49,4 +49,9 @@ jobs:
           SUNAT_INROPRIN_CLIENT_SECRET: ${{ secrets.SUNAT_INROPRIN_CLIENT_SECRET }}
           SUNAT_INROPRIN_USUARIO: ${{ secrets.SUNAT_INROPRIN_USUARIO }}
           SUNAT_INROPRIN_CLAVE: ${{ secrets.SUNAT_INROPRIN_CLAVE }}
+          # Para dejar al día la hoja que mira Contabilidad. Si faltan, la
+          # consulta igual guarda todo y solo se salta la hoja.
+          GOOGLE_SA_EMAIL: ${{ secrets.GOOGLE_SA_EMAIL }}
+          GOOGLE_SA_PRIVATE_KEY: ${{ secrets.GOOGLE_SA_PRIVATE_KEY }}
+          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
         run: node --experimental-strip-types scripts/sunat-diario.mts

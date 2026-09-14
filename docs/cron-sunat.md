@@ -79,6 +79,24 @@ repository secret**. Ocho, uno por uno:
 Los cuatro de SUNAT son los que ya están en Vercel. Si no los tienes a mano,
 se vuelven a copiar desde ahí.
 
+**Tres más, opcionales**, para que la hoja que mira Contabilidad se actualice
+sola todos los días. Sin ellas la consulta funciona igual y guarda todo; lo
+único que pasa es que la hoja se queda como la dejó la última publicación
+manual:
+
+| Secreto | De dónde sale |
+|---|---|
+| `GOOGLE_SA_EMAIL` | Vercel · Settings · Environment Variables |
+| `GOOGLE_SA_PRIVATE_KEY` | ídem (es larga y empieza con `-----BEGIN PRIVATE KEY-----`) |
+| `GOOGLE_DRIVE_FOLDER_ID` | ídem |
+
+Para verlas: en Vercel, proyecto **foto-grama** · Settings · Environment
+Variables, y en cada una el menú de los tres puntos tiene la opción de
+mostrar el valor.
+
+`GOOGLE_SHEET_ID` aparece en esa lista pero **no lo usa nadie**: es resto de
+una versión anterior. No hace falta copiarlo.
+
 ### 3. Probarlo sin esperar al día siguiente
 
 Pestaña **Actions** · **SUNAT diario** · **Run workflow**. Tarda unos minutos
