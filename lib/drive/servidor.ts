@@ -17,10 +17,38 @@ const DRIVES = { supportsAllDrives: true, includeItemsFromAllDrives: true };
 
 export type Drive = ReturnType<typeof google.drive>;
 
+/**
+ * Normaliza la clave privada de la cuenta de servicio.
+ *
+ * Llega de tres formas según de dónde se copie, y las tres son correctas para
+ * quien las pega: con los saltos escritos como \n literal (que es como vive
+ * en un archivo .env), con saltos de verdad (como sale del JSON de Google), y
+ * entre comillas (que en un .env las quita el lector, pero en un secreto de
+ * GitHub o de Vercel pasan a ser parte del valor).
+ *
+ * Google rechaza la clave con comillas y el error no dice que sobren: habla
+ * de formato inválido. Costaba una tarde averiguarlo y cuesta tres líneas
+ * evitarlo.
+ */
+export function normalizarClavePrivada(bruta: string | undefined): string | undefined {
+  if (!bruta) return undefined;
+
+  let k = bruta.trim();
+  if ((k.startsWith('"') && k.endsWith('"')) || (k.startsWith("'") && k.endsWith("'"))) {
+    k = k.slice(1, -1);
+  }
+  k = k.replace(/\\n/g, "\n");
+
+  // El salto final no es decorativo: hay lectores de PEM que sin él no
+  // reconocen la clave, y recortarlo al limpiar espacios es fácil de hacer
+  // sin darse cuenta.
+  return k.endsWith("\n") ? k : k + "\n";
+}
+
 export function conectarDrive(): { drive: Drive; raiz: string } {
-  const email = process.env.GOOGLE_SA_EMAIL;
-  const key = process.env.GOOGLE_SA_PRIVATE_KEY?.replace(/\\n/g, "\n");
-  const raiz = process.env.GOOGLE_DRIVE_FOLDER_ID;
+  const email = process.env.GOOGLE_SA_EMAIL?.trim();
+  const key = normalizarClavePrivada(process.env.GOOGLE_SA_PRIVATE_KEY);
+  const raiz = process.env.GOOGLE_DRIVE_FOLDER_ID?.trim();
 
   if (!email || !key || !raiz) {
     throw new Error("Credenciales de Drive no configuradas en el servidor.");

@@ -104,6 +104,12 @@ Para verlas: en Vercel, proyecto **foto-grama** · Settings · Environment
 Variables, y en cada una el menú de los tres puntos tiene la opción de
 mostrar el valor.
 
+Sobre `GOOGLE_SA_PRIVATE_KEY`: es un bloque largo que empieza con
+`-----BEGIN PRIVATE KEY-----`. Puede aparecer entre comillas, con los saltos
+escritos como `\n` literal, o con saltos de verdad. **Las tres formas
+sirven**: el código quita las comillas y arregla los saltos antes de usarla.
+Se pega tal como venga, sin retocar nada.
+
 `GOOGLE_SHEET_ID` aparece en esa lista pero **no lo usa nadie**: es resto de
 una versión anterior. No hace falta copiarlo.
 
