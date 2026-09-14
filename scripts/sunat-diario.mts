@@ -142,6 +142,9 @@ async function consultar(periodo: string): Promise<boolean> {
     p_cuadran: 0, p_monto_distinto: 0, p_no_estan_en_sunat: 0,
     p_no_comparables: 0, p_solo_en_sunat: 0, p_monto_solo_en_sunat: 0,
     p_columnas_faltantes: lectura.faltantes,
+    // Para saber después si una columna viene vacía de verdad o si el
+    // lector no la encuentra, sin mirar la pantalla en el momento justo.
+    p_columnas_sin_usar: lectura.sinMapear,
     p_identidad_sospechosa: identidad.ok ? null : identidad.motivo,
     p_segundos: Math.round((Date.now() - arranque) / 1000),
   });
