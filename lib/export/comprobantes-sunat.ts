@@ -50,6 +50,49 @@ export const CABECERAS_SUNAT = [
   "Visto por primera vez", "Visto por última vez", "CAR SUNAT",
 ];
 
+/**
+ * De qué es cada columna.
+ *
+ * Va pegado a las cabeceras y en el mismo orden porque son la misma decisión:
+ * si se agrega una columna acá arriba hay que decir también qué contiene.
+ *
+ * Existe porque la hoja de Google adivina, y adivina mal. Con el archivo en
+ * inglés —que es como está— leyó «11/12/2025» como 12 de noviembre en vez de
+ * 11 de diciembre, y lo dejó viéndose igual: la fecha se muestra bien y se
+ * ordena mal. Las que tenían día mayor que 12 se salvaron por accidente. Y una
+ * serie «0001» adivinada como número pierde los ceros y deja de calzar con el
+ * comprobante.
+ *
+ * Por eso no se le deja adivinar nada: cada columna se manda con su tipo.
+ * Identificador es todo lo que se parece a un número pero no se suma —RUC,
+ * serie, número, período, código— y va como texto a propósito.
+ */
+export type TipoColumna = "texto" | "numero" | "fecha";
+
+export const TIPOS_SUNAT: TipoColumna[] = [
+  "texto",  // Período
+  "texto",  // RUC proveedor
+  "texto",  // Proveedor
+  "texto",  // Tipo
+  "texto",  // Serie
+  "texto",  // Número
+  "fecha",  // Fecha de emisión
+  "texto",  // Moneda
+  "numero", // Tipo de cambio
+  "numero", // Base imponible
+  "numero", // IGV
+  "numero", // Total
+  "numero", // Detracción
+  "texto",  // Estado
+  "texto",  // Es nota de
+  "texto",  // Corrige a
+  "texto",  // Lo rindió
+  "texto",  // Cambios detectados
+  "fecha",  // Visto por primera vez
+  "fecha",  // Visto por última vez
+  "texto",  // CAR SUNAT
+];
+
 const NOMBRE_TIPO: Record<string, string> = {
   "01": "Factura", "03": "Boleta", "07": "Nota de crédito",
   "08": "Nota de débito", "12": "Ticket",

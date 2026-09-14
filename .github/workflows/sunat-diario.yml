@@ -23,6 +23,11 @@ on:
         description: "Períodos a consultar, separados por coma (202601,202602). Vacío = mes en curso y anterior."
         required: false
         default: ""
+      solo_publicar:
+        description: "Solo rehacer la hoja con lo ya guardado, sin preguntarle a SUNAT."
+        type: boolean
+        required: false
+        default: false
 
 # Sin permisos de escritura: esto solo lee de SUNAT y escribe en la base.
 permissions:
@@ -74,4 +79,5 @@ jobs:
           GOOGLE_SA_PRIVATE_KEY: ${{ secrets.GOOGLE_SA_PRIVATE_KEY }}
           GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
           PERIODOS: ${{ inputs.periodos }}
+          SOLO_PUBLICAR: ${{ inputs.solo_publicar && '1' || '' }}
         run: node --experimental-strip-types scripts/sunat-diario.mts

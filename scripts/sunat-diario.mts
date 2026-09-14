@@ -17,8 +17,9 @@ import { pedirExportacion, consultarTicket, bajarArchivo, procesoEnCurso } from 
 import { periodoDe, periodoCerradoAnterior, validarPeriodo } from "../lib/sunat/periodo.ts";
 import { leerZip } from "../lib/sunat/zip.ts";
 import { leerPropuestaRce, revisarIdentidad } from "../lib/sunat/rce.ts";
-import { filasComprobantesSunat, type ComprobanteHistorico } from "../lib/export/comprobantes-sunat.ts";
-import { aCsv } from "../lib/export/csv.ts";
+import {
+  filasComprobantesSunat, TIPOS_SUNAT, type ComprobanteHistorico,
+} from "../lib/export/comprobantes-sunat.ts";
 import { publicarHoja } from "../lib/drive/servidor.ts";
 
 const EMPRESA = process.env.SUNAT_EMPRESA ?? "INROPRIN";
@@ -218,9 +219,10 @@ async function publicarLaHoja(): Promise<void> {
   }));
 
   const r = await publicarHoja({
-    csv: aCsv(filasComprobantesSunat(historico)),
+    filas: filasComprobantesSunat(historico),
     nombre: "COMPROBANTES SUNAT",
     carpetas: ["SUNAT"],
+    tipos: TIPOS_SUNAT,
   });
   console.log(`\nHoja al día: ${historico.length} comprobantes · ${r.url}`);
 }
@@ -254,6 +256,19 @@ function periodosAConsultar(): string[] {
     else console.error(`✗ Se descarta ${p}: ${v.motivo}`);
   }
   return buenos;
+}
+
+/**
+ * Rehacer la hoja sin volver a preguntarle a SUNAT.
+ *
+ * Hace falta cuando cambia la forma de la hoja —una columna nueva, un tipo de
+ * celda distinto— y los datos ya están guardados. Preguntar de nuevo no
+ * aportaría nada y costaría una de las pocas exportaciones que SUNAT deja
+ * encolar por día.
+ */
+if (process.env.SOLO_PUBLICAR === "1") {
+  await publicarLaHoja();
+  process.exit(0);
 }
 
 const periodos = periodosAConsultar();

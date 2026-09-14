@@ -4,27 +4,32 @@ Un panel dentro de una hoja de Google que lee la que publica la aplicación y
 muestra el mes: cuánto IGV, cuántas notas de crédito y cuánto restan del
 crédito fiscal, qué comprobantes cambiaron y quién factura más.
 
-## Por qué en una hoja aparte
+## Dónde va
 
-La hoja que publica la aplicación —**COMPROBANTES SUNAT**— se reescribe entera
-todos los días con lo que trae SUNAT. Cualquier cosa que alguien agregue
-encima se perdería sin aviso: una fórmula, una columna, este mismo script.
+**En la misma hoja que publica la aplicación** —COMPROBANTES SUNAT—, como una
+pestaña más al lado de los datos.
 
-Por eso el tablero vive en **otra hoja**, que solo la lee. Así Contabilidad
-puede trabajar sobre ella sin miedo, y si algo se rompe, la fuente sigue
-intacta.
+Antes no se podía: la publicación diaria reescribía el archivo entero y se
+habría llevado por delante el tablero, el script y cualquier fórmula que
+alguien agregara. Ahora la aplicación escribe **solo dentro de la pestaña de
+datos** —la que se llama como el archivo— y no toca nada más. Las otras
+pestañas, el script que les cuelga, los formatos y los anchos de columna
+sobreviven a la consulta de cada mañana.
+
+La única regla que queda es la evidente: **no escribir en la pestaña de
+datos**, porque esa sí se reemplaza entera todos los días a las 8. Lo que
+Contabilidad quiera anotar va en otra pestaña.
 
 ## Instalación
 
-### 1. Crear la hoja
+### 1. Abrir la hoja
 
-En Google Drive: **Nuevo · Hoja de cálculo**. Ponle **TABLERO SUNAT**.
-
-No necesita ningún dato: todo lo lee de la otra.
+Abre **COMPROBANTES SUNAT**, la que publica la aplicación. No hay que crear
+nada.
 
 ### 2. Pegar el código
 
-En esa hoja: **Extensiones · Apps Script**.
+En la hoja: **Extensiones · Apps Script**.
 
 1. Borra lo que haya en `Código.gs` y pega el contenido de **`Codigo.gs`**.
 2. Arriba a la izquierda, junto a «Archivos», el **+** · **HTML**. Llámalo
@@ -41,16 +46,17 @@ Vuelve a la hoja y **recárgala**. Aparece el menú **Monitoreo SUNAT**.
 
 La primera vez que abras el tablero, Google va a pedir autorización. Es
 normal: el script necesita leer la otra hoja y, si activas los avisos, mandar
-correo. Elige la cuenta, **Configuración avanzada**, **Ir a TABLERO SUNAT**,
+correo. Elige la cuenta, **Configuración avanzada**, **Ir a COMPROBANTES SUNAT**,
 y **Permitir**.
 
 ### 4. Que Contabilidad pueda entrar
 
-Comparte la hoja **TABLERO SUNAT** con quien la vaya a usar.
-
-Y que cada persona tenga también acceso de lectura a **COMPROBANTES SUNAT**:
-sin eso el tablero le sale vacío. Ese acceso se da desde la aplicación, en
+Comparte la hoja con quien la vaya a usar. Eso se hace desde la aplicación, en
 **Sistema · Credenciales de SUNAT · Publicar y dar acceso a Contabilidad**.
+
+Es una sola hoja, así que con ese acceso ven los datos y el tablero. El acceso
+es de **lectura**: la pestaña de datos se reemplaza cada mañana y lo que
+alguien editara encima se perdería sin aviso.
 
 ## El correo
 
@@ -90,8 +96,12 @@ de anular. Esa es la pregunta que ninguna hoja puede responder por su cuenta.
 **«La hoja no trae estas columnas…»** — cambiaron los títulos en la fuente. El
 mensaje dice cuáles. Se arreglan en `COL`, al principio de `Codigo.gs`.
 
-**El tablero sale vacío** — la persona no tiene acceso de lectura a
-COMPROBANTES SUNAT. Ver el paso 4.
+**El tablero sale vacío** — la persona no tiene acceso a la hoja. Ver el
+paso 4.
+
+**Se borró una pestaña que alguien agregó** — no debería volver a pasar: la
+publicación escribe solo dentro de la pestaña de datos. Si pasa, avisa: es un
+error nuestro, no de quien la agregó.
 
 **Tarda en abrir la primera vez** — son trece mil filas. Después queda en
 caché media hora.

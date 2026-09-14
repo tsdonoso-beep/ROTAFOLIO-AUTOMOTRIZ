@@ -115,17 +115,26 @@ export function aCsv(filas: string[][]): string {
 /** Un número con signo y decimales opcionales, nada más. */
 const NUMERO = /^-?\d+(\.\d+)?$/;
 
-function escapar(valor: string): string {
+/**
+ * Evita que un valor de texto se lea como fórmula.
+ *
+ * Un valor que empieza por = + - @ lo interpreta Excel —y también Sheets—
+ * como fórmula, y se neutraliza con un apóstrofo. Pero un importe negativo
+ * también empieza por "-", y neutralizarlo lo convierte en texto: la columna
+ * deja de sumarse, que en un documento que va a pago es peor que el riesgo
+ * que se quería evitar. Los números se dejan pasar tal cual; "-40.00" no
+ * puede ser una fórmula.
+ *
+ * Está aparte del CSV porque la hoja de Google se escribe celda por celda,
+ * sin pasar por CSV, y necesita exactamente la misma regla.
+ */
+export function neutralizarFormula(valor: string): string {
   const v = valor ?? "";
+  return !NUMERO.test(v) && /^[=+\-@]/.test(v) ? `'${v}` : v;
+}
 
-  // Un valor que empieza por = + - @ lo interpreta Excel como fórmula, y se
-  // neutraliza con un apóstrofo. Pero un importe negativo también empieza
-  // por "-", y neutralizarlo lo convierte en texto: la columna deja de
-  // sumarse, que en un documento que va a pago es peor que el riesgo que se
-  // quería evitar. Los números se dejan pasar tal cual; "-40.00" no puede
-  // ser una fórmula.
-  const seguro = !NUMERO.test(v) && /^[=+\-@]/.test(v) ? `'${v}` : v;
-
+function escapar(valor: string): string {
+  const seguro = neutralizarFormula(valor);
   return /[";\r\n]/.test(seguro) ? `"${seguro.replace(/"/g, '""')}"` : seguro;
 }
 

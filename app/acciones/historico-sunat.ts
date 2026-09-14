@@ -11,9 +11,9 @@
 import { solicitanteActual, clienteServidor } from "@/lib/supabase/servidor";
 import { autoriza } from "@/lib/dominio/permisos";
 import {
-  filasComprobantesSunat, nombreArchivoSunat, type ComprobanteHistorico,
+  filasComprobantesSunat, nombreArchivoSunat, TIPOS_SUNAT,
+  type ComprobanteHistorico,
 } from "@/lib/export/comprobantes-sunat";
-import { aCsv } from "@/lib/export/csv";
 import { publicarHoja, darLectura, explicarFallo } from "@/lib/drive/servidor";
 
 export interface HojaHistorico {
@@ -132,9 +132,9 @@ export async function hojaDelHistorico(periodo?: string): Promise<HojaHistorico 
  * Deja el histórico como hoja de Google, para Contabilidad.
  *
  * Se publica siempre con el mismo nombre en la misma carpeta, así el enlace
- * se reparte una vez y sirve para siempre. Reescribir pisa lo que se haya
- * anotado encima: esta hoja es la fuente, y quien quiera trabajar sobre ella
- * que la traiga a la suya con IMPORTRANGE.
+ * se reparte una vez y sirve para siempre. Se reemplaza solo la pestaña de
+ * datos: el tablero de Contabilidad vive en otra pestaña del mismo archivo y
+ * la publicación no lo toca.
  */
 export async function publicarHistoricoEnDrive(): Promise<
   { ok: true; id: string; url: string; cuantos: number; reemplazada: boolean }
@@ -148,9 +148,10 @@ export async function publicarHistoricoEnDrive(): Promise<
 
   try {
     const r = await publicarHoja({
-      csv: aCsv(hoja.filas),
+      filas: hoja.filas,
       nombre: "COMPROBANTES SUNAT",
       carpetas: ["SUNAT"],
+      tipos: TIPOS_SUNAT,
     });
     return { ok: true, id: r.id, url: r.url, cuantos: hoja.cuantos, reemplazada: r.reemplazada };
   } catch (e) {
@@ -166,8 +167,8 @@ export async function publicarHistoricoEnDrive(): Promise<
  * aparece a gente de verdad en su Drive— y no debe pasar como efecto
  * secundario de apretar otro botón.
  *
- * Solo lectura, porque la hoja se reescribe en cada publicación y lo que
- * alguien editara encima se perdería sin aviso.
+ * Solo lectura, porque la pestaña de datos se reescribe en cada publicación y
+ * lo que alguien editara encima se perdería sin aviso.
  */
 export async function compartirConContabilidad(): Promise<
   | { ok: true; url: string; dados: string[]; fallaron: Array<{ correo: string; motivo: string }> }
