@@ -18,8 +18,14 @@ está ahí.
 
 ### 1. La cuenta del robot
 
-Consulta con su propia cuenta, no con la de una persona. Así la bitácora dice
-quién consultó, y la clave de nadie vive en un servidor.
+El robot **no es un programa**: es una cuenta de usuario, como la de cualquier
+persona, solo que detrás no hay nadie. La base de datos pregunta «¿quién
+eres?» antes de dejar escribir, y el proceso de las 8 de la mañana necesita
+poder responder.
+
+Con cuenta propia la bitácora dice «Robot SUNAT consultó» en vez del nombre de
+alguien que estaba durmiendo, y la clave de esa persona no vive en un
+servidor. Para cortarlo, basta con desactivar esta cuenta.
 
 En Supabase · Authentication · Users · **Add user**:
 
@@ -27,23 +33,32 @@ En Supabase · Authentication · Users · **Add user**:
 - Contraseña: una larga, que nadie más use
 - Marcar **Auto Confirm User**
 
-Después, en el SQL Editor, darle el rol (una sola vez):
+Después, en el SQL Editor, crear su ficha y darle el rol (una sola vez):
 
 ```sql
--- Crea la persona del robot y le da el rol que necesita para consultar.
+-- La tabla exige un DNI de 8 a 12 dígitos y único. El robot no tiene, así que
+-- se le pone uno de 12 que empieza en 9: los DNI reales son de 8 y ninguno
+-- empieza así, de modo que no puede chocar con una persona. Queda marcado
+-- como provisional, que es para lo que existe esa casilla.
 with a as (
   select id from auth.users where email = 'robot.sunat@sin-correo.local'
-),
-u as (
-  insert into usuarios (auth_id, email, nombre, activo)
-  select a.id, 'robot.sunat@sin-correo.local', 'Robot SUNAT', true from a
-  on conflict (email) do update set auth_id = excluded.auth_id, activo = true
+), u as (
+  insert into usuarios (auth_id, email, nombre, dni, dni_provisional, activo)
+  select a.id, 'robot.sunat@sin-correo.local', 'Robot SUNAT', '999000000001', true, true
+  from a
+  on conflict (email) do update
+    set auth_id = excluded.auth_id, activo = true
   returning id
 )
 insert into roles_usuario (usuario_id, rol)
 select u.id, 'ADMIN_SISTEMA' from u
 on conflict do nothing;
 ```
+
+Supabase muestra un aviso —«This query creates a table without enabling Row
+Level Security»— que en este caso es falso: la consulta no crea ninguna tabla,
+solo inserta filas en dos que ya existen y ya tienen RLS. Se elige **Run
+without RLS**, que en este contexto significa «ejecuta sin tocar nada más».
 
 ### 2. Los secretos
 
