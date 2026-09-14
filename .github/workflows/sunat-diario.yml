@@ -41,8 +41,13 @@ jobs:
 
       - name: Consultar el mes en curso y el anterior
         env:
+          # Se pasan los dos nombres posibles: Supabase reserva el prefijo
+          # SUPABASE_ en sus propios secretos, así que quien copie los valores
+          # desde ahí llega con PROJECT_URL y ANON_KEY. El que esté puesto gana.
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          PROJECT_URL: ${{ secrets.PROJECT_URL }}
+          ANON_KEY: ${{ secrets.ANON_KEY }}
           ROBOT_CORREO: ${{ secrets.ROBOT_CORREO }}
           ROBOT_CLAVE: ${{ secrets.ROBOT_CLAVE }}
           SUNAT_INROPRIN_CLIENT_ID: ${{ secrets.SUNAT_INROPRIN_CLIENT_ID }}

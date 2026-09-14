@@ -62,13 +62,23 @@ without RLS**, que en este contexto significa «ejecuta sin tocar nada más».
 
 ### 2. Los secretos
 
-En el repositorio: **Settings · Secrets and variables · Actions · New
-repository secret**. Ocho, uno por uno:
+Van en **GitHub**, no en Supabase. Son dos sitios distintos que se parecen:
+Supabase tiene sus propios secretos para Edge Functions, y GitHub Actions no
+puede leer de ahí.
+
+El camino es: el repositorio en GitHub · **Settings** · **Secrets and
+variables** · **Actions** · **New repository secret**. Ocho, uno por uno:
 
 | Secreto | De dónde sale |
 |---|---|
 | `SUPABASE_URL` | el mismo valor que `NEXT_PUBLIC_SUPABASE_URL` en Vercel |
 | `SUPABASE_ANON_KEY` | el mismo que `NEXT_PUBLIC_SUPABASE_ANON_KEY` |
+
+Esos dos también valen como `PROJECT_URL` y `ANON_KEY`, que es como quedan si
+los valores se copiaron desde los secretos de Supabase —ahí el prefijo
+`SUPABASE_` está reservado y no deja usarlo—. Cualquiera de los dos nombres
+funciona; no hace falta volver a escribirlos.
+
 | `ROBOT_CORREO` | `robot.sunat@sin-correo.local` |
 | `ROBOT_CLAVE` | la contraseña del paso 1 |
 | `SUNAT_INROPRIN_CLIENT_ID` | el mismo que en Vercel |

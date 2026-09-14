@@ -24,18 +24,29 @@ import { publicarHoja } from "../lib/drive/servidor.ts";
 const EMPRESA = process.env.SUNAT_EMPRESA ?? "INROPRIN";
 const RUC     = process.env.SUNAT_RUC ?? "20512201611";
 
-/** Corta la ejecución diciendo qué falta, en vez de fallar más adelante. */
-function exigir(nombre: string): string {
-  const v = (process.env[nombre] ?? "").trim();
-  if (!v) {
-    console.error(`✗ Falta la variable ${nombre}. Se ponen en Settings · Secrets del repositorio.`);
-    process.exit(1);
+/**
+ * Corta la ejecución diciendo qué falta, en vez de fallar más adelante.
+ *
+ * Acepta más de un nombre porque Supabase reserva el prefijo SUPABASE_ en sus
+ * propios secretos, y quien copie los valores desde ahí llega con los nombres
+ * que Supabase permitió. Los dos sirven; fallar por el nombre habiendo puesto
+ * el valor correcto sería una pérdida de tiempo tonta.
+ */
+function exigir(...nombres: string[]): string {
+  for (const n of nombres) {
+    const v = (process.env[n] ?? "").trim();
+    if (v) return v;
   }
-  return v;
+  console.error(
+    `✗ Falta ${nombres.join(" o ")}.\n` +
+    "  Van en GitHub · Settings · Secrets and variables · Actions,\n" +
+    "  no en los secretos de Supabase: Actions no puede leer de ahí."
+  );
+  process.exit(1);
 }
 
-const url    = exigir("SUPABASE_URL");
-const anon   = exigir("SUPABASE_ANON_KEY");
+const url    = exigir("SUPABASE_URL", "PROJECT_URL");
+const anon   = exigir("SUPABASE_ANON_KEY", "ANON_KEY");
 const correo = exigir("ROBOT_CORREO");
 const clave  = exigir("ROBOT_CLAVE");
 
