@@ -228,7 +228,61 @@ function campoDe(titulo: string): Campo | null {
   return null;
 }
 
-/** Parte una línea de CSV respetando las comillas. */
+/**
+ * Parte el archivo entero en registros, respetando las comillas.
+ *
+ * Cortar primero por saltos de línea y después por el separador parece lo
+ * mismo y no lo es: un campo entrecomillado puede contener un salto, y
+ * entonces un registro se parte en dos y las dos mitades salen corridas.
+ * Pasó de verdad —dos filas de marzo de 2026 quedaron con la fecha en la
+ * columna del CAR, el nombre del proveedor en la del RUC y una serie en la
+ * del tipo— y no lo notó nadie hasta mirar qué tipos de comprobante había.
+ *
+ * Se recorre carácter por carácter llevando la cuenta de si se está dentro
+ * de comillas. Es la única forma de que un salto adentro no corte nada.
+ */
+export function partirCsv(texto: string, sep: string): string[][] {
+  const registros: string[][] = [];
+  let fila: string[] = [];
+  let campo = "";
+  let enComillas = false;
+
+  const cerrarFila = () => {
+    fila.push(campo.trim());
+    campo = "";
+    // Una línea en blanco no es un registro vacío: es una línea en blanco.
+    if (fila.length > 1 || fila[0] !== "") registros.push(fila);
+    fila = [];
+  };
+
+  for (let i = 0; i < texto.length; i++) {
+    const c = texto[i];
+
+    if (enComillas) {
+      if (c === '"') {
+        if (texto[i + 1] === '"') { campo += '"'; i++; }
+        else enComillas = false;
+      } else campo += c;
+      continue;
+    }
+
+    if (c === '"') { enComillas = true; continue; }
+    if (c === sep) { fila.push(campo.trim()); campo = ""; continue; }
+
+    if (c === "\n" || c === "\r") {
+      if (c === "\r" && texto[i + 1] === "\n") i++;
+      cerrarFila();
+      continue;
+    }
+
+    campo += c;
+  }
+
+  cerrarFila();
+  return registros;
+}
+
+/** Parte una línea suelta de CSV respetando las comillas. */
 export function partirLinea(linea: string, sep: string): string[] {
   const out: string[] = [];
   let actual = "";
@@ -344,17 +398,18 @@ function modificaDe(
  */
 export function leerPropuestaRce(texto: string): LecturaRce {
   const limpio = texto.replace(/^﻿/, "");
-  const lineas = limpio.split(/\r?\n/).filter(l => l.trim() !== "");
+  const primeraLinea = limpio.split(/\r?\n/, 1)[0] ?? "";
 
-  if (lineas.length === 0) {
+  if (primeraLinea.trim() === "") {
     return {
       filas: [], mapeo: [], sinMapear: [], duplicadas: [], titulos: [], ejemplo: [],
       faltantes: [...ESPERADOS], descartadas: 0,
     };
   }
 
-  const sep = separadorDe(lineas[0]);
-  const titulos = partirLinea(lineas[0], sep);
+  const sep = separadorDe(primeraLinea);
+  const registros = partirCsv(limpio, sep);
+  const titulos = registros[0] ?? [];
 
   const mapeo: LecturaRce["mapeo"] = [];
   const sinMapear: string[] = [];
@@ -384,8 +439,8 @@ export function leerPropuestaRce(texto: string): LecturaRce {
   const filas: FilaRce[] = [];
   let descartadas = 0;
 
-  for (let i = 1; i < lineas.length; i++) {
-    const celdas = partirLinea(lineas[i], sep);
+  for (let i = 1; i < registros.length; i++) {
+    const celdas = registros[i];
     const cruda: Record<string, string> = {};
     titulos.forEach((t, j) => { if (t) cruda[t] = celdas[j] ?? ""; });
 
@@ -431,7 +486,7 @@ export function leerPropuestaRce(texto: string): LecturaRce {
     sinMapear,
     duplicadas,
     titulos,
-    ejemplo: lineas.length > 1 ? partirLinea(lineas[1], sep) : [],
+    ejemplo: registros[1] ?? [],
     // La identidad del generador sirve de respaldo cuando el archivo trae
     // una sola: no hay que reportarla como faltante si está cubierta.
     faltantes: ESPERADOS.filter(c => {

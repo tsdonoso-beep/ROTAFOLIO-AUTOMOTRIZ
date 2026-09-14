@@ -2,7 +2,7 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
   leerPropuestaRce, separadorDe, partirLinea, aNumero, aFecha,
-  normalizarNumero, codigoTipo, normalizar, revisarIdentidad, type FilaRce,
+  normalizarNumero, codigoTipo, normalizar, revisarIdentidad, partirCsv, type FilaRce,
 } from "../rce.ts";
 
 describe("normalizar títulos", () => {
@@ -405,5 +405,75 @@ describe("impuestos, detracción y tipo de cambio", () => {
   test("todas las columnas quedan reconocidas, ninguna suelta", () => {
     assert.deepEqual(r.sinMapear, []);
     assert.deepEqual(r.duplicadas, []);
+  });
+});
+
+// Dos filas de marzo de 2026 salieron con la fecha en la columna del CAR, el
+// nombre del proveedor en la del RUC y una serie en la del tipo. La causa era
+// cortar por saltos de línea antes de mirar las comillas: una razón social
+// con un salto adentro parte el registro en dos y todo queda corrido.
+describe("un salto de línea dentro de un campo", () => {
+  const cabecera = [
+    "CAR SUNAT", "RUC", "Apellidos y Nombres o Razón social", "Fecha de emisión",
+    "Tipo CP/Doc.", "Serie del CDP", "Nro CP o Doc. Nro Inicial (Rango)", "Total CP",
+  ].join(";");
+
+  const conSalto = [
+    "CAR-1", "20512201611", '"INSTITUTO NACIONAL\nDE CALIDAD"',
+    "13/03/2026", "01", "F001", "123", "51.97",
+  ].join(";");
+
+  const normal = ["CAR-2", "20100055237", "FERRETERIA EL SOL", "14/03/2026", "01", "E001", "9", "10.00"].join(";");
+
+  const r = leerPropuestaRce([cabecera, conSalto, normal].join("\n"));
+
+  test("el registro no se parte en dos", () => {
+    assert.equal(r.filas.length, 2);
+  });
+
+  test("las columnas no se corren: el tipo sigue siendo el tipo", () => {
+    assert.equal(r.filas[0].tipoComprobante, "01");
+    assert.equal(r.filas[0].serie, "F001");
+    assert.equal(r.filas[0].carSunat, "CAR-1");
+  });
+
+  test("el nombre conserva su salto en vez de romper la fila", () => {
+    assert.match(r.filas[0].razonGenerador ?? "", /INSTITUTO NACIONAL/);
+    assert.match(r.filas[0].razonGenerador ?? "", /DE CALIDAD/);
+  });
+
+  test("la fila siguiente tampoco se contamina", () => {
+    assert.equal(r.filas[1].carSunat, "CAR-2");
+    assert.equal(r.filas[1].total, 10);
+  });
+});
+
+describe("partirCsv", () => {
+  test("separa campos y registros", () => {
+    assert.deepEqual(partirCsv("a;b\nc;d", ";"), [["a", "b"], ["c", "d"]]);
+  });
+
+  test("respeta el separador dentro de comillas", () => {
+    assert.deepEqual(partirCsv('a;"b;c";d', ";"), [["a", "b;c", "d"]]);
+  });
+
+  test("respeta el salto de línea dentro de comillas", () => {
+    assert.deepEqual(partirCsv('a;"b\nc";d', ";"), [["a", "b\nc", "d"]]);
+  });
+
+  test("entiende la comilla escapada", () => {
+    assert.deepEqual(partirCsv('a;"di ""hola"""', ";"), [["a", 'di "hola"']]);
+  });
+
+  test("los saltos de Windows cuentan como uno solo", () => {
+    assert.deepEqual(partirCsv("a;b\r\nc;d", ";"), [["a", "b"], ["c", "d"]]);
+  });
+
+  test("las líneas en blanco no se cuelan como registros", () => {
+    assert.deepEqual(partirCsv("a;b\n\n\nc;d\n", ";"), [["a", "b"], ["c", "d"]]);
+  });
+
+  test("un campo vacío al final sigue contando", () => {
+    assert.deepEqual(partirCsv("a;b;", ";"), [["a", "b", ""]]);
   });
 });
