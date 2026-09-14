@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { normalizarClavePrivada } from "../servidor.ts";
+import { normalizarClavePrivada, correoDeServicio } from "../servidor.ts";
 
 // Una clave de juguete con la misma forma que la de verdad. No abre nada.
 const CUERPO = "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDeJemplo";
@@ -51,5 +51,48 @@ describe("normalizarClavePrivada", () => {
     const k = normalizarClavePrivada(`"${CON_ESCAPES}"`)!;
     assert.ok(k.startsWith("-----BEGIN PRIVATE KEY-----\n"), k.slice(0, 40));
     assert.ok(k.trimEnd().endsWith("-----END PRIVATE KEY-----"));
+  });
+});
+
+// Sacar la clave del .json a mano es donde se equivoca todo el mundo: se
+// corta de más, se pega con la coma del final, se pierde un trozo. Aceptar el
+// archivo entero elimina ese paso.
+describe("cuando se pega el archivo .json completo", () => {
+  const JSON_DE_GOOGLE = JSON.stringify({
+    type: "service_account",
+    project_id: "ardent-bulwark-489403-v6",
+    private_key_id: "abc123",
+    private_key: CON_ESCAPES,
+    client_email: "repo-print-drive@ardent-bulwark-489403-v6.iam.gserviceaccount.com",
+    client_id: "123456789",
+  }, null, 2);
+
+  test("saca la clave de adentro", () => {
+    assert.equal(normalizarClavePrivada(JSON_DE_GOOGLE), REAL);
+  });
+
+  test("y también el correo, que viene en el mismo archivo", () => {
+    assert.equal(
+      correoDeServicio(undefined, JSON_DE_GOOGLE),
+      "repo-print-drive@ardent-bulwark-489403-v6.iam.gserviceaccount.com",
+    );
+  });
+
+  test("el correo puesto aparte manda sobre el del archivo", () => {
+    assert.equal(correoDeServicio("otro@ejemplo.com", JSON_DE_GOOGLE), "otro@ejemplo.com");
+  });
+
+  test("un JSON sin clave privada no se toma por una", () => {
+    const sinClave = JSON.stringify({ type: "service_account" });
+    assert.equal(normalizarClavePrivada(sinClave), sinClave + "\n");
+  });
+
+  test("algo que empieza con llave pero no es JSON no revienta", () => {
+    assert.ok(normalizarClavePrivada("{esto no es json")!.startsWith("{esto"));
+  });
+
+  test("sin archivo ni correo, no hay correo", () => {
+    assert.equal(correoDeServicio(undefined, undefined), undefined);
+    assert.equal(correoDeServicio("  ", "no es json"), undefined);
   });
 });

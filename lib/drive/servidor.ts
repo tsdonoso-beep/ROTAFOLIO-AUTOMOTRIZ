@@ -34,6 +34,21 @@ export function normalizarClavePrivada(bruta: string | undefined): string | unde
   if (!bruta) return undefined;
 
   let k = bruta.trim();
+
+  // Google entrega la clave dentro de un archivo .json, y sacar de ahí el
+  // trozo exacto sin cortarlo de más es el paso donde todo el mundo se
+  // equivoca. Si lo que llega es ese archivo entero, se saca la clave sola.
+  if (k.startsWith("{")) {
+    try {
+      const j = JSON.parse(k) as { private_key?: unknown };
+      if (typeof j.private_key === "string" && j.private_key.includes("PRIVATE KEY")) {
+        k = j.private_key;
+      }
+    } catch {
+      // No era JSON válido: se sigue tratando como una clave suelta, y si
+      // tampoco lo es, Google lo dirá.
+    }
+  }
   if ((k.startsWith('"') && k.endsWith('"')) || (k.startsWith("'") && k.endsWith("'"))) {
     k = k.slice(1, -1);
   }
@@ -45,8 +60,32 @@ export function normalizarClavePrivada(bruta: string | undefined): string | unde
   return k.endsWith("\n") ? k : k + "\n";
 }
 
+/**
+ * El correo de la cuenta de servicio.
+ *
+ * Si la clave se pegó como el archivo .json completo, el correo viene dentro
+ * y no hace falta ponerlo aparte: son dos secretos menos que copiar mal.
+ */
+export function correoDeServicio(
+  correo: string | undefined, clave: string | undefined
+): string | undefined {
+  const c = correo?.trim();
+  if (c) return c;
+
+  const k = clave?.trim();
+  if (!k?.startsWith("{")) return undefined;
+  try {
+    const j = JSON.parse(k) as { client_email?: unknown };
+    return typeof j.client_email === "string" ? j.client_email : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function conectarDrive(): { drive: Drive; raiz: string } {
-  const email = process.env.GOOGLE_SA_EMAIL?.trim();
+  const email = correoDeServicio(
+    process.env.GOOGLE_SA_EMAIL, process.env.GOOGLE_SA_PRIVATE_KEY,
+  );
   const key = normalizarClavePrivada(process.env.GOOGLE_SA_PRIVATE_KEY);
   const raiz = process.env.GOOGLE_DRIVE_FOLDER_ID?.trim();
 

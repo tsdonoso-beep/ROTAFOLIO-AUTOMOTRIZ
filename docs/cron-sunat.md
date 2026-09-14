@@ -104,11 +104,22 @@ Para verlas: en Vercel, proyecto **foto-grama** · Settings · Environment
 Variables, y en cada una el menú de los tres puntos tiene la opción de
 mostrar el valor.
 
-Sobre `GOOGLE_SA_PRIVATE_KEY`: es un bloque largo que empieza con
-`-----BEGIN PRIVATE KEY-----`. Puede aparecer entre comillas, con los saltos
-escritos como `\n` literal, o con saltos de verdad. **Las tres formas
-sirven**: el código quita las comillas y arregla los saltos antes de usarla.
-Se pega tal como venga, sin retocar nada.
+Sobre `GOOGLE_SA_PRIVATE_KEY`: lo más simple es **pegar el archivo `.json`
+entero** que descarga Google al crear la clave. De ahí se saca la clave y
+también el correo, así que con eso `GOOGLE_SA_EMAIL` sobra.
+
+Sacar a mano el trozo de la clave del .json es el paso donde se equivoca todo
+el mundo —se corta de más, se arrastra la coma del final, se pierde un
+pedazo—, y el error que devuelve Google habla de formato sin decir dónde está
+el problema.
+
+También sirve pegar solo la clave, como un bloque que empieza con
+`-----BEGIN PRIVATE KEY-----`, con o sin comillas, con los saltos escritos
+como `\n` o de verdad. Todas esas formas se aceptan.
+
+Las variables de Vercel se guardaron como tipo *Secret*, que no deja volver a
+verlas. Por eso hubo que crear una clave nueva en Google Cloud Console: no
+invalida la anterior, una cuenta de servicio puede tener varias.
 
 `GOOGLE_SHEET_ID` aparece en esa lista pero **no lo usa nadie**: es resto de
 una versión anterior. No hace falta copiarlo.
