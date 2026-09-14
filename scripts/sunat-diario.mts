@@ -175,9 +175,15 @@ async function publicarLaHoja(): Promise<void> {
     }
   }
 
+  const aNum = (v: unknown) => (v == null || v === "" ? null : Number(v));
+
   const historico = (data as ComprobanteHistorico[]).map(c => ({
     ...c,
-    total: c.total == null ? null : Number(c.total),
+    total: aNum(c.total),
+    base: aNum(c.base),
+    igv: aNum(c.igv),
+    detraccion: aNum(c.detraccion),
+    tipoCambio: aNum(c.tipoCambio),
     rendidoPor: quien.get(llave(c.proveedorRuc, c.tipoComprobante, c.serie, c.numero)) ?? null,
   }));
 

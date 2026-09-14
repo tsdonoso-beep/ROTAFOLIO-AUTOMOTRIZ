@@ -65,6 +65,31 @@ export interface FilaRce {
   /** Tipo de nota (crédito o débito), cuando lo es. */
   tipoNota: string | null;
 
+  /**
+   * Los impuestos, separados por destino de la compra.
+   *
+   * El archivo no trae un IGV sino tres, según a qué se destine: operaciones
+   * gravadas (DG), gravadas y no gravadas (DGNG) y no gravadas (DNG). La
+   * distinción decide la prorrata del crédito fiscal, así que se guardan
+   * separados aunque la hoja muestre la suma: juntarlos al leer perdería el
+   * dato para siempre, y separarlos después obligaría a volver a consultar
+   * todos los períodos.
+   */
+  impuestos: {
+    baseDg: number | null;
+    igvDg: number | null;
+    baseDgng: number | null;
+    igvDgng: number | null;
+    baseDng: number | null;
+    igvDng: number | null;
+  };
+
+  /** Lo que se detrae. En Perú decide si el crédito fiscal se puede usar. */
+  detraccion: number | null;
+
+  /** Para las facturas en moneda extranjera. */
+  tipoCambio: number | null;
+
   /** La fila entera, por si hace falta mirarla. */
   cruda: Record<string, string>;
 }
@@ -80,7 +105,9 @@ export type Campo =
   | "ruc" | "razonSocial" | "rucGenerador" | "razonGenerador"
   | "tipoComprobante" | "serie" | "numero" | "fechaEmision" | "total" | "moneda"
   | "carSunat" | "estado" | "tipoNota"
-  | "modificaTipo" | "modificaSerie" | "modificaNumero" | "modificaFecha";
+  | "modificaTipo" | "modificaSerie" | "modificaNumero" | "modificaFecha"
+  | "baseDg" | "igvDg" | "baseDgng" | "igvDgng" | "baseDng" | "igvDng"
+  | "detraccion" | "tipoCambio";
 
 export interface LecturaRce {
   filas: FilaRce[];
@@ -168,6 +195,19 @@ const ALIAS: Array<{ campo: Campo; titulos: string[] }> = [
   { campo: "modificaFecha", titulos: [
     "fecha emision doc modificado", "fecha emision cp modificado",
   ] },
+
+  // Los más largos van primero: la segunda vuelta del emparejado busca por
+  // contenido, y «igv ipm dg» está dentro de «igv ipm dgng». Con la exacta
+  // bastaría, pero el orden lo hace correcto también sin ella.
+  { campo: "baseDgng", titulos: ["bi gravado dgng"] },
+  { campo: "igvDgng", titulos: ["igv ipm dgng"] },
+  { campo: "baseDng", titulos: ["bi gravado dng"] },
+  { campo: "igvDng", titulos: ["igv ipm dng"] },
+  { campo: "baseDg", titulos: ["bi gravado dg", "base imponible"] },
+  { campo: "igvDg", titulos: ["igv ipm dg", "igv"] },
+
+  { campo: "detraccion", titulos: ["detraccion", "monto detraccion"] },
+  { campo: "tipoCambio", titulos: ["tipo de cambio", "tipo cambio"] },
 ];
 
 const ESPERADOS: Array<Campo> = [
@@ -367,6 +407,16 @@ export function leerPropuestaRce(texto: string): LecturaRce {
       estado: dame(celdas, "estado").trim() || null,
       tipoNota: dame(celdas, "tipoNota").trim() || null,
       modifica: modificaDe(celdas, dame),
+      impuestos: {
+        baseDg: aNumero(dame(celdas, "baseDg")),
+        igvDg: aNumero(dame(celdas, "igvDg")),
+        baseDgng: aNumero(dame(celdas, "baseDgng")),
+        igvDgng: aNumero(dame(celdas, "igvDgng")),
+        baseDng: aNumero(dame(celdas, "baseDng")),
+        igvDng: aNumero(dame(celdas, "igvDng")),
+      },
+      detraccion: aNumero(dame(celdas, "detraccion")),
+      tipoCambio: aNumero(dame(celdas, "tipoCambio")),
     };
 
     // Una fila sin RUC y sin número no sirve para cruzar contra nada. Suele

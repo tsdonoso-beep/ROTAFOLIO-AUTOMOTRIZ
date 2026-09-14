@@ -12,7 +12,8 @@ const c = (p: Partial<ComprobanteHistorico> = {}): ComprobanteHistorico => ({
   fechaEmision: "2026-08-05", total: 118, moneda: "PEN", estado: "1",
   tipoNota: null, modificaTipo: null, modificaSerie: null, modificaNumero: null,
   carSunat: "CAR-100", primeraVez: "2026-09-01T10:00:00Z", ultimaVez: "2026-09-13T10:00:00Z",
-  rendidoPor: null, cambios: 0, ...p,
+  rendidoPor: null, cambios: 0,
+  base: 100, igv: 18, detraccion: null, tipoCambio: null, ...p,
 });
 
 describe("nombreDeTipo", () => {
@@ -50,7 +51,7 @@ describe("filasComprobantesSunat", () => {
 
   test("el importe va con dos decimales, para que Excel lo sume", () => {
     const f = filasComprobantesSunat([c({ total: 118 })]);
-    assert.equal(f[1][8], "118.00");
+    assert.equal(f[1][11], "118.00");
   });
 
   // Quien lee la hoja busca «E001-500», no un tipo y una serie sueltos.
@@ -59,21 +60,21 @@ describe("filasComprobantesSunat", () => {
       tipoComprobante: "07", tipoNota: "01",
       modificaTipo: "01", modificaSerie: "E001", modificaNumero: "500",
     })]);
-    assert.equal(f[1][11], "Factura E001-500");
+    assert.equal(f[1][15], "Factura E001-500");
   });
 
   test("una factura normal deja esa celda vacía", () => {
-    assert.equal(filasComprobantesSunat([c()])[1][11], "");
+    assert.equal(filasComprobantesSunat([c()])[1][15], "");
   });
 
   test("sin cambios la celda va vacía, no un cero que se lee como dato", () => {
-    assert.equal(filasComprobantesSunat([c({ cambios: 0 })])[1][13], "");
-    assert.equal(filasComprobantesSunat([c({ cambios: 2 })])[1][13], "2");
+    assert.equal(filasComprobantesSunat([c({ cambios: 0 })])[1][17], "");
+    assert.equal(filasComprobantesSunat([c({ cambios: 2 })])[1][17], "2");
   });
 
   test("dice quién lo rindió, que es lo que SUNAT no sabe", () => {
     const f = filasComprobantesSunat([c({ rendidoPor: "Annie Ramos" })]);
-    assert.equal(f[1][12], "Annie Ramos");
+    assert.equal(f[1][16], "Annie Ramos");
   });
 
   test("un comprobante sin datos no rompe la hoja", () => {
@@ -81,9 +82,10 @@ describe("filasComprobantesSunat", () => {
       proveedorRuc: null, proveedorNombre: null, tipoComprobante: null,
       serie: null, numero: null, fechaEmision: null, total: null,
       moneda: null, estado: null, carSunat: null,
+      base: null, igv: null, detraccion: null, tipoCambio: null,
     })]);
     assert.equal(vacio[1].length, CABECERAS_SUNAT.length);
-    assert.equal(vacio[1][8], "");
+    assert.equal(vacio[1][11], "");
   });
 });
 
@@ -113,5 +115,37 @@ describe("nombreArchivoSunat", () => {
   });
   test("sin período, el histórico completo", () => {
     assert.match(nombreArchivoSunat(null), /historico/);
+  });
+});
+
+// Sin estos números Contabilidad no puede verificar el crédito fiscal, que es
+// justamente su trabajo.
+describe("las columnas de impuestos", () => {
+  test("base, IGV y detracción salen con dos decimales", () => {
+    const f = filasComprobantesSunat([c({ base: 100, igv: 18, detraccion: 24.24 })])[1];
+    assert.equal(f[9], "100.00");
+    assert.equal(f[10], "18.00");
+    assert.equal(f[12], "24.24");
+  });
+
+  test("el tipo de cambio va con cuatro decimales, como lo publica SUNAT", () => {
+    const f = filasComprobantesSunat([c({ tipoCambio: 3.752 })])[1];
+    assert.equal(f[8], "3.7520");
+  });
+
+  // Un IGV en cero es una operación exonerada; uno vacío es un dato que no
+  // vino. Mostrar los dos igual haría que una exoneración parezca un hueco.
+  test("cero se muestra como cero y vacío como vacío", () => {
+    assert.equal(filasComprobantesSunat([c({ igv: 0 })])[1][10], "0.00");
+    assert.equal(filasComprobantesSunat([c({ igv: null })])[1][10], "");
+  });
+
+  test("siguen calzando las celdas con los títulos", () => {
+    const f = filasComprobantesSunat([c()]);
+    assert.equal(f[0].length, 21);
+    assert.equal(f[1].length, f[0].length);
+    assert.equal(f[0][9], "Base imponible");
+    assert.equal(f[0][10], "IGV");
+    assert.equal(f[0][12], "Detracción");
   });
 });

@@ -20,6 +20,12 @@ export interface ComprobanteHistorico {
   total: number | null;
   moneda: string | null;
   estado: string | null;
+  /** Base imponible: la suma de los tres destinos. */
+  base: number | null;
+  /** IGV: la suma de los tres destinos. El desglose vive en la base. */
+  igv: number | null;
+  detraccion: number | null;
+  tipoCambio: number | null;
   tipoNota: string | null;
   modificaTipo: string | null;
   modificaSerie: string | null;
@@ -33,10 +39,14 @@ export interface ComprobanteHistorico {
   cambios: number;
 }
 
+// El orden importa: lo que Contabilidad busca primero va a la izquierda, y
+// lo técnico al final. Cambiarlo después rompe lo que alguien haya armado
+// encima, así que se decide una vez.
 export const CABECERAS_SUNAT = [
   "Período", "RUC proveedor", "Proveedor", "Tipo", "Serie", "Número",
-  "Fecha de emisión", "Moneda", "Total", "Estado",
-  "Es nota de", "Corrige a", "Lo rindió", "Cambios detectados",
+  "Fecha de emisión", "Moneda", "Tipo de cambio",
+  "Base imponible", "IGV", "Total", "Detracción",
+  "Estado", "Es nota de", "Corrige a", "Lo rindió", "Cambios detectados",
   "Visto por primera vez", "Visto por última vez", "CAR SUNAT",
 ];
 
@@ -51,7 +61,13 @@ export function nombreDeTipo(codigo: string | null): string {
   return NOMBRE_TIPO[codigo] ?? codigo;
 }
 
+// Vacío cuando no hay dato, no un cero: un IGV en cero es una operación
+// exonerada y uno vacío es un dato que no vino. Confundirlos haría que una
+// exoneración parezca un hueco, y al revés.
 const num = (v: number | null) => (v == null ? "" : Number(v).toFixed(2));
+
+/** El tipo de cambio lleva cuatro decimales, que es como lo publica SUNAT. */
+const cambio = (v: number | null) => (v == null ? "" : Number(v).toFixed(4));
 
 /** La fecha como la espera Excel en español. */
 export function fechaCorta(iso: string | null): string {
@@ -72,7 +88,11 @@ export function filasComprobantesSunat(cs: ComprobanteHistorico[]): string[][] {
       c.numero ?? "",
       fechaCorta(c.fechaEmision),
       c.moneda ?? "",
+      cambio(c.tipoCambio),
+      num(c.base),
+      num(c.igv),
       num(c.total),
+      num(c.detraccion),
       c.estado ?? "",
       c.tipoNota ?? "",
       // Se escribe como un comprobante, no como tres columnas sueltas: quien

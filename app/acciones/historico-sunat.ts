@@ -104,9 +104,18 @@ export async function hojaDelHistorico(periodo?: string): Promise<HojaHistorico 
     }
   }
 
+  // Los importes llegan como número desde la base, pero se fuerzan igual:
+  // un numeric grande puede viajar como texto y una suma de textos concatena
+  // en vez de sumar, en silencio.
+  const aNum = (v: unknown) => (v == null || v === "" ? null : Number(v));
+
   const historico: ComprobanteHistorico[] = (data as ComprobanteHistorico[]).map(c => ({
     ...c,
-    total: c.total == null ? null : Number(c.total),
+    total: aNum(c.total),
+    base: aNum(c.base),
+    igv: aNum(c.igv),
+    detraccion: aNum(c.detraccion),
+    tipoCambio: aNum(c.tipoCambio),
     rendidoPor: quienRindio.get(
       llave(c.proveedorRuc, c.tipoComprobante, c.serie, c.numero)
     ) ?? null,

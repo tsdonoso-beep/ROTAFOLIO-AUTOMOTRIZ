@@ -261,6 +261,9 @@ describe("revisarIdentidad", () => {
     tipoComprobante: "01", serie: "E001", numero: "1",
     fechaEmision: "2026-08-05", total: 10, moneda: "PEN", cruda: {},
     carSunat: null, estado: "1", tipoNota: null, modifica: null,
+    impuestos: { baseDg: null, igvDg: null, baseDgng: null, igvDgng: null,
+                 baseDng: null, igvDng: null },
+    detraccion: null, tipoCambio: null,
   });
 
   // Lo que pasó con el período 202608 antes de separar las dos identidades.
@@ -349,5 +352,58 @@ describe("notas de crédito y estado del comprobante", () => {
                      "modificaSerie", "modificaNumero", "modificaFecha"]) {
       assert.ok(campos.includes(c as never), `falta ${c}`);
     }
+  });
+});
+
+// Los impuestos deciden el crédito fiscal, que es el trabajo de Contabilidad.
+describe("impuestos, detracción y tipo de cambio", () => {
+  const cabecera = [
+    "RUC", "Apellidos y Nombres o Razón social", "Fecha de emisión",
+    "Tipo CP/Doc.", "Serie del CDP", "Nro CP o Doc. Nro Inicial (Rango)",
+    "BI Gravado DG", "IGV / IPM DG", "BI Gravado DGNG", "IGV / IPM DGNG",
+    "BI Gravado DNG", "IGV / IPM DNG", "Detracción", "Tipo de Cambio",
+    "Total CP", "Moneda",
+  ].join(";");
+  const fila = [
+    "20100055237", "FERRETERIA EL SOL", "05/08/2026", "01", "E001", "500",
+    "100.00", "18.00", "50.00", "9.00", "25.00", "0.00",
+    "12.00", "3.752", "202.00", "PEN",
+  ].join(";");
+  const r = leerPropuestaRce(cabecera + "\n" + fila);
+  const f = r.filas[0];
+
+  test("lee el IGV de operaciones gravadas", () => {
+    assert.equal(f.impuestos.igvDg, 18);
+    assert.equal(f.impuestos.baseDg, 100);
+  });
+
+  // «igv ipm dg» está contenido dentro de «igv ipm dgng»: si el emparejado
+  // por contenido ganara, los tres IGV serían el mismo número.
+  test("no confunde DG con DGNG ni con DNG", () => {
+    assert.equal(f.impuestos.igvDgng, 9);
+    assert.equal(f.impuestos.baseDgng, 50);
+    assert.equal(f.impuestos.igvDng, 0);
+    assert.equal(f.impuestos.baseDng, 25);
+  });
+
+  test("lee la detracción y el tipo de cambio", () => {
+    assert.equal(f.detraccion, 12);
+    assert.equal(f.tipoCambio, 3.752);
+  });
+
+  test("cero no es lo mismo que vacío", () => {
+    // Un IGV de 0 es una operación exonerada; uno vacío es un dato que no
+    // vino. Confundirlos haría que una exoneración parezca un hueco.
+    assert.equal(f.impuestos.igvDng, 0);
+    const sinImpuestos = leerPropuestaRce(
+      "RUC;Serie del CDP;Nro CP o Doc. Nro Inicial (Rango);Total CP\n20100055237;E001;1;10"
+    ).filas[0];
+    assert.equal(sinImpuestos.impuestos.igvDg, null);
+    assert.equal(sinImpuestos.detraccion, null);
+  });
+
+  test("todas las columnas quedan reconocidas, ninguna suelta", () => {
+    assert.deepEqual(r.sinMapear, []);
+    assert.deepEqual(r.duplicadas, []);
   });
 });
