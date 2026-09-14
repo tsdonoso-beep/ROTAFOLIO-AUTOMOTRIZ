@@ -30,10 +30,18 @@ jobs:
     timeout-minutes: 25
 
     steps:
-      - uses: actions/checkout@v4
+      # v5 en adelante corren sobre Node 24 por su cuenta. Con las v4, GitHub
+      # las fuerza a Node 24 igual y avisa en cada ejecución; el aviso no
+      # rompe nada, pero un registro con ruido acaba en que nadie lo lee.
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
+          # Esto es otra cosa que lo de arriba: es la versión con la que
+          # corre NUESTRO script, no la de las acciones. Se queda en una LTS
+          # a propósito. En setiembre de 2026 la 26 todavía es «Current», y
+          # una tarea que corre sola de madrugada no es donde conviene
+          # estrenar versión.
           node-version: "22"
           cache: npm
 
