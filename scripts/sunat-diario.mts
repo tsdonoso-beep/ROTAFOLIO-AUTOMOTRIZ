@@ -13,7 +13,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { credencialesDe } from "../lib/sunat/credenciales.ts";
-import { pedirExportacion, consultarTicket, bajarArchivo } from "../lib/sunat/sire.ts";
+import { pedirExportacion, consultarTicket, bajarArchivo, procesoEnCurso } from "../lib/sunat/sire.ts";
 import { periodoDe, periodoCerradoAnterior, validarPeriodo } from "../lib/sunat/periodo.ts";
 import { leerZip } from "../lib/sunat/zip.ts";
 import { leerPropuestaRce, revisarIdentidad } from "../lib/sunat/rce.ts";
@@ -82,11 +82,38 @@ async function esperarTicket(periodo: string, ticket: string) {
   throw new Error(`El ticket ${ticket} no terminó en seis minutos.`);
 }
 
+/**
+ * Pide la exportación, esperando si hay otra en curso.
+ *
+ * SUNAT admite un proceso a la vez por contribuyente. Al consultar varios
+ * meses seguidos, el siguiente llega antes de que el anterior termine de
+ * cerrarse del lado de ellos, y sin esto el período se perdía.
+ */
+async function pedirConPaciencia(periodo: string): Promise<string> {
+  const INTENTOS = 5;
+  const ESPERA_MS = 30000;
+
+  for (let i = 1; ; i++) {
+    try {
+      return await pedirExportacion(cred, periodo, "csv");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const enCurso = procesoEnCurso(msg);
+      if (!enCurso || i >= INTENTOS) throw e;
+      console.log(
+        `  SUNAT tiene otra exportación en curso${enCurso.ticket ? ` (ticket ${enCurso.ticket})` : ""}.`
+        + ` Esperando ${ESPERA_MS / 1000} s — intento ${i} de ${INTENTOS - 1}.`
+      );
+      await new Promise(r => setTimeout(r, ESPERA_MS));
+    }
+  }
+}
+
 async function consultar(periodo: string): Promise<boolean> {
   const arranque = Date.now();
   console.log(`\n── ${periodo} ──`);
 
-  const ticket = await pedirExportacion(cred, periodo, "csv");
+  const ticket = await pedirConPaciencia(periodo);
   console.log(`  ticket ${ticket}`);
 
   const archivo = await esperarTicket(periodo, ticket);

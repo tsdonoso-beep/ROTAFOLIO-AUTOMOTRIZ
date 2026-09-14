@@ -12,7 +12,10 @@
 import { solicitanteActual, clienteServidor } from "@/lib/supabase/servidor";
 import { autoriza } from "@/lib/dominio/permisos";
 import { credencialesDe, type CredencialesSunat } from "@/lib/sunat/credenciales";
-import { pedirExportacion, consultarTicket, bajarArchivo, type ArchivoDelTicket } from "@/lib/sunat/sire";
+import {
+  pedirExportacion, consultarTicket, bajarArchivo, procesoEnCurso,
+  type ArchivoDelTicket,
+} from "@/lib/sunat/sire";
 import { validarPeriodo } from "@/lib/sunat/periodo";
 import { leerZip } from "@/lib/sunat/zip";
 import { leerPropuestaRce, revisarIdentidad, type LecturaRce } from "@/lib/sunat/rce";
@@ -79,7 +82,23 @@ async function credenciales(
 }
 
 function comoError(e: unknown): { tipo: "error"; motivo: string } {
-  return { tipo: "error", motivo: e instanceof Error ? e.message : String(e) };
+  const motivo = e instanceof Error ? e.message : String(e);
+
+  // SUNAT admite una exportación a la vez por contribuyente. Su mensaje lo
+  // dice, pero enterrado en un JSON de validación; acá se dice en una frase
+  // con lo único que hay que hacer, que es esperar.
+  const enCurso = procesoEnCurso(motivo);
+  if (enCurso) {
+    return {
+      tipo: "error",
+      motivo: "SUNAT ya está preparando otro período para esta empresa"
+        + (enCurso.ticket ? ` (ticket ${enCurso.ticket})` : "")
+        + ". Admite uno a la vez: espera un par de minutos y vuelve a intentarlo. "
+        + "Lo que ya se trajo está guardado.",
+    };
+  }
+
+  return { tipo: "error", motivo };
 }
 
 /**

@@ -4,7 +4,8 @@ import { periodoCerradoAnterior, periodoDe, validarPeriodo } from "../periodo.ts
 import { credencialesDe, usuarioSol } from "../credenciales.ts";
 import { cuerpoDeToken, olvidarToken, obtenerToken, urlDeToken, vigencia, vigente } from "../token.ts";
 import {
-  leerTicket, mensajeDeEstado, resumirFallo, urlArchivo, urlEstadoTicket, urlExportarPropuesta,
+  leerTicket, mensajeDeEstado, procesoEnCurso, resumirFallo,
+  urlArchivo, urlEstadoTicket, urlExportarPropuesta,
 } from "../sire.ts";
 import { TICKET_PROPUESTA_RCE } from "./fixtures/ticket-real.ts";
 
@@ -386,5 +387,33 @@ describe("mensajeDeEstado", () => {
   test("el 422 no se traduce: su cuerpo dice más", () => {
     assert.equal(mensajeDeEstado(422), null);
     assert.equal(mensajeDeEstado(404), null);
+  });
+});
+
+// SUNAT admite una exportación a la vez por contribuyente. Al consultar
+// varios meses seguidos, el siguiente llega antes de que el anterior se
+// cierre del lado de ellos, y sin distinguirlo el período se perdía.
+describe("procesoEnCurso", () => {
+  const RECHAZO = '{"cod":422,"msg":"Unprocessable Entity","errors":[{"cod":42209,'
+    + '"msg":"Estimado contribuyente aún tiene un proceso de \\"Generar archivo '
+    + 'exportar propuesta\\" en curso con Ticket: 20260300000141 y Fecha Envío: 14/09/2026 12:07:34"}]}';
+
+  test("reconoce el rechazo por otra exportación en curso", () => {
+    assert.notEqual(procesoEnCurso(RECHAZO), null);
+  });
+
+  test("saca el número de ticket, que es lo que identifica al proceso", () => {
+    assert.equal(procesoEnCurso(RECHAZO)!.ticket, "20260300000141");
+  });
+
+  test("sin ticket a la vista no inventa uno", () => {
+    assert.equal(procesoEnCurso('{"errors":[{"cod":42209,"msg":"en curso"}]}')!.ticket, null);
+  });
+
+  // Un 422 por otra causa se deja pasar: su cuerpo nombra el campo, y
+  // taparlo con «espera un rato» perdería el dato que sirve.
+  test("otros rechazos no se confunden con este", () => {
+    assert.equal(procesoEnCurso('{"errors":[{"cod":1061,"msg":"codOrigenEnvio vacio"}]}'), null);
+    assert.equal(procesoEnCurso("SUNAT respondió HTTP 500"), null);
   });
 });

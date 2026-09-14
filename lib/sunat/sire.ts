@@ -217,6 +217,20 @@ export function mensajeDeEstado(estado: number, esperarSegundos?: number | null)
   return null;
 }
 
+/**
+ * Reconoce el rechazo por tener otra exportación en curso.
+ *
+ * SUNAT admite un solo proceso de «Generar archivo exportar propuesta» por
+ * contribuyente a la vez, y rechaza el siguiente con un 422 y el código
+ * 42209. No es un error del pedido: es que llegó temprano. Distinguirlo
+ * permite esperar y reintentar en vez de perder el período —que es lo que
+ * pasaba al consultar varios meses seguidos—.
+ */
+export function procesoEnCurso(mensaje: string): { ticket: string | null } | null {
+  if (!/42209/.test(mensaje)) return null;
+  return { ticket: /Ticket:\s*(\w+)/.exec(mensaje)?.[1] ?? null };
+}
+
 async function pedir(url: string, token: string, traer: typeof globalThis.fetch) {
   const res = await traer(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) {
