@@ -154,6 +154,43 @@ export async function publicarHoja(p: {
   return { id: nueva.data.id!, url: nueva.data.webViewLink!, reemplazada: false };
 }
 
+/**
+ * Da acceso de lectura a un archivo.
+ *
+ * Solo lectura: esta hoja se reescribe en cada publicación, así que lo que
+ * alguien editara encima se perdería. Quien necesite anotar sobre ella que la
+ * traiga a la suya con IMPORTRANGE.
+ *
+ * No manda correo. El aviso lo da quien reparte el enlace, que sabe explicar
+ * qué es; una notificación de Drive sin contexto se archiva sin abrirse.
+ *
+ * Devuelve a quién se le dio y a quién no, en vez de cortar al primer fallo:
+ * si un correo está mal escrito, el resto igual debe quedar con acceso.
+ */
+export async function darLectura(
+  fileId: string, correos: string[]
+): Promise<{ ok: string[]; fallaron: Array<{ correo: string; motivo: string }> }> {
+  const { drive } = conectarDrive();
+  const ok: string[] = [];
+  const fallaron: Array<{ correo: string; motivo: string }> = [];
+
+  for (const correo of correos) {
+    try {
+      await drive.permissions.create({
+        fileId,
+        requestBody: { type: "user", role: "reader", emailAddress: correo },
+        sendNotificationEmail: false,
+        ...DRIVES,
+      });
+      ok.push(correo);
+    } catch (e) {
+      fallaron.push({ correo, motivo: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  return { ok, fallaron };
+}
+
 /** Traduce los fallos de Drive a algo que quien lo lea pueda accionar. */
 export function explicarFallo(e: unknown): string {
   const msg = e instanceof Error ? e.message : String(e);

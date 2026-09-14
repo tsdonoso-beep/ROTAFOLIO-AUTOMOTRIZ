@@ -14,7 +14,7 @@ import {
   filasComprobantesSunat, nombreArchivoSunat, type ComprobanteHistorico,
 } from "@/lib/export/comprobantes-sunat";
 import { aCsv } from "@/lib/export/csv";
-import { publicarHoja, explicarFallo } from "@/lib/drive/servidor";
+import { publicarHoja, darLectura, explicarFallo } from "@/lib/drive/servidor";
 
 export interface HojaHistorico {
   nombre: string;
@@ -128,7 +128,8 @@ export async function hojaDelHistorico(periodo?: string): Promise<HojaHistorico 
  * que la traiga a la suya con IMPORTRANGE.
  */
 export async function publicarHistoricoEnDrive(): Promise<
-  { ok: true; url: string; cuantos: number; reemplazada: boolean } | { ok: false; motivo: string }
+  { ok: true; id: string; url: string; cuantos: number; reemplazada: boolean }
+  | { ok: false; motivo: string }
 > {
   const hoja = await hojaDelHistorico();
   if (!hoja) return { ok: false, motivo: "No se pudo armar la hoja. ¿Sigue abierta la sesión?" };
@@ -142,8 +143,49 @@ export async function publicarHistoricoEnDrive(): Promise<
       nombre: "COMPROBANTES SUNAT",
       carpetas: ["SUNAT"],
     });
-    return { ok: true, url: r.url, cuantos: hoja.cuantos, reemplazada: r.reemplazada };
+    return { ok: true, id: r.id, url: r.url, cuantos: hoja.cuantos, reemplazada: r.reemplazada };
   } catch (e) {
     return { ok: false, motivo: explicarFallo(e) };
   }
+}
+
+
+/**
+ * Le da acceso de lectura a la hoja a quien lleva la contabilidad.
+ *
+ * Va aparte de publicar y no dentro: compartir un archivo es hacia afuera —le
+ * aparece a gente de verdad en su Drive— y no debe pasar como efecto
+ * secundario de apretar otro botón.
+ *
+ * Solo lectura, porque la hoja se reescribe en cada publicación y lo que
+ * alguien editara encima se perdería sin aviso.
+ */
+export async function compartirConContabilidad(): Promise<
+  | { ok: true; url: string; dados: string[]; fallaron: Array<{ correo: string; motivo: string }> }
+  | { ok: false; motivo: string }
+> {
+  const solicitante = await solicitanteActual();
+  if (!solicitante || !autoriza(solicitante, "editar_catalogos").ok) {
+    return { ok: false, motivo: "Solo Administración del sistema puede compartir la hoja." };
+  }
+
+  const sb = await clienteServidor();
+  const { data: gente } = await sb
+    .from("usuarios")
+    .select("email, roles_usuario!inner ( rol )")
+    .eq("activo", true)
+    .eq("roles_usuario.rol", "CONTABILIDAD");
+
+  const correos = [...new Set((gente ?? []).map(g => g.email).filter(Boolean))];
+  if (correos.length === 0) {
+    return { ok: false, motivo: "No hay nadie activo con el rol de Contabilidad." };
+  }
+
+  // Se publica primero para tener el archivo y su enlace: compartir algo que
+  // todavía no existe no tendría sentido.
+  const hoja = await publicarHistoricoEnDrive();
+  if (!hoja.ok) return hoja;
+
+  const r = await darLectura(hoja.id, correos);
+  return { ok: true, url: hoja.url, dados: r.ok, fallaron: r.fallaron };
 }

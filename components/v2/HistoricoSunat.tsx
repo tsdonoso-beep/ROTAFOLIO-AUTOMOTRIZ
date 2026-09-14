@@ -3,7 +3,9 @@ import { useState, useTransition } from "react";
 import { Tarjeta, Aviso, Cifra } from "./Encabezado";
 import { IconoAlerta, IconoCheck, IconoDescargar, IconoEnlace } from "./Iconos";
 import { descargarCsv } from "@/lib/export/csv";
-import { hojaDelHistorico, publicarHistoricoEnDrive } from "@/app/acciones/historico-sunat";
+import {
+  hojaDelHistorico, publicarHistoricoEnDrive, compartirConContabilidad,
+} from "@/app/acciones/historico-sunat";
 
 /**
  * Descarga del histórico de comprobantes.
@@ -18,18 +20,30 @@ export default function HistoricoSunat({ periodos }: {
   const [pendiente, iniciar] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [hoja, setHoja] = useState<{ url: string; cuantos: number } | null>(null);
+  const [dados, setDados] = useState<string[] | null>(null);
 
   const total = periodos.reduce((a, p) => a + p.cuantos, 0);
 
+  const compartir = () => iniciar(async () => {
+    setError(null); setHoja(null); setDados(null);
+    const r = await compartirConContabilidad();
+    if (!r.ok) { setError(r.motivo); return; }
+    setHoja({ url: r.url, cuantos: 0 });
+    setDados(r.dados);
+    if (r.fallaron.length) {
+      setError(`No se pudo dar acceso a: ${r.fallaron.map(f => f.correo).join(", ")}.`);
+    }
+  });
+
   const publicar = () => iniciar(async () => {
-    setError(null); setHoja(null);
+    setError(null); setHoja(null); setDados(null);
     const r = await publicarHistoricoEnDrive();
     if (!r.ok) { setError(r.motivo); return; }
     setHoja({ url: r.url, cuantos: r.cuantos });
   });
 
   const bajar = (periodo?: string) => iniciar(async () => {
-    setError(null); setHoja(null);
+    setError(null); setHoja(null); setDados(null);
     const hoja = await hojaDelHistorico(periodo);
     if (!hoja) { setError("No se pudo armar la hoja. ¿Sigue abierta la sesión?"); return; }
     if (hoja.cuantos === 0) { setError("No hay comprobantes guardados de ese período."); return; }
@@ -75,7 +89,9 @@ export default function HistoricoSunat({ periodos }: {
       {hoja && (
         <div style={{ marginBottom: 12 }}>
           <Aviso tono="ok" icono={<IconoCheck size={16} />}>
-            Hoja publicada en Drive con {hoja.cuantos.toLocaleString("es-PE")} comprobantes.{" "}
+            {dados
+              ? `Contabilidad ya puede verla: ${dados.length} ${dados.length === 1 ? "persona" : "personas"}. `
+              : `Hoja publicada en Drive con ${hoja.cuantos.toLocaleString("es-PE")} comprobantes. `}
             <a href={hoja.url} target="_blank" rel="noreferrer"
                style={{ color: "inherit", textDecoration: "underline" }}>
               Abrirla
@@ -99,6 +115,16 @@ export default function HistoricoSunat({ periodos }: {
           {pendiente ? "Trabajando…" : `Bajar CSV (${total.toLocaleString("es-PE")})`}
         </button>
       </div>
+
+      <button className="btn-ghost" onClick={compartir} disabled={pendiente}
+        style={{ width: "100%", justifyContent: "center", marginBottom: 10 }}>
+        <IconoEnlace size={15} />
+        {pendiente ? "Trabajando…" : "Publicar y dar acceso a Contabilidad"}
+      </button>
+      <p style={{ marginTop: -4, marginBottom: 12, fontSize: 11, color: "var(--text3)", lineHeight: 1.45 }}>
+        Da acceso de <strong>solo lectura</strong> a quien tiene el rol de Contabilidad. No
+        les manda correo: el enlace se los pasas tú, que sabes explicarles qué es.
+      </p>
 
       <p className="rotulo" style={{ marginBottom: 7 }}>O un período suelto</p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>

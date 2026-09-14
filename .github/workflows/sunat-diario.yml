@@ -1,0 +1,52 @@
+# Consulta diaria al registro de compras de SUNAT
+#
+# Corre acá y no en Vercel porque allá un cron solo puede correr una vez al
+# día y cada ejecución muere al minuto; el ticket de SUNAT tarda entre uno y
+# tres minutos.
+#
+# Las credenciales viven en Settings · Secrets and variables · Actions. El
+# repositorio es público: nada de esto puede ir en un archivo.
+
+name: SUNAT diario
+
+on:
+  schedule:
+    # 08:00 en Lima, que es UTC-5 todo el año. GitHub puede correrlo en
+    # cualquier momento de esa hora, lo cual da igual para algo diario.
+    - cron: "0 13 * * *"
+  # Para poder dispararlo a mano desde la pestaña Actions sin esperar al día
+  # siguiente. Es como se prueba la primera vez.
+  workflow_dispatch:
+
+# Sin permisos de escritura: esto solo lee de SUNAT y escribe en la base.
+permissions:
+  contents: read
+
+jobs:
+  consultar:
+    runs-on: ubuntu-latest
+    # SUNAT encola el pedido y hay que esperarlo; el corte por omisión son
+    # seis horas, que para esto es una eternidad.
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Consultar el mes en curso y el anterior
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          ROBOT_CORREO: ${{ secrets.ROBOT_CORREO }}
+          ROBOT_CLAVE: ${{ secrets.ROBOT_CLAVE }}
+          SUNAT_INROPRIN_CLIENT_ID: ${{ secrets.SUNAT_INROPRIN_CLIENT_ID }}
+          SUNAT_INROPRIN_CLIENT_SECRET: ${{ secrets.SUNAT_INROPRIN_CLIENT_SECRET }}
+          SUNAT_INROPRIN_USUARIO: ${{ secrets.SUNAT_INROPRIN_USUARIO }}
+          SUNAT_INROPRIN_CLAVE: ${{ secrets.SUNAT_INROPRIN_CLAVE }}
+        run: node --experimental-strip-types scripts/sunat-diario.mts
