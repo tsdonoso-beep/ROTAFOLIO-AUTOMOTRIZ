@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<style>
+  /* La paleta sale de la guía de visualización y está validada contra las dos
+     superficies: banda de luminosidad, piso de croma y contraste ≥ 3:1. Se
+     declara por rol, no por hex suelto, para que el modo oscuro cambie en un
+     solo sitio. */
+  :root {
+    color-scheme: light;
+    --surface:     #fcfcfb;
+    --panel:       #ffffff;
+    --borde:       #e5e4df;
+    --borde-suave: #f0efeb;
+    --ink:         #0b0b0b;
+    --ink-2:       #52514e;
+    --ink-3:       #86847d;
+    --serie:       #2a78d6;
+    --critico:     #d03b3b;
+    --bueno:       #0ca30c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface:     #1a1a19;
+      --panel:       #232322;
+      --borde:       #35352f;
+      --borde-suave: #2b2b28;
+      --ink:         #ffffff;
+      --ink-2:       #c3c2b7;
+      --ink-3:       #8f8e85;
+      --serie:       #3987e5;
+      --critico:     #d03b3b;
+      --bueno:       #0ca30c;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 22px 26px 34px;
+    background: var(--surface); color: var(--ink);
+    font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
+  .rotulo {
+    font-size: 10.5px; font-weight: 600; letter-spacing: .09em;
+    text-transform: uppercase; color: var(--ink-3);
+  }
+
+  header { display: flex; justify-content: space-between; align-items: flex-end;
+           gap: 18px; flex-wrap: wrap; margin-bottom: 20px; }
+  h1 { margin: 0; font-size: 21px; font-weight: 700; letter-spacing: -.015em; }
+  header p { margin: 4px 0 0; font-size: 12.5px; color: var(--ink-2); }
+  select {
+    font: inherit; padding: 7px 11px; border-radius: 8px;
+    border: 1px solid var(--borde); background: var(--panel); color: var(--ink);
+  }
+
+  .tarjeta { background: var(--panel); border: 1px solid var(--borde);
+             border-radius: 12px; padding: 18px 20px; }
+
+  .cifras { display: grid; gap: 12px; margin-bottom: 18px;
+            grid-template-columns: repeat(auto-fit, minmax(158px, 1fr)); }
+  .cifra .v { font-size: 25px; font-weight: 700; letter-spacing: -.02em;
+              font-variant-numeric: tabular-nums; margin: 0 0 3px; }
+  .cifra .v.resta { color: var(--critico); }
+  .cifra .n { font-size: 11px; color: var(--ink-3); margin: 3px 0 0; }
+
+  .dos { display: grid; gap: 16px; grid-template-columns: 1.35fr 1fr; align-items: start; }
+  @media (max-width: 900px) { .dos { grid-template-columns: 1fr; } }
+
+  h2 { margin: 0 0 3px; font-size: 14.5px; font-weight: 700; }
+  .sub { margin: 0 0 15px; font-size: 12px; color: var(--ink-2); line-height: 1.5; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { text-align: left; padding: 0 12px 7px 0; border-bottom: 1px solid var(--borde);
+       font-size: 10.5px; font-weight: 600; letter-spacing: .07em;
+       text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
+  td { padding: 8px 12px 8px 0; border-bottom: 1px solid var(--borde-suave); vertical-align: top; }
+  th.n, td.n { text-align: right; padding-right: 0; white-space: nowrap; }
+  .prov { font-weight: 500; }
+  .sec { display: block; font-size: 10.5px; color: var(--ink-3); margin-top: 1px; }
+
+  .vacio { padding: 26px 0; text-align: center; color: var(--ink-3); font-size: 12.5px; }
+  .aviso { display: flex; gap: 9px; padding: 12px 14px; border-radius: 9px;
+           font-size: 12.5px; line-height: 1.5; margin-bottom: 15px;
+           background: color-mix(in srgb, var(--critico) 9%, transparent);
+           border: 1px solid color-mix(in srgb, var(--critico) 26%, transparent);
+           color: var(--ink); }
+  .aviso b { color: var(--critico); }
+
+  /* El gráfico: una sola serie, así que no lleva leyenda — el título la
+     nombra. Las barras son finas, con el extremo redondeado anclado a la
+     línea base y 2px de aire entre una y otra. */
+  .grafico { position: relative; }
+  .barra { cursor: default; transition: opacity .12s; }
+  .barra:hover { opacity: .78; }
+  .rejilla { stroke: var(--borde); stroke-width: 1; }
+  .eje { font-size: 10px; fill: var(--ink-3); font-family: inherit; }
+  .valor { font-size: 10.5px; fill: var(--ink-2); font-variant-numeric: tabular-nums; }
+  #globo {
+    position: absolute; pointer-events: none; opacity: 0; transition: opacity .1s;
+    background: var(--ink); color: var(--surface); padding: 7px 10px;
+    border-radius: 7px; font-size: 11.5px; white-space: nowrap; z-index: 5;
+    transform: translate(-50%, -100%);
+  }
+
+  #cargando { padding: 70px 0; text-align: center; color: var(--ink-3); }
+  #error { display: none; }
+</style>
+</head>
+<body>
+
+<div id="cargando">Leyendo la hoja…</div>
+
+<div id="error" class="tarjeta">
+  <h2>No se pudo armar el tablero</h2>
+  <p class="sub" id="errorTexto"></p>
+</div>
+
+<div id="todo" style="display:none">
+  <header>
+    <div>
+      <h1>Monitoreo SUNAT</h1>
+      <p>Registro de compras declarado a nombre de INROPRIN</p>
+    </div>
+    <label>
+      <span class="rotulo" style="display:block;margin-bottom:5px">Período</span>
+      <select id="periodo"></select>
+    </label>
+  </header>
+
+  <div class="cifras" id="cifras"></div>
+
+  <div id="avisoNotas"></div>
+
+  <div class="dos">
+    <div class="tarjeta">
+      <h2>IGV neto por mes</h2>
+      <p class="sub">Lo que suman las compras menos lo que restan las notas de crédito.</p>
+      <div class="grafico">
+        <div id="globo"></div>
+        <svg id="chart" width="100%" height="230" role="img"
+             aria-label="IGV neto por mes"></svg>
+      </div>
+    </div>
+
+    <div class="tarjeta">
+      <h2>Quién factura más</h2>
+      <p class="sub">Proveedores del período, sin contar notas de crédito.</p>
+      <table>
+        <thead><tr><th>Proveedor</th><th class="n">Comprob.</th><th class="n">Total</th></tr></thead>
+        <tbody id="proveedores"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="tarjeta" style="margin-top:16px">
+    <h2>Notas de crédito del período</h2>
+    <p class="sub">Cada una resta del crédito fiscal. «Corrige a» dice sobre qué factura cae.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Proveedor</th><th>Nota</th><th>Corrige a</th>
+          <th>Lo rindió</th><th class="n">Monto</th><th class="n">IGV que resta</th>
+        </tr>
+      </thead>
+      <tbody id="notas"></tbody>
+    </table>
+    <p class="sub" id="masNotas" style="margin:11px 0 0"></p>
+  </div>
+
+  <div class="tarjeta" style="margin-top:16px">
+    <h2>Comprobantes que cambiaron</h2>
+    <p class="sub">Llegaron distintos de como estaban la última vez que se consultó su período.</p>
+    <table>
+      <thead><tr><th>Proveedor</th><th>Comprobante</th><th class="n">Total</th><th class="n">Visto</th></tr></thead>
+      <tbody id="cambiados"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+var soles = function (n) {
+  return 'S/ ' + Number(n || 0).toLocaleString('es-PE',
+    { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+var miles = function (n) { return Number(n || 0).toLocaleString('es-PE'); };
+var esc = function (s) {
+  return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+  });
+};
+var mes = function (p) {
+  var n = ['ene','feb','mar','abr','may','jun','jul','ago','set','oct','nov','dic'];
+  return p.length === 6 ? n[Number(p.slice(4)) - 1] + ' ' + p.slice(2, 4) : p;
+};
+
+function pedir(periodo) {
+  document.getElementById('cargando').style.display = '';
+  document.getElementById('todo').style.display = 'none';
+  document.getElementById('error').style.display = 'none';
+  google.script.run
+    .withSuccessHandler(pintar)
+    .withFailureHandler(function (e) {
+      document.getElementById('cargando').style.display = 'none';
+      document.getElementById('error').style.display = '';
+      document.getElementById('errorTexto').textContent = e && e.message ? e.message : String(e);
+    })
+    .datosDelTablero(periodo || null);
+}
+
+var ultimo = null;
+
+function pintar(d) {
+  ultimo = d;
+  document.getElementById('cargando').style.display = 'none';
+  document.getElementById('todo').style.display = '';
+
+  var sel = document.getElementById('periodo');
+  sel.innerHTML = d.periodos.map(function (p) {
+    return '<option value="' + p + '"' + (p === d.elegido ? ' selected' : '') + '>' + mes(p) + '</option>';
+  }).join('');
+  sel.onchange = function () { pedir(this.value); };
+
+  var r = d.resumen;
+  var neto = r.igvCompras - r.igvNotas;
+  document.getElementById('cifras').innerHTML = [
+    tarjeta(soles(neto), 'IGV neto del mes',
+            r.igvNotas > 0 ? soles(r.igvCompras) + ' menos ' + soles(r.igvNotas) : null),
+    tarjeta(miles(r.comprobantes), 'comprobantes', miles(r.proveedores) + ' proveedores'),
+    tarjeta(soles(r.base), 'base imponible', null),
+    tarjeta(soles(r.total), 'total facturado', null),
+    tarjeta(miles(d.notas.length), 'notas de crédito',
+            d.notas.length ? soles(r.igvNotas) + ' de IGV' : 'ninguna', d.notas.length > 0)
+  ].join('');
+
+  document.getElementById('avisoNotas').innerHTML = d.notas.length
+    ? '<div class="aviso"><span>⚠</span><div><b>' + d.notas.length
+      + (d.notas.length === 1 ? ' nota de crédito resta ' : ' notas de crédito restan ')
+      + soles(r.igvNotas) + '</b> del crédito fiscal de este período.'
+      + (r.rendidos ? '' : ' Ninguno de estos comprobantes se rindió por la aplicación todavía.')
+      + '</div></div>'
+    : '';
+
+  document.getElementById('proveedores').innerHTML = d.topProveedores.length
+    ? d.topProveedores.map(function (p) {
+        return '<tr><td class="prov">' + esc(p.proveedor)
+          + '<span class="sec mono">' + esc(p.ruc) + '</span></td>'
+          + '<td class="n mono">' + miles(p.n) + '</td>'
+          + '<td class="n mono">' + soles(p.total) + '</td></tr>';
+      }).join('')
+    : '<tr><td colspan="3" class="vacio">Sin comprobantes en este período.</td></tr>';
+
+  var notas = d.notas.slice(0, 25);
+  document.getElementById('notas').innerHTML = notas.length
+    ? notas.map(function (n) {
+        return '<tr><td class="prov">' + esc(n.proveedor)
+          + '<span class="sec mono">' + esc(n.ruc) + '</span></td>'
+          + '<td class="mono">' + esc(n.comprobante) + '<span class="sec">' + esc(n.fecha) + '</span></td>'
+          + '<td class="mono">' + esc(n.corrigeA || '—') + '</td>'
+          + '<td>' + esc(n.rindio || '—') + '</td>'
+          + '<td class="n mono">' + soles(n.monto) + '</td>'
+          + '<td class="n mono" style="color:var(--critico)">' + soles(n.igv) + '</td></tr>';
+      }).join('')
+    : '<tr><td colspan="6" class="vacio">Ninguna nota de crédito en este período.</td></tr>';
+  document.getElementById('masNotas').textContent =
+    d.notas.length > notas.length ? 'Se muestran ' + notas.length + ' de ' + d.notas.length + '.' : '';
+
+  document.getElementById('cambiados').innerHTML = d.cambiados.length
+    ? d.cambiados.map(function (c) {
+        return '<tr><td class="prov">' + esc(c.proveedor) + '</td>'
+          + '<td class="mono">' + esc(c.comprobante) + '</td>'
+          + '<td class="n mono">' + soles(c.total) + '</td>'
+          + '<td class="n mono">' + esc(c.ultimaVez) + '</td></tr>';
+      }).join('')
+    : '<tr><td colspan="4" class="vacio">Ninguno cambió desde la última consulta. Eso es lo normal.</td></tr>';
+
+  dibujar(d.porMes, d.elegido);
+}
+
+function tarjeta(valor, rotulo, nota, resta) {
+  return '<div class="tarjeta cifra"><p class="v' + (resta ? ' resta' : '') + '">' + valor + '</p>'
+    + '<p class="rotulo">' + rotulo + '</p>'
+    + (nota ? '<p class="n">' + nota + '</p>' : '') + '</div>';
+}
+
+/**
+ * Barras del IGV neto por mes.
+ *
+ * Una sola serie, así que no lleva leyenda: el título la nombra. Se etiquetan
+ * solo el mes elegido y el más alto — un número sobre cada barra convierte el
+ * gráfico en una tabla mal hecha.
+ */
+function dibujar(porMes, elegido) {
+  var svg = document.getElementById('chart');
+  var globo = document.getElementById('globo');
+  svg.innerHTML = '';
+  if (!porMes.length) return;
+
+  var W = svg.clientWidth || 640, H = 230;
+  var m = { top: 22, right: 8, bottom: 26, left: 58 };
+  var ancho = W - m.left - m.right, alto = H - m.top - m.bottom;
+
+  var max = Math.max.apply(null, porMes.map(function (p) { return p.igv; }).concat([0]));
+  var min = Math.min.apply(null, porMes.map(function (p) { return p.igv; }).concat([0]));
+  var rango = (max - min) || 1;
+  var y = function (v) { return m.top + alto - ((v - min) / rango) * alto; };
+  var cero = y(0);
+
+  var ns = 'http://www.w3.org/2000/svg';
+  var crear = function (t, a) {
+    var e = document.createElementNS(ns, t);
+    for (var k in a) e.setAttribute(k, a[k]);
+    return e;
+  };
+
+  // Rejilla recesiva: tres referencias, no una cuadrícula.
+  [min, (min + max) / 2, max].forEach(function (v) {
+    svg.appendChild(crear('line', { x1: m.left, x2: W - m.right, y1: y(v), y2: y(v), class: 'rejilla' }));
+    var t = crear('text', { x: m.left - 9, y: y(v) + 3.5, class: 'eje', 'text-anchor': 'end' });
+    t.textContent = 'S/ ' + Math.round(v / 1000) + 'k';
+    svg.appendChild(t);
+  });
+
+  var paso = ancho / porMes.length;
+  var ancla = Math.max(Math.min(paso - 12, 34), 10);
+
+  porMes.forEach(function (p, i) {
+    var cx = m.left + paso * i + paso / 2;
+    var arriba = Math.min(y(p.igv), cero), abajo = Math.max(y(p.igv), cero);
+    var h = Math.max(abajo - arriba, 2);
+    var esElegido = p.periodo === elegido;
+
+    var b = crear('rect', {
+      x: cx - ancla / 2, y: arriba, width: ancla, height: h, rx: 4,
+      fill: p.igv < 0 ? 'var(--critico)' : 'var(--serie)',
+      opacity: esElegido ? 1 : 0.5, class: 'barra'
+    });
+    b.addEventListener('mousemove', function (ev) {
+      globo.style.opacity = 1;
+      globo.style.left = cx + 'px';
+      globo.style.top = (arriba - 8) + 'px';
+      globo.innerHTML = '<b>' + mes(p.periodo) + '</b> · ' + soles(p.igv)
+        + ' · ' + miles(p.comprobantes) + ' comprob.';
+    });
+    b.addEventListener('mouseleave', function () { globo.style.opacity = 0; });
+    svg.appendChild(b);
+
+    var e = crear('text', { x: cx, y: H - 8, class: 'eje', 'text-anchor': 'middle' });
+    e.textContent = mes(p.periodo);
+    svg.appendChild(e);
+
+    // Solo el elegido y el máximo llevan número encima.
+    if (esElegido || p.igv === max) {
+      var v = crear('text', { x: cx, y: arriba - 7, class: 'valor', 'text-anchor': 'middle' });
+      v.textContent = 'S/ ' + Math.round(p.igv / 1000) + 'k';
+      svg.appendChild(v);
+    }
+  });
+
+  svg.appendChild(crear('line', {
+    x1: m.left, x2: W - m.right, y1: cero, y2: cero,
+    stroke: 'var(--ink-3)', 'stroke-width': 1
+  }));
+}
+
+pedir(null);
+
+// Al cambiar el ancho solo se redibuja el gráfico. Volver a pedir los datos
+// costaría releer trece mil filas por arrastrar el borde de la ventana.
+var redibujar;
+window.addEventListener('resize', function () {
+  clearTimeout(redibujar);
+  redibujar = setTimeout(function () {
+    if (ultimo) dibujar(ultimo.porMes, ultimo.elegido);
+  }, 150);
+});
+</script>
+</body>
+</html>
