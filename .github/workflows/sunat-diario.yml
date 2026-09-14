@@ -15,8 +15,14 @@ on:
     # cualquier momento de esa hora, lo cual da igual para algo diario.
     - cron: "0 13 * * *"
   # Para poder dispararlo a mano desde la pestaña Actions sin esperar al día
-  # siguiente. Es como se prueba la primera vez.
+  # siguiente. Es como se prueba la primera vez, y también como se rellenan
+  # meses viejos cuando se agrega una columna nueva.
   workflow_dispatch:
+    inputs:
+      periodos:
+        description: "Períodos a consultar, separados por coma (202601,202602). Vacío = mes en curso y anterior."
+        required: false
+        default: ""
 
 # Sin permisos de escritura: esto solo lee de SUNAT y escribe en la base.
 permissions:
@@ -67,4 +73,5 @@ jobs:
           GOOGLE_SA_EMAIL: ${{ secrets.GOOGLE_SA_EMAIL }}
           GOOGLE_SA_PRIVATE_KEY: ${{ secrets.GOOGLE_SA_PRIVATE_KEY }}
           GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+          PERIODOS: ${{ inputs.periodos }}
         run: node --experimental-strip-types scripts/sunat-diario.mts

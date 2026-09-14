@@ -196,13 +196,51 @@ async function publicarLaHoja(): Promise<void> {
 }
 
 const hoy = new Date();
-const periodos = [periodoDe(hoy), periodoCerradoAnterior(hoy)]
-  .filter(p => validarPeriodo(p, hoy).ok);
+
+/**
+ * Qué períodos consultar.
+ *
+ * Por omisión, el mes en curso y el anterior: el anterior porque los
+ * proveedores siguen declarando después del cierre. Se puede pasar una lista
+ * para rellenar meses viejos, que es lo que hace falta cuando se agrega una
+ * columna nueva y los datos de antes la tienen vacía.
+ *
+ * Los inválidos se descartan con su motivo en vez de intentarlos: SUNAT
+ * limita cuántas exportaciones se encolan seguidas, y gastar una en un
+ * período mal escrito cuesta el siguiente.
+ */
+function periodosAConsultar(): string[] {
+  const pedidos = (process.env.PERIODOS ?? "")
+    .split(/[,\s]+/).map(p => p.trim()).filter(Boolean);
+
+  if (pedidos.length === 0) {
+    return [periodoDe(hoy), periodoCerradoAnterior(hoy)].filter(p => validarPeriodo(p, hoy).ok);
+  }
+
+  const buenos: string[] = [];
+  for (const p of pedidos) {
+    const v = validarPeriodo(p, hoy);
+    if (v.ok) buenos.push(v.periodo);
+    else console.error(`✗ Se descarta ${p}: ${v.motivo}`);
+  }
+  return buenos;
+}
+
+const periodos = periodosAConsultar();
+if (periodos.length === 0) {
+  console.error("✗ No quedó ningún período válido que consultar.");
+  process.exit(1);
+}
+console.log(`Períodos: ${periodos.join(", ")}`);
+
+// Entre un período y otro se espera: pedir seis seguidos ya devolvió un 429.
+const DESCANSO_MS = 20000;
 
 let hubo = false;
 const fallaron: string[] = [];
 
-for (const p of periodos) {
+for (const [i, p] of periodos.entries()) {
+  if (i > 0) await new Promise(r => setTimeout(r, DESCANSO_MS));
   try {
     if (await consultar(p)) hubo = true;
   } catch (e) {
