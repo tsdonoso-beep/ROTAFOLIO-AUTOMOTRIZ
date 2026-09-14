@@ -14,6 +14,11 @@
 /** La hoja que publica la aplicación. Se cambia solo si se muda de archivo. */
 var HOJA_FUENTE = "1ttW7DOAiem0bl2FVL5n06MdAcmq79Yqu-S35P-rzJK0";
 
+// La pestaña con los datos. Es la que reescribe la aplicación cada mañana;
+// esta de acá al lado no la toca. Se busca por nombre y no por posición
+// porque las pestañas se arrastran sin querer.
+var PESTANA_DATOS = "COMPROBANTES SUNAT";
+
 /** A quién avisar. Vacío = a quien sea dueño de esta hoja. */
 var AVISAR_A = "";
 
@@ -70,7 +75,8 @@ function leerFuente_() {
     try { return JSON.parse(guardado); } catch (e) { /* caché vieja: se relee */ }
   }
 
-  var hoja = SpreadsheetApp.openById(HOJA_FUENTE).getSheets()[0];
+  var libro = SpreadsheetApp.openById(HOJA_FUENTE);
+  var hoja = libro.getSheetByName(PESTANA_DATOS) || libro.getSheets()[0];
   var datos = hoja.getDataRange().getValues();
   if (datos.length < 2) return [];
 
@@ -96,7 +102,7 @@ function leerFuente_() {
       proveedor: String(f[donde.proveedor] || ''),
       tipo:      String(f[donde.tipo] || ''),
       comprobante: [f[donde.serie], f[donde.numero]].filter(String).join('-'),
-      fecha:     String(f[donde.fecha] || ''),
+      fecha:     aFecha_(f[donde.fecha]),
       moneda:    String(f[donde.moneda] || ''),
       base:      aNumero_(f[donde.base]),
       igv:       aNumero_(f[donde.igv]),
@@ -104,13 +110,29 @@ function leerFuente_() {
       corrigeA:  String(f[donde.corrigeA] || ''),
       rindio:    String(f[donde.rindio] || ''),
       cambios:   aNumero_(f[donde.cambios]) || 0,
-      ultimaVez: String(f[donde.ultimaVez] || '')
+      ultimaVez: aFecha_(f[donde.ultimaVez])
     });
   }
 
   // La caché tiene un tope de tamaño; si no entra, se relee y ya está.
   try { cache.put('filas', JSON.stringify(filas), 1800); } catch (e) { /* sin caché */ }
   return filas;
+}
+
+/**
+ * La fecha como se lee en Perú: dd/mm/aaaa.
+ *
+ * Desde que la aplicación escribe por la API, estas columnas llegan como
+ * fechas de verdad y no como texto. Es mejor —se ordenan y se filtran—, pero
+ * un Date puesto en una tabla se imprime como «Thu Dec 11 2025 00:00:00
+ * GMT-0500». Acá se vuelve a dejar legible.
+ */
+function aFecha_(v) {
+  if (v === '' || v === null || v === undefined) return '';
+  if (Object.prototype.toString.call(v) !== '[object Date]') return String(v);
+  var dd = ('0' + v.getDate()).slice(-2);
+  var mm = ('0' + (v.getMonth() + 1)).slice(-2);
+  return dd + '/' + mm + '/' + v.getFullYear();
 }
 
 function aNumero_(v) {
