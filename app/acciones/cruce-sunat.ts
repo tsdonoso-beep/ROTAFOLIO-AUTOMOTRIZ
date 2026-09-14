@@ -323,6 +323,10 @@ export async function traerYCruzar(
       p_solo_en_sunat: r.soloEnSunat,
       p_monto_solo_en_sunat: r.montoSoloEnSunat,
       p_columnas_faltantes: lectura.faltantes,
+      // Para poder saber después si una columna viene vacía de verdad o si
+      // el lector no la encuentra, sin tener que mirar la pantalla en el
+      // momento justo.
+      p_columnas_sin_usar: lectura.sinMapear,
       p_identidad_sospechosa: resultado.identidadSospechosa,
       p_segundos: Math.round((Date.now() - arranque) / 1000),
     });
