@@ -2,65 +2,71 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Viáticos y rendiciones · As Is, propuestas y accesos</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Del memo a la rendición</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
+/* Documento de proceso, con estética de plano impreso: un solo mundo visual,
+   claro, pintado explícitamente para que no dependa del tema del visor. */
 :root{
   --paper:#E9ECE3; --card:#FBFCF8; --ink:#17201D; --ink-2:#5B665E; --ink-3:#8A948C;
   --rule:#C6CDBE; --teal:#2A5B62; --stamp:#B0362C; --stamp-soft:rgba(176,54,44,.10);
   --new:#2E7D5B; --new-soft:rgba(46,125,91,.10); --amber:#8A6B27;
+  --wire:#4A5A52; --lane:#F4F6F1; --lane-2:#EDF0E9; --hair:#D5DAD0;
+  --blue:#2E6FA8; --blue-soft:#EDF3F8; --blue-hi:#DEEAF4;
+  --new-bg:#E9F4EE; --new-hi:#D8EDE2; --amber-bg:#FDF7EA; --amber-hi:#F8EFDA;
+  --gate:#F5DE7A; --gate-line:#B99B14; --gate-ink:#8A7410;
+  --go:#DFF0D8; --go-line:#5A9E4B; --stop:#F8DEDB;
 }
 *{box-sizing:border-box}
-html,body{margin:0;padding:0}
-body{background:var(--paper); color:var(--ink); font-family:Barlow,system-ui,sans-serif; font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased}
-header{padding:26px 22px 0; max-width:1620px; margin:0 auto}
-h1{font-family:"Barlow Condensed",sans-serif; font-size:clamp(30px,5vw,46px); font-weight:700; line-height:1.02; margin:0 0 6px}
+body{background:var(--paper); color:var(--ink); font-family:Barlow,system-ui,sans-serif; font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased; margin:0}
+header{padding-block:26px 0; padding-inline:22px; max-width:1620px; margin:0 auto}
+h1{font-family:"Barlow Condensed",sans-serif; font-size:clamp(30px,5vw,46px); font-weight:700; line-height:1.02; margin:0 0 6px; text-wrap:balance}
 .sub{color:var(--ink-2); max-width:70ch; margin:0 0 18px}
 .tabs{display:flex; flex-wrap:wrap; border-bottom:1px solid var(--rule)}
 .tab{appearance:none; background:none; border:0; cursor:pointer; font-family:"Barlow Condensed",sans-serif; font-size:17px; font-weight:600; color:var(--ink-2); padding:9px 14px 8px; margin-bottom:-1px; border-bottom:3px solid transparent}
 .tab:hover{color:var(--ink)}
 .tab[aria-selected="true"]{color:var(--ink); border-bottom-color:var(--stamp)}
 .tab.prop[aria-selected="true"]{border-bottom-color:var(--new)}
+.tab.conex[aria-selected="true"]{border-bottom-color:var(--teal)}
 .tab:focus-visible{outline:2px solid var(--teal); outline-offset:2px}
-.ctx{max-width:1620px; margin:0 auto; padding:14px 22px 0}
+.ctx{max-width:1620px; margin:0 auto; padding-block:14px 0; padding-inline:22px}
 .ctx p{margin:0 0 8px; color:var(--ink-2); font-size:14.5px; max-width:84ch}
 .ctx .resu{display:inline-block; font-family:"Barlow Condensed",sans-serif; font-weight:700; font-size:13px; color:var(--new); border:1px solid var(--new); border-radius:2px; padding:1px 8px; margin-right:6px}
-.legend{display:flex; flex-wrap:wrap; gap:6px 18px; padding:10px 22px 6px; max-width:1620px; margin:0 auto; font-size:13px; color:var(--ink-2)}
+.ctx .fix{display:inline-block; font-family:"Barlow Condensed",sans-serif; font-weight:700; font-size:13px; color:var(--stamp); border:1px solid var(--stamp); border-radius:2px; padding:1px 8px; margin-right:6px}
+.legend{display:flex; flex-wrap:wrap; gap:6px 18px; padding-block:10px 6px; padding-inline:22px; max-width:1620px; margin:0 auto; font-size:13px; color:var(--ink-2)}
 .lg{display:flex; align-items:center; gap:7px}
-.hint{font-size:12.5px; color:var(--ink-3); padding:0 22px 6px; max-width:1620px; margin:0 auto}
+.hint{font-size:12.5px; color:var(--ink-3); padding-block:0 6px; padding-inline:22px; max-width:1620px; margin:0 auto}
 
-/* ---- lienzo con carriles fijos ---- */
-.wrap{max-width:1620px; margin:0 auto; padding:2px 22px 34px}
+.wrap{max-width:1620px; margin:0 auto; padding-block:2px 34px; padding-inline:22px}
 .board{background:#fff; border:1px solid var(--rule); border-radius:3px; display:flex; overflow:hidden}
 .lanescol{flex:none; border-right:1px solid var(--rule); background:#fff; z-index:3; box-shadow:3px 0 6px rgba(23,32,29,.06)}
 .scroller{overflow-x:auto; overflow-y:hidden; flex:1}
 svg{display:block; font-family:Barlow,sans-serif}
 svg .task{cursor:pointer}
-svg .task rect.body{fill:#EDF3F8; stroke:#2E6FA8; stroke-width:1.4; rx:7}
+svg .task rect.body{fill:var(--blue-soft); stroke:var(--blue); stroke-width:1.4; rx:7}
 svg .task.rup rect.body{stroke:var(--stamp); stroke-dasharray:5 3}
-svg .task.nuevo rect.body{fill:#E9F4EE; stroke:var(--new)}
-svg .task.pend rect.body{fill:#FDF7EA; stroke:var(--amber); stroke-dasharray:5 3}
-svg .task.pend:hover rect.body{fill:#F8EFDA}
+svg .task.nuevo rect.body{fill:var(--new-bg); stroke:var(--new)}
+svg .task.pend rect.body{fill:var(--amber-bg); stroke:var(--amber); stroke-dasharray:5 3}
+svg .task.pend:hover rect.body{fill:var(--amber-hi)}
 svg .badge.p rect{fill:#FBF2DE; stroke:var(--amber)}
 svg .badge.p text{fill:var(--amber)}
 svg .badge.p:hover rect{fill:var(--amber)}
 svg .badge.p:hover text{fill:#fff}
 svg .tnum.p{fill:var(--amber)}
-.p-title.pend{color:var(--amber)}
-svg .task:hover rect.body{fill:#DEEAF4}
-svg .task.nuevo:hover rect.body{fill:#D8EDE2}
-svg text{fill:#17201D}
-svg .tnum{font-family:"IBM Plex Mono",monospace; font-size:9.5px; fill:#2E6FA8}
+svg .task:hover rect.body{fill:var(--blue-hi)}
+svg .task.nuevo:hover rect.body{fill:var(--new-hi)}
+svg text{fill:var(--ink)}
+svg .tnum{font-family:"IBM Plex Mono",monospace; font-size:9.5px; fill:var(--blue)}
 svg .tnum.n{fill:var(--new)}
 svg .tlabel{font-size:11.4px; font-weight:500}
 svg .glabel{font-size:11px; font-weight:600}
-svg .flabel{font-size:10.5px; fill:#5B665E}
-svg .dlabel{font-size:10px; fill:#5B665E}
-svg .poolname{font-family:"Barlow Condensed",sans-serif; font-size:12.5px; font-weight:700; letter-spacing:.04em; fill:#2A5B62}
-svg .rolename{font-family:"Barlow Condensed",sans-serif; font-size:12.5px; font-weight:600; fill:#5B665E}
+svg .flabel{font-size:10.5px; fill:var(--ink-2)}
+svg .dlabel{font-size:10px; fill:var(--ink-2)}
+svg .poolname{font-family:"Barlow Condensed",sans-serif; font-size:12.5px; font-weight:700; letter-spacing:.04em; fill:var(--teal)}
+svg .rolename{font-family:"Barlow Condensed",sans-serif; font-size:12.5px; font-weight:600; fill:var(--ink-2)}
 svg .badge{cursor:pointer}
 svg .badge rect{fill:#F6EDEB; stroke:var(--stamp); stroke-width:1.3; rx:2}
 svg .badge text{fill:var(--stamp); font-family:"Barlow Condensed",sans-serif; font-weight:700; font-size:10.5px}
@@ -71,48 +77,73 @@ svg .badge.n text{fill:var(--new)}
 svg .badge.n:hover rect{fill:var(--new)}
 svg .badge.n:hover text{fill:#fff}
 
-/* ---- presentación ---- */
-.deck{max-width:1120px; margin:0 auto; padding:6px 22px 44px}
-.slide{background:#fff; border:1px solid var(--rule); border-radius:3px; padding:34px 40px 38px; min-height:540px}
-.slide h2{font-family:"Barlow Condensed",sans-serif; font-size:32px; font-weight:700; margin:0 0 4px; color:var(--teal); line-height:1.05}
-.slide .kicker{font-family:"Barlow Condensed",sans-serif; font-weight:600; font-size:14px; color:var(--ink-3); letter-spacing:.03em; margin:0 0 14px}
-.slide p{max-width:80ch; margin:0 0 14px}
-.slide ul{margin:0 0 16px; padding-left:20px; max-width:80ch}
-.slide li{margin:0 0 7px}
-.slide h3{font-family:"Barlow Condensed",sans-serif; font-size:20px; margin:20px 0 6px}
-table{border-collapse:collapse; width:100%; border:1px solid var(--rule); margin:8px 0 18px; font-size:13.8px}
-th{background:var(--teal); color:#fff; font-family:"Barlow Condensed",sans-serif; font-weight:700; font-size:14px; text-align:left; padding:7px 10px}
+/* ---- vista de conexiones ---- */
+.doc{max-width:1000px; margin:0 auto; padding-block:6px 48px; padding-inline:22px}
+.doc section{background:#fff; border:1px solid var(--rule); border-radius:3px; padding-block:26px 30px; padding-inline:clamp(18px,4vw,38px); margin-bottom:20px}
+.doc h2{font-family:"Barlow Condensed",sans-serif; font-size:29px; font-weight:700; margin:0 0 3px; color:var(--teal); line-height:1.06; text-wrap:balance}
+.doc .kicker{font-family:"Barlow Condensed",sans-serif; font-weight:600; font-size:13px; color:var(--ink-3); letter-spacing:.05em; text-transform:uppercase; margin:0 0 12px}
+.doc p{max-width:74ch; margin:0 0 13px}
+.doc h3{font-family:"Barlow Condensed",sans-serif; font-size:19px; margin:22px 0 6px; color:var(--ink)}
+.doc ul{margin:0 0 14px; padding-left:19px; max-width:74ch}
+.doc li{margin:0 0 6px}
+.tbox{overflow-x:auto; margin:10px 0 18px}
+table{border-collapse:collapse; width:100%; border:1px solid var(--rule); font-size:13.6px; min-width:560px}
+th{background:var(--teal); color:#fff; font-family:"Barlow Condensed",sans-serif; font-weight:700; font-size:14px; text-align:left; padding:7px 10px; vertical-align:bottom}
 td{border-top:1px solid var(--rule); padding:8px 10px; vertical-align:top}
-td.hoy{color:var(--stamp)} td.man{color:var(--new)}
-code,pre{font-family:"IBM Plex Mono",monospace}
-pre{background:#F2F4F7; border-left:3px solid var(--teal); padding:12px 14px; overflow-x:auto; font-size:12.4px; line-height:1.55; margin:8px 0 16px}
-.callout{background:#FBFCF8; border:1px solid var(--rule); border-left:3px solid var(--stamp); padding:13px 16px; margin:14px 0}
+td.num{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; white-space:nowrap}
+tr.alt td{background:#FAFBF7}
+.st{font-family:"Barlow Condensed",sans-serif; font-weight:700; font-size:12.5px; padding:1px 7px; border-radius:2px; white-space:nowrap; display:inline-block}
+.st.ya{color:var(--new); border:1px solid var(--new); background:var(--new-soft)}
+.st.falta{color:var(--amber); border:1px solid var(--amber); background:#FBF2DE}
+.st.dec{color:var(--stamp); border:1px solid var(--stamp); background:var(--stamp-soft)}
+code{font-family:"IBM Plex Mono",monospace; font-size:.92em; background:#F1F3EE; padding:1px 5px; border-radius:2px}
+pre{font-family:"IBM Plex Mono",monospace; background:#F2F4F7; border-left:3px solid var(--teal); padding:12px 14px; overflow-x:auto; font-size:12.4px; line-height:1.55; margin:8px 0 16px}
+.callout{background:var(--card); border:1px solid var(--rule); border-left:3px solid var(--stamp); padding:14px 17px; margin:16px 0; max-width:74ch}
 .callout.n{border-left-color:var(--new)}
 .callout.a{border-left-color:var(--amber)}
 .callout h3{font-family:"Barlow Condensed",sans-serif; font-size:18px; margin:0 0 5px}
 .callout p{margin:0 0 7px} .callout p:last-child{margin:0}
-.deckbar{display:flex; align-items:center; gap:14px; padding:12px 2px 0}
-.dbtn{appearance:none; background:#fff; border:1px solid var(--rule); border-radius:3px; width:34px; height:34px; cursor:pointer; font-size:16px; color:var(--ink-2)}
-.dbtn:hover:not(:disabled){border-color:var(--teal); color:var(--teal)}
-.dbtn:disabled{opacity:.35; cursor:default}
-.dots{display:flex; gap:6px; flex-wrap:wrap; flex:1}
-.dot{width:9px; height:9px; border-radius:50%; border:1px solid var(--ink-3); background:transparent; cursor:pointer; padding:0}
-.dot[aria-current="true"]{background:var(--teal); border-color:var(--teal)}
-.dcount{font-family:"IBM Plex Mono",monospace; font-size:12.5px; color:var(--ink-3)}
+.fichas{display:grid; grid-template-columns:repeat(auto-fit,minmax(255px,1fr)); gap:14px; margin:14px 0 20px}
+.ficha{border:1px solid var(--rule); border-top:3px solid var(--teal); padding:15px 16px 17px; background:var(--card)}
+.ficha.ok{border-top-color:var(--new)}
+.ficha.no{border-top-color:var(--amber)}
+.ficha h4{font-family:"Barlow Condensed",sans-serif; font-size:19px; font-weight:700; margin:0 0 2px; line-height:1.1}
+.ficha .est{font-size:12.5px; margin-bottom:9px}
+.ficha dl{margin:0; display:grid; grid-template-columns:auto 1fr; gap:4px 10px; font-size:13.2px}
+.ficha dt{font-family:"Barlow Condensed",sans-serif; font-weight:600; color:var(--ink-3); white-space:nowrap}
+.ficha dd{margin:0}
+.campos{font-family:"IBM Plex Mono",monospace; font-size:12.3px; line-height:1.8}
+.campos b{background:var(--new-soft); color:var(--new); font-weight:500; padding:1px 5px; border-radius:2px}
+.campos i{background:#FBF2DE; color:var(--amber); font-style:normal; padding:1px 5px; border-radius:2px}
+.cadena{display:grid; gap:0; margin:12px 0 20px; max-width:none}
+.paso{display:grid; grid-template-columns:34px 1fr auto; gap:0 14px; align-items:start; padding:13px 0; border-top:1px solid var(--rule)}
+.paso:first-child{border-top:0}
+.paso .n{font-family:"IBM Plex Mono",monospace; font-size:12px; font-weight:500; color:#fff; background:var(--teal); width:22px; height:22px; border-radius:50%; display:grid; place-items:center; margin-top:2px}
+.paso .q{min-width:0}
+.paso .q b{font-family:"Barlow Condensed",sans-serif; font-size:17px; font-weight:700; display:block; line-height:1.15}
+.paso .q span{font-size:13.4px; color:var(--ink-2); display:block; margin-top:2px}
+.paso .m{font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums; font-size:15px; font-weight:500; white-space:nowrap; text-align:right; padding-top:3px}
+.paso .m i{display:block; font-style:normal; font-size:11.5px; color:var(--ink-3); margin-top:1px}
+.paso.saldo{background:var(--new-soft); margin-inline:-12px; padding-inline:12px; border-top:1px solid var(--new)}
+.paso.saldo .n{background:var(--new)}
+.paso.saldo .m{color:var(--new); font-weight:700}
+.desglose{display:flex; flex-wrap:wrap; gap:4px 14px; margin-top:6px; font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--ink-2)}
+@media (max-width:560px){.paso{grid-template-columns:24px 1fr; }.paso .m{grid-column:2; text-align:left; padding-top:6px}}
+.dg{overflow-x:auto; margin:6px 0 20px; border:1px solid var(--rule); background:#fff; border-radius:3px}
 
 /* ---- panel ---- */
 .scrim{position:fixed; inset:0; background:rgba(23,32,29,.32); opacity:0; pointer-events:none; transition:opacity .18s; z-index:40}
 .scrim.on{opacity:1; pointer-events:auto}
 aside{position:fixed; top:0; right:0; bottom:0; width:min(430px,100%); background:var(--card); border-left:1px solid var(--rule); z-index:50; transform:translateX(102%); transition:transform .2s ease; overflow-y:auto; box-shadow:-10px 0 30px rgba(23,32,29,.12)}
 aside.on{transform:none}
-.panel{padding:22px 24px 60px}
+.panel{padding-block:22px 60px; padding-inline:24px}
 .p-close{position:sticky; top:0; float:right; margin:-6px -6px 0 0; background:var(--card); border:1px solid var(--rule); border-radius:3px; width:30px; height:30px; cursor:pointer; font-size:17px; color:var(--ink-2)}
-.p-num{font-family:"IBM Plex Mono",monospace; font-size:12.5px; color:#2E6FA8}
+.p-num{font-family:"IBM Plex Mono",monospace; font-size:12.5px; color:var(--blue)}
 .p-who{font-family:"Barlow Condensed",sans-serif; font-weight:600; color:var(--ink-3); font-size:15px}
-.p-title{font-family:"Barlow Condensed",sans-serif; font-size:26px; font-weight:700; line-height:1.1; margin:2px 0 14px}
-.p-title.rup{color:var(--stamp)} .p-title.nuevo{color:var(--new)}
+.p-title{font-family:"Barlow Condensed",sans-serif; font-size:26px; font-weight:700; line-height:1.1; margin:2px 0 14px; text-wrap:balance}
+.p-title.rup{color:var(--stamp)} .p-title.nuevo{color:var(--new)} .p-title.pend{color:var(--amber)}
 .p-body p{margin:0 0 14px; font-size:14.5px}
-.f{border-top:1px solid var(--rule); padding:11px 0 3px}
+.f{border-top:1px solid var(--rule); padding-block:11px 3px}
 .f dt{font-family:"Barlow Condensed",sans-serif; font-weight:600; font-size:14px; color:var(--ink-3); margin-bottom:2px}
 .f dd{margin:0 0 6px; font-size:14.5px}
 .quote{border-left:3px solid var(--stamp); background:var(--stamp-soft); padding:10px 13px; margin:14px 0; font-style:italic; font-size:14.5px}
@@ -120,12 +151,12 @@ aside.on{transform:none}
 .pill{display:inline-block; font-family:"IBM Plex Mono",monospace; font-size:11.5px; border:1px solid rgba(42,91,98,.35); color:var(--teal); padding:1px 6px; border-radius:2px; margin:0 4px 4px 0}
 .pill.n{border-color:var(--new); color:var(--new)}
 .pill.p{border-color:var(--amber); color:var(--amber)}
-footer{max-width:1620px; margin:0 auto; padding:16px 22px 46px; color:var(--ink-3); font-size:13px; border-top:1px solid var(--rule)}
+footer{max-width:1620px; margin:0 auto; padding-block:16px 46px; padding-inline:22px; color:var(--ink-3); font-size:13px; border-top:1px solid var(--rule)}
 footer p{margin:0; max-width:84ch}
 @media (max-width:700px){
   aside{width:100%; top:auto; height:76vh; transform:translateY(102%); border-left:0; border-top:1px solid var(--rule); border-radius:6px 6px 0 0}
   aside.on{transform:none}
-  .slide{padding:24px 20px 30px}
+  .doc section{padding-block:20px 24px}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -133,26 +164,26 @@ footer p{margin:0; max-width:84ch}
 <body>
 
 <header>
-  <h1>Viáticos y rendiciones</h1>
-  <p class="sub">El proceso que Norma eligió para empezar. A la izquierda, cómo funciona hoy, reconstruido con lo levantado con Rosa, Carolina y David. A la derecha, cómo quedaría con la aplicación que estamos construyendo. Toca cualquier actividad para ver su detalle.</p>
+  <h1>Del memo a la rendición</h1>
+  <p class="sub">Un solo viaje, desde que la jefatura lo decide hasta que Rosa lo asienta. Tres pestañas: cómo funciona hoy —incluyendo el MemoTracker de Franco, que el mapa anterior no tenía—, cómo quedaría con la aplicación, y cómo se conectan las dos herramientas sin que ninguna tenga que rehacerse. Toca cualquier actividad para ver su detalle.</p>
   <div class="tabs" role="tablist" id="tabs"></div>
 </header>
 
 <div class="ctx" id="ctx"></div>
 <div class="legend" id="legend">
-  <span class="lg"><svg width="26" height="16"><rect x="1" y="1" width="24" height="14" rx="4" fill="#EDF3F8" stroke="#2E6FA8" stroke-width="1.3"/></svg>Actividad actual</span>
-  <span class="lg"><svg width="26" height="16"><rect x="1" y="1" width="24" height="14" rx="4" fill="#E9F4EE" stroke="#2E7D5B" stroke-width="1.3"/></svg>Actividad propuesta</span>
-  <span class="lg"><svg width="18" height="18"><path d="M9 1L17 9L9 17L1 9Z" fill="#F5DE7A" stroke="#B99B14" stroke-width="1.3"/></svg>Decisión</span>
-  <span class="lg"><svg width="18" height="18"><circle cx="9" cy="9" r="7" fill="#DFF0D8" stroke="#5A9E4B" stroke-width="1.5"/></svg>Inicio</span>
-  <span class="lg"><svg width="18" height="18"><circle cx="9" cy="9" r="7" fill="#F8DEDB" stroke="#B0362C" stroke-width="2.4"/></svg>Fin</span>
-  <span class="lg"><svg width="26" height="16"><rect x="1" y="2" width="24" height="12" rx="2" fill="#F6EDEB" stroke="#B0362C" stroke-width="1.3"/></svg>Punto de ruptura</span>
-  <span class="lg"><svg width="26" height="16"><rect x="1" y="1" width="24" height="14" rx="4" fill="#FDF7EA" stroke="#8A6B27" stroke-width="1.3" stroke-dasharray="4 3"/></svg>Todavía no construido</span>
+  <span class="lg"><svg width="26" height="16" aria-hidden="true"><rect x="1" y="1" width="24" height="14" rx="4" fill="#EDF3F8" stroke="#2E6FA8" stroke-width="1.3"/></svg>Actividad actual</span>
+  <span class="lg"><svg width="26" height="16" aria-hidden="true"><rect x="1" y="1" width="24" height="14" rx="4" fill="#E9F4EE" stroke="#2E7D5B" stroke-width="1.3"/></svg>Actividad propuesta</span>
+  <span class="lg"><svg width="18" height="18" aria-hidden="true"><path d="M9 1L17 9L9 17L1 9Z" fill="#F5DE7A" stroke="#B99B14" stroke-width="1.3"/></svg>Decisión</span>
+  <span class="lg"><svg width="18" height="18" aria-hidden="true"><circle cx="9" cy="9" r="7" fill="#DFF0D8" stroke="#5A9E4B" stroke-width="1.5"/></svg>Inicio</span>
+  <span class="lg"><svg width="18" height="18" aria-hidden="true"><circle cx="9" cy="9" r="7" fill="#F8DEDB" stroke="#B0362C" stroke-width="2.4"/></svg>Fin</span>
+  <span class="lg"><svg width="26" height="16" aria-hidden="true"><rect x="1" y="2" width="24" height="12" rx="2" fill="#F6EDEB" stroke="#B0362C" stroke-width="1.3"/></svg>Punto de ruptura</span>
+  <span class="lg"><svg width="26" height="16" aria-hidden="true"><rect x="1" y="1" width="24" height="14" rx="4" fill="#FDF7EA" stroke="#8A6B27" stroke-width="1.3" stroke-dasharray="4 3"/></svg>Todavía no construido</span>
 </div>
 <p class="hint" id="hint">Los carriles quedan fijos al desplazarse. Toca cualquier actividad para ver su detalle.</p>
 
 <div id="view"></div>
 
-<footer><p>Fuentes: entrevistas con Rosa, Carolina y David; el mapeo por etapas del trabajo de Rosa; sesión de trabajo interna del equipo. El flujo «Con la app» describe lo que está construido y verificado contra la base de datos al 10 de septiembre de 2026; lo que todavía no existe va marcado en ámbar.</p></footer>
+<footer><p>Fuentes: entrevistas con Rosa, Carolina y David; el mapeo por etapas del trabajo de Rosa; la sesión con Franco sobre sus automatizaciones y la sesión de pizarra con jefatura. Las cifras del MemoTracker salen de sus 423 registros exportados al 15 de setiembre de 2026; las de memos, personas y rendiciones, del seguimiento de cajas chicas y viáticos de Control de Gestión, con 520 memos-persona y 9,470 líneas de rendición; las del SIRE, de los 13,095 comprobantes cargados en la base. Lo que todavía no existe va marcado en ámbar y no se presenta como hecho.</p></footer>
 
 <div class="scrim" id="scrim"></div>
 <aside id="panel" aria-hidden="true" aria-label="Detalle"><div class="panel" id="panelBody"></div></aside>
@@ -161,15 +192,17 @@ footer p{margin:0; max-width:84ch}
 /* ===================== CÓMO FUNCIONA HOY ===================== */
 const ASIS={
  nombre:"Cómo funciona hoy",
- ctxHtml:`<p>Un solo viaje recorre siete áreas y veintitrés pasos antes de convertirse en asiento contable. Nace de un memo, se financia por adelantado, se gasta en provincia sin supervisión, se rinde semanas después en papel, se revisa dos veces y recién entonces llega a Contabilidad.</p>
-  <p>Las nueve marcas rojas son los puntos donde el proceso se rompe. Ocho ocurren antes de que el expediente llegue a Contabilidad; la novena es lo que le queda a Rosa después.</p>`,
+ ctxHtml:`<p>Un solo viaje recorre siete áreas y dos herramientas antes de convertirse en asiento contable. Nace de un memo que se pide por correo, se financia por adelantado, se gasta en provincia sin supervisión, se rinde semanas después en papel, se revisa y recién entonces llega a Contabilidad.</p>
+  <p><span class="fix">Corregido</span> El mapa anterior no incluía el <b>MemoTracker</b>, la herramienta de Franco que ya lee esos correos, detecta la aprobación, crea la carpeta en Drive y registra el pago. Está acá abajo como un carril más, porque es el punto de partida real y no un plan.</p>
+  <p>Las marcas rojas son los puntos donde el proceso se rompe. Nueve ocurren antes de que el expediente llegue a Contabilidad; la décima es lo que le queda a Rosa después; dos son huecos de la propia herramienta, que no sabe quién rinde ni logra registrar la revisión; y la última es de quién depende que el memo exista.</p>`,
  lanes:[
   {pool:"JEFATURA",role:"Jefatura de proyectos"},
   {pool:"CONTROL DE GESTIÓN",role:"David · Costos"},
   {pool:"FINANZAS",role:"Jenny · Tesorería"},
-  {pool:"ADMINISTRACIÓN",role:"Anie · Caja chica"},
+  {pool:"ADMINISTRACIÓN",role:"Anie · Memos y caja chica"},
   {pool:"CAMPO",role:"Trabajador que viaja"},
   {pool:"CONTABILIDAD",role:"Rosa"},
+  {pool:"HERRAMIENTAS",role:"MemoTracker · Franco"},
   {pool:"SUNAT",role:"Plataforma"}
  ],
  nodes:[
@@ -181,80 +214,108 @@ const ASIS={
    que:"Se calcula sobre los días declarados: desayuno, almuerzo, cena, movilidad entre colegios y un extra por imprevistos. El hospedaje no entra porque lo gestiona Anie por separado.",
    docs:["Formato de cálculo de viáticos"],tools:["Excel"],dep:["Jefatura"],
    quote:"Todo nace del memo.",qw:"David, costos y control de gestión"},
-  {id:"a3",type:"task",row:1,col:3,num:"1.3",t:"Abre dos memos: viáticos y pasajes",who:"Control de Gestión",
-   que:"Cuando el viaje es aéreo se abren dos memos separados. El de pasajes se emite primero con la fecha de ida y se actualiza después con la de retorno, porque al abrirlo no se sabe cuándo vuelve la persona.",
-   docs:["Memo de viáticos","Memo de pasajes"],dep:["Jefatura"],
-   dolor:"El correlativo del memo no está estandarizado: cada área lleva el suyo y no hay numeración única en el grupo.",
-   doc:{label:"Memo",side:"up"}},
-  {id:"a4",type:"task",row:3,col:3,num:"1.4",t:"Compra pasajes terrestres y reserva hospedaje",who:"Anie",
+  {id:"a3",type:"task",row:1,col:3,num:"1.3",t:"Concentra el pedido, redacta el memo y lo manda",who:"Kory · Annie",
+   que:"El memo sale en Word, firmado por la jefatura del proyecto y dirigido a la Gerencia de Administración y Finanzas. Lleva el correlativo escrito a mano y un anexo que lista a cada responsable con su DNI, su monto y su cuenta bancaria. Cuando el viaje es aéreo se abren dos memos separados: el de pasajes se emite primero con la fecha de ida y se actualiza después con la de retorno, porque al abrirlo no se sabe cuándo vuelve la persona.",
+   docs:["Memo de viáticos","Memo de pasajes","Anexo de responsables"],tools:["Word","Gmail"],dep:["Jefatura"],
+   dolor:"El correlativo lo escribe una persona. En los 423 registros hay 8 números repetidos —todos de Control de Gestión— y 7 mal escritos: seis como «PASAJE 429-2026» en vez de «429-2026», y uno que quedó como una fecha.",
+   doc:{label:"Memo + anexo",side:"up"},
+   rup:{id:"V13",label:"Dos personas mandan todo",t:"El 95% de los memos sale de dos buzones",
+     que:"De los 423 memos, 220 los mandó Kory Sobrino y 182 Annie Mantilla. Las otras nueve personas que aparecen como remitentes suman 21 entre todas. El memo 594-2026 lo firma José Haertel como Project Manager, pero al correo lo mandó Kory; los siete trabajadores que viajaron no aparecen en ninguna parte del circuito.",
+     quote:"El trabajador no pide su memo: pide que se lo pidan.",qw:"Lo que muestran los 423 registros"}},
+
+  {id:"m1",type:"task",row:6,col:4,num:"T.1",t:"Captura el memo del correo",who:"MemoTracker",
+   que:"Lee el buzón y guarda una fila: el hilo de Gmail, el número, el área, el proyecto, el remitente y la fecha. Lleva 423 memos entre marzo y setiembre de 2026, de Gestión de Proyectos (215), Control de Gestión (190) y Postventa (2).",
+   tools:["Apps Script","Gmail","Google Sheets"],
+   dolor:"No saca el número del asunto: en 341 de los 422 memos el asunto ni lo menciona —dice «VIATICOS BARRANCA» o «HOSPEDAJE PUNO» y nada más—. Lo saca del nombre del archivo adjunto, que sí lo trae. Hay 387 memos con adjuntos registrados.",
+   rup:{id:"V11",label:"No sabe quién rinde",t:"La fila del memo no dice a qué personas cubre",
+     que:"El anexo con los responsables, sus DNI y sus montos vive dentro del Word adjunto, y nadie lo abre. La herramienta sabe que el memo existe, quién lo mandó y cuánto costó, pero no a quién hay que cobrarle la rendición. Por eso su control de rendiciones excluye viáticos a propósito. La columna «tipo», que distinguiría viático de caja chica o reembolso, está vacía en 404 de los 423 registros.",
+     quote:"Ni siquiera nos dice qué personas están relacionadas en este memo.",qw:"Sesión de pizarra con jefatura"}},
+
+  {id:"m2",type:"task",row:6,col:5,num:"T.2",t:"Aprueba, crea la carpeta y sigue archivando",who:"MemoTracker",
+   que:"Busca en el mismo hilo la respuesta del jefe que aprueba, y recién entonces crea la carpeta del memo en Drive y archiva el documento con una captura del correo. Sin aprobación no hay carpeta. Y no termina ahí: se queda mirando el hilo, así que si después llega una factura o un cargo por ese mismo correo, lo sube a la carpeta que corresponde sin que nadie lo mueva. Tiene fecha de aprobación en 374 memos y carpeta en 387.",
+   tools:["Apps Script","Google Drive"],docs:["Carpeta del memo","Captura del hilo","Archivos que llegan después"],
+   dolor:"Quién aprueba es configurable y ya cambió una vez de persona. Además avisa cada quince minutos por chat qué memos están pendientes, aprobados o listos para pagar.",
+   rup:{id:"V12",label:"La revisión no se registra",t:"Las columnas del visto bueno están rotas",
+     que:"«Fecha de envío a Tesorería» y «VB Finanzas» son justamente el tramo que la pizarra marcó como pendiente de mapear. No es que falte: existe y se rompió. Las dos dicen #REF! en 395 de los 423 registros, porque la fórmula apunta a algo que se borró. Nadie lo notó porque nadie las mira."}},
+
+  {id:"a4",type:"task",row:3,col:6,num:"1.4",t:"Compra pasajes terrestres y reserva hospedaje",who:"Anie",
    que:"Los viajes cercanos se pagan directamente con la caja chica que maneja Anie. El hospedaje de todo el personal que viaja también lo gestiona ella, de forma centralizada.",
    docs:["Comprobantes de pasajes","Reservas de hospedaje"],tools:["Caja chica"],dep:["Jefatura"]},
-  {id:"a5",type:"task",row:2,col:4,num:"1.5",t:"Abona el viático al trabajador",who:"Jenny · Tesorería",
-   que:"Se deposita el dinero calculado. Jenny paga todo y para todas las empresas del grupo.",
-   docs:["Constancia de transferencia"],tools:["Banca"],dep:["Control de Gestión"]},
-  {id:"b1",type:"task",row:4,col:5,num:"2.1",t:"Viaja y gasta en campo",who:"Trabajador",
+
+  {id:"a5",type:"task",row:2,col:7,num:"1.5",t:"Abona el viático en una sola planilla",who:"Jenny · Tesorería",
+   que:"No es una transferencia por persona: es una planilla de haberes del banco con todos los beneficiarios del memo juntos, cada uno con su nombre, su DNI y su monto. El memo 594-2026 pagó S/ 5,292.00 a siete personas en un solo envío, firmado por Jenny.",
+   docs:["Constancia de la planilla"],tools:["Banca empresarial"],dep:["Control de Gestión"],
+   dolor:"Esa constancia es el único documento que dice, en formato leíble por una máquina, qué personas están detrás del memo y cuánto le tocó a cada una. Hoy nadie la usa para eso: se archiva y ya."},
+
+  {id:"m3",type:"task",row:6,col:8,num:"T.3",t:"Registra que el memo se pagó",who:"MemoTracker",
+   que:"Toma la alerta de pago que emite InroPay —la herramienta de tesorería, distinta del MemoTracker— y marca la fila. De los 423 memos, 365 están en estado PAGADO y 295 tienen fecha de pago.",
+   tools:["Apps Script","InroPay"],
+   dolor:"Hoy la información va en un solo sentido: InroPay avisa y MemoTracker anota. Lo que Franco quiere construir es el sentido contrario —que el memo aprobado le aparezca a Tesorería como pendiente de revisión y, si todo está conforme, se registre solo—. Eso todavía no existe."},
+
+  {id:"b1",type:"task",row:4,col:9,num:"2.1",t:"Viaja y gasta en campo",who:"Trabajador",
    que:"Movilidad entre colegios, alimentación y los imprevistos del viaje. Van técnicos que instalan, capacitadores, gestores y hasta profesores cuando hay levantamiento de observaciones.",
    docs:["Boletas","Facturas","Constancias de Yape"],dep:["Proveedores de provincia"]},
-  {id:"b2",type:"task",row:4,col:6,num:"2.2",t:"Reúne comprobantes y llena la planilla de movilidad",who:"Trabajador",
+  {id:"b2",type:"task",row:4,col:10,num:"2.2",t:"Reúne comprobantes y llena la planilla de movilidad",who:"Trabajador",
    que:"Guarda todo en un sobre. Los taxis no van en la rendición: se registran en una planilla de movilidad aparte, en papel, cuyo formato entrega Recursos Humanos y que se entrega a Administración.",
    docs:["Boletas y facturas","Planilla de movilidad","Declaración jurada"],tools:["Papel"],dep:["Recursos Humanos","Administración"],
    dolor:"En provincia hay gastos que simplemente no tienen comprobante, y hay proveedores que cobran más por facturar.",
    rup:{id:"V5",label:"Sin comprobante",t:"El gasto existe pero no tiene respaldo",
      que:"Lo que no tiene comprobante va por declaración jurada, que tiene tope. Y los comprobantes térmicos se borran solos: quien no los fotografía a tiempo se queda sin sustento.",
      quote:"Con la moto de cinco soles no te da.",qw:"David, costos y control de gestión"}},
-  {id:"g1",type:"gateway",row:4,col:7,t:"¿El viaje se ejecutó como se planificó?"},
-  {id:"b3",type:"task",row:4,col:8,num:"2.3",t:"Lo redestinan a otro punto en el camino",who:"Trabajador",
+  {id:"g1",type:"gateway",row:4,col:11,t:"¿El viaje se ejecutó como se planificó?"},
+  {id:"b3",type:"task",row:4,col:12,num:"2.3",t:"Lo redestinan a otro punto en el camino",who:"Trabajador",
    que:"Sale con presupuesto para cinco días en un destino y a mitad del viaje lo mandan dos días a otro lado. El dinero del primer memo se gasta en un lugar que ese memo no contemplaba.",
    dep:["Jefatura"],
    rup:{id:"V1",label:"El plan no se respeta",t:"El presupuesto deja de tener sentido a mitad del viaje",
      que:"Control de Gestión calcula sobre un plan de días y destinos. Cuando el plan cambia sobre la marcha, el presupuesto ya no sirve de referencia y la revisión posterior se vuelve una reconstrucción.",
      quote:"Sería bueno automatizar eso, siempre y cuando se respete el plan. Y ellos no respetan su plan.",qw:"David, costos y control de gestión"}},
-  {id:"b4",type:"task",row:0,col:9,num:"2.4",t:"Abre otro memo para el viaje siguiente",who:"Jefatura",
+  {id:"b4",type:"task",row:0,col:13,num:"2.4",t:"Abre otro memo para el viaje siguiente",who:"Jefatura",
    que:"El trabajador regresa un miércoles y el lunes sale otra vez. Se abre un memo nuevo sin que el anterior se haya rendido.",
    docs:["Nuevo memo"],dep:["Control de Gestión"],
    rup:{id:"V3",label:"Memos encadenados",t:"Se abre un memo nuevo sin rendir el anterior",
      que:"Una misma persona puede acumular varios memos abiertos. En un caso extremo se acumularon alrededor de cincuenta y una devolución cercana a los mil novecientos soles.",
      quote:"Llegas el miércoles en la noche y el lunes a primera hora te estás yendo a otro punto.",qw:"Carolina, finanzas"}},
-  {id:"b5",type:"task",row:4,col:10,num:"2.5",t:"Vuelve y deja la rendición para cuando haya tiempo",who:"Trabajador",
+  {id:"b5",type:"task",row:4,col:14,num:"2.5",t:"Vuelve y deja la rendición para cuando haya tiempo",who:"Trabajador",
    que:"La rendición compite con la carga operativa. Se rinde cuando el personal encuentra un hueco, y para entonces ya se juntaron tres o cuatro memos.",
    rup:{id:"V4",label:"Nadie controla que rindan",t:"No hay responsable del cumplimiento",
      que:"La jefatura no hace seguimiento y Control de Gestión termina persiguiendo. El área ha trabajado sábados y domingos para ponerse al día con el atraso acumulado.",
      quote:"¿Quién controla que rindan? Anda por nosotros. Estamos perdiendo todos los días.",qw:"David, costos y control de gestión"}},
-  {id:"c1",type:"task",row:3,col:11,num:"3.1",t:"Se sienta con Anie a ordenar los comprobantes",who:"Anie · Trabajador",
+  {id:"c1",type:"task",row:3,col:15,num:"3.1",t:"Se sienta con Anie a ordenar los comprobantes",who:"Anie · Trabajador",
    que:"Sacan todos los memos pendientes y ordenan boletas y facturas. Puede tomar un día entero por persona.",
    docs:["Boletas","Facturas"],tools:["Papel"],
    quote:"Sacan los memos que tengan y comienzan a rendir. Se quedan ahí todo un día.",qw:"Carolina, finanzas"},
-  {id:"c2",type:"task",row:4,col:12,num:"3.2",t:"Llena a mano la plantilla de rendición e imprime",who:"Trabajador",
-   que:"Una plantilla de Excel con el número de memo, la fecha de solicitud, la empresa y una fila por comprobante. Cada persona la llena por su cuenta.",
-   docs:["Plantilla de rendición"],tools:["Excel","Impresora"],
+  {id:"c2",type:"task",row:4,col:16,num:"3.2",t:"Llena a mano la plantilla de rendición e imprime",who:"Trabajador",
+   que:"Un Excel por persona y por memo: monto recibido, monto rendido, el porcentaje que eso representa, el proyecto, el DNI, el origen y destino del viaje, y una fila por documento. Cada fila dice si es factura, planilla de movilidad o declaración jurada, porque solo la factura da crédito fiscal.",
+   docs:["Formato de entrega a rendir"],tools:["Excel","Impresora"],
    rup:{id:"V9",label:"Reglas no escritas",t:"Los topes viven en la cabeza de las personas",
      que:"La planilla de movilidad tiene reglas: un tope por día y la obligación de partir el excedente al mes siguiente. No están documentadas en ningún lado.",
      quote:"Son reglas no escritas. O sea, viven en la cabeza de una persona.",qw:"Sesión de trabajo del equipo"}},
-  {id:"c3",type:"task",row:4,col:13,num:"3.3",t:"Arma el sobre manila y lo entrega",who:"Trabajador",
+  {id:"c3",type:"task",row:4,col:17,num:"3.3",t:"Arma el sobre manila y lo entrega",who:"Trabajador",
    que:"Comprobantes físicos dentro de un sobre, con la plantilla impresa como carátula.",
    docs:["Sobre manila","Plantilla impresa"],tools:["Papel"],doc:{label:"Sobre manila",side:"down"}},
-  {id:"d1",type:"task",row:1,col:14,num:"4.1",t:"Revisa gasto por gasto contra el presupuesto",who:"Control de Gestión",
+  {id:"d1",type:"task",row:1,col:18,num:"4.1",t:"Revisa gasto por gasto contra el presupuesto",who:"Control de Gestión",
    que:"Se compara lo gastado contra lo presupuestado por día. Si gastó de más, hay que sustentarlo; si gastó de menos, devuelve; y si fue exacto, también se revisa.",
    docs:["Cuadro de gastos","Comprobantes"],tools:["Excel"],dep:["Trabajador"],
    dolor:"Los memos se reparten entre varios proyectos y la gente los agrupa como puede. Cuando el cuadro llega ordenado por persona en vez de por proyecto, no cuadra.",
    rup:{id:"V6",label:"Proyecto mal asignado",t:"El gasto no se puede atribuir al proyecto correcto",
      que:"Un mismo memo puede repartirse entre varios proyectos. Si la glosa viene por persona y no por proyecto, la asignación se confunde y hay que rehacerla.",
      quote:"Se confunden. Al final se confunden.",qw:"David, costos y control de gestión"}},
-  {id:"g2",type:"gateway",row:1,col:15,t:"¿Cuadra el saldo del memo?"},
-  {id:"d2",type:"task",row:4,col:16,num:"4.2",t:"Devuelve el saldo o sustenta el exceso",who:"Trabajador",
-   que:"El sobrante se deposita de vuelta a la cuenta de la empresa. El exceso hay que justificarlo.",
-   docs:["Constancia de depósito"],dep:["Finanzas"]},
-  {id:"d3",type:"task",row:1,col:16,num:"4.3",t:"Escanea, sube al Drive y arma el folder manila",who:"Control de Gestión",
+  {id:"g2",type:"gateway",row:1,col:19,t:"¿Cuadra el saldo del memo?"},
+  {id:"d2",type:"task",row:4,col:20,num:"4.2",t:"Devuelve el saldo o sustenta el exceso",who:"Trabajador",
+   que:"El sobrante lo transfiere la persona desde su propia cuenta a la de la empresa, y manda la captura. En el memo 594-2026: recibió S/ 212.00, rindió S/ 201.80 y devolvió S/ 10.20 el 27 de agosto, operación 10394730.",
+   docs:["Captura de la transferencia"],dep:["Finanzas"],
+   dolor:"El mensaje de esa transferencia lo escribe la persona. En este caso puso «Devolución del Memo 594,2026», con coma en vez de guion: quien después busque «594-2026» no la encuentra."},
+  {id:"d3",type:"task",row:1,col:20,num:"4.3",t:"Escanea, sube al Drive y arma el folder manila",who:"Control de Gestión",
    que:"La documentación se digitaliza en una carpeta compartida a la que casi todas las áreas tienen acceso de lectura, y en paralelo se arma el compilado físico.",
    docs:["Carpeta de rendiciones en Drive","Folder manila"],tools:["Drive","Escáner"],
    dolor:"El escaneo se hace por formalidad hacia Contabilidad, pero el expediente físico se sigue armando igual: se hacen las dos cosas."},
-  {id:"d4",type:"task",row:1,col:17,num:"4.4",t:"Entrega el compilado a Contabilidad",who:"Control de Gestión",
+  {id:"d4",type:"task",row:1,col:21,num:"4.4",t:"Entrega el compilado a Contabilidad",who:"Control de Gestión",
    que:"Sobre manila sobre sobre manila. Es el fajo que llega al escritorio de Rosa.",
    docs:["Compilado de rendiciones"],
    rup:{id:"V7",label:"Llega en papel y desordenado",t:"Contabilidad recibe el bloque completo, sin estructura",
      que:"Costos y administración no conversan directamente con Contabilidad sobre el formato, así que el expediente llega armado según el criterio de cada quien.",
      quote:"Costos y admin no conversan, y a contabilidad le llega todo desordenado.",qw:"David, costos y control de gestión"}},
-  {id:"e1",type:"task",row:5,col:18,num:"5.1",t:"Revisa comprobante contra el cuadro, uno por uno",who:"Rosa",
+  {id:"e1",type:"task",row:5,col:22,num:"5.1",t:"Revisa comprobante contra el cuadro, uno por uno",who:"Rosa",
    que:"Le llega por el área de costos: Annie, y Felipe y Rodrigo cuando los chicos no dan abasto. Toma el Excel impreso como carátula y va contrastando cada boleta con su fila. Comprobante, cuadro, comprobante, cuadro.",
    docs:["Comprobantes de la rendición","Planillas de movilidad","Declaraciones juradas","Memos de asignación de fondos"],tools:["Papel","Excel"],
    dep:["Costos (Annie, Felipe, Rodrigo)","Finanzas","Proyectos"],
@@ -263,31 +324,31 @@ const ASIS={
    rup:{id:"V10",label:"Registro uno por uno",t:"El trabajo llega ordenado, pero se sigue digitando a mano",
      que:"Antes el mismo expediente se revisaba dos y tres veces entre Proyectos, Finanzas, Contabilidad y Costos. Eso ya se corrigió y hoy Rosa recibe algo limpio: cuando la rendición llega a Contabilidad, se cierra —ella registra y no vuelve a discutir si el gasto procede—. Lo que no se resolvió es que el registro sigue siendo manual, comprobante por comprobante, sobre volúmenes que en la caja de administración llegan a cien o doscientas líneas.",
      quote:"A mí me corresponde solamente. Tranquila: el proceso ya está ordenado.",qw:"Rosa, contabilidad"}},
-  {id:"e2",type:"task",row:5,col:19,num:"5.2",t:"Marca el centro de costo con colores sobre el papel",who:"Rosa",
+  {id:"e2",type:"task",row:5,col:23,num:"5.2",t:"Marca el centro de costo con colores sobre el papel",who:"Rosa",
    que:"Va pintando cada gasto según el centro de costo al que pertenece, para después registrar todos los del mismo color juntos.",
    tools:["Resaltadores","Excel impreso"],
    quote:"Lo marca de colores para saber a qué centro de costo asignar, y sobre eso ya lo va digitando.",qw:"Observación del proceso de Rosa"},
-  {id:"e3",type:"task",row:5,col:20,num:"5.3",t:"Digita en los subdiarios 11, 21 y 31",who:"Rosa",
+  {id:"e3",type:"task",row:5,col:24,num:"5.3",t:"Digita en los subdiarios 11, 21 y 31",who:"Rosa",
    que:"Los tres a la par: las compras de la rendición en el 11, la devolución del dinero en el 21 y la rendición propiamente dicha en el 31. Para el 21 calcula ella misma la diferencia entre lo depositado y lo rendido.",
    tools:["CONCAR (subdiarios 11, 21 y 31)"],
    dolor:"Es doble trabajo: primero ingresa al registro de compras y después hace la rendición. Y el mismo fajo mezcla varios centros de costo, que hay que separar a mano entre administrativo y proyectos."},
-  {id:"e4",type:"task",row:5,col:21,num:"5.4",t:"Imprime y adjunta el legajo al asiento",who:"Rosa",
+  {id:"e4",type:"task",row:5,col:25,num:"5.4",t:"Imprime y adjunta el legajo al asiento",who:"Rosa",
    que:"Adjunta todo el sustento al asiento 31 para no tener que rearmarlo si alguien lo consulta después. Es la razón por la que, habiendo escaneo, igual se imprime: el legajo tiene que estar pegado al asiento.",
    docs:["Legajo impreso"],tools:["Impresora"],
    dolor:"Todo el sustento se imprime en papel, incluso el que ya venía digitalizado en el Drive."},
-  {id:"t1",type:"timer",row:6,col:22,t:"El SIRE se libera el día 8",
+  {id:"t1",type:"timer",row:7,col:26,t:"El SIRE se libera el día 8",
    que:"Recién desde esa fecha se puede cruzar lo registrado contra lo que SUNAT reporta.",tools:["SIRE"]},
-  {id:"e5",type:"task",row:5,col:23,num:"5.5",t:"Cruza los comprobantes contra el SIRE",who:"Rosa",
+  {id:"e5",type:"task",row:5,col:27,num:"5.5",t:"Cruza los comprobantes contra el SIRE",who:"Rosa",
    que:"Verifica que cada comprobante exista y esté declarado, y que la devolución del saldo aparezca en la cuenta.",
    tools:["SIRE","CONCAR"],dep:["SUNAT"]},
-  {id:"f1",type:"task",row:2,col:24,num:"6.1",t:"Libera el fondo del viaje siguiente",who:"Finanzas",
+  {id:"f1",type:"task",row:2,col:28,num:"6.1",t:"Libera el fondo del viaje siguiente",who:"Finanzas",
    que:"El nuevo desembolso depende de que la liquidación anterior esté cerrada en el sistema.",
    dep:["Contabilidad","Control de Gestión"],
    rup:{id:"V8",label:"Reposición bloqueada",t:"El atraso del cierre frena el siguiente viaje",
      que:"El retraso que empezó en campo termina bloqueando la operación: mientras no cierre la liquidación, no sale el fondo del próximo viaje."}},
-  {id:"end",type:"end",row:2,col:25,t:"Rendición cerrada"}
+  {id:"end",type:"end",row:2,col:29,t:"Rendición cerrada"}
  ],
- edges:[["s","a1"],["a1","a2"],["a2","a3"],["a2","a4"],["a3","a5"],["a4","a5"],["a5","b1"],
+ edges:[["s","a1"],["a1","a2"],["a2","a3"],["a3","m1"],["m1","m2"],["a2","a4"],["m2","a5"],["a4","a5"],["a5","m3"],["m3","b1"],
         ["b1","b2"],["b2","g1"],["g1","b3","No"],["b3","b1"],["g1","b5","Sí"],
         ["b5","b4"],["b4","b1"],["b5","c1"],["c1","c2"],["c2","c3"],["c3","d1"],
         ["d1","g2"],["g2","d2","No"],["d2","d1"],["g2","d3","Sí"],["d3","d4"],
@@ -297,9 +358,10 @@ const ASIS={
 /* ===================== TO BE ===================== */
 const TOBE={
  nombre:"Con la app",
- ctxHtml:`<p><span class="resu">Con la app</span> El mismo viaje, los mismos siete actores. Lo que cambia no es quién hace qué, sino dónde vive la información: el comprobante se captura en el momento y en el sitio, y de ahí en adelante nadie vuelve a transcribirlo.</p>
-  <p>Los recuadros verdes ya están construidos y probados contra la base de datos real. El recuadro ámbar es lo que todavía no existe: se dibuja igual para no prometer de más.</p>
-  <p><b>De los nueve puntos de ruptura, la app cierra cinco</b> —memos encadenados, proyecto mal asignado, papel desordenado, reposición bloqueada y registro uno por uno—. <b>Atenúa tres:</b> el control de que rindan, los gastos sin comprobante y las reglas no escritas. <b>Y no toca uno:</b> que el plan del viaje cambie a mitad de camino. Eso último es coordinación entre personas, no software.</p>`,
+ ctxHtml:`<p><span class="resu">Con la app</span> El mismo viaje, los mismos actores, y el MemoTracker intacto. Lo que cambia no es quién hace qué, sino dónde vive la información: el memo se pide desde una pantalla en vez de un Word, el comprobante se captura en el momento y en el sitio, y de ahí en adelante nadie vuelve a transcribirlo.</p>
+  <p><span class="fix">Corregido</span> La propuesta anterior inventaba un correlativo nuevo, <code>INROPRIN-2026-VIA-00001</code>. Eso habría dejado ciego al MemoTracker, que reconoce el memo por el <code>NNN-AAAA</code> del asunto. Se mantiene el formato y el contador que ya existen; lo único que cambia es que pasa a haber <b>un solo emisor</b>. El detalle está en «Las conexiones».</p>
+  <p>Los recuadros verdes ya están construidos y probados contra la base de datos. Los azules del carril de abajo son el MemoTracker, que sigue funcionando igual. Los ámbar son lo que todavía no existe: se dibujan igual para no prometer de más. El primero de ellos —que el trabajador pida su propio viático— además esconde una decisión de proceso, no solo trabajo pendiente.</p>
+  <p><b>De los trece puntos de ruptura, la app cierra siete</b> —memos encadenados, proyecto mal asignado, papel desordenado, reposición bloqueada, registro uno por uno, y los dos huecos de la herramienta: quién rinde y la revisión sin registrar—. <b>Atenúa cuatro:</b> el control de que rindan, los gastos sin comprobante, las reglas no escritas y la concentración del pedido en dos buzones. <b>Y no toca dos:</b> que el plan del viaje cambie a mitad de camino, y que en provincia haya gasto sin comprobante posible. Eso último es coordinación y realidad de campo, no software.</p>`,
  lanes:[
   {pool:"JEFATURA",role:"Jefatura de proyectos"},
   {pool:"CONTROL DE GESTIÓN",role:"David · Costos"},
@@ -307,123 +369,883 @@ const TOBE={
   {pool:"ADMINISTRACIÓN",role:"Anie · Memos"},
   {pool:"CAMPO",role:"Trabajador que viaja"},
   {pool:"CONTABILIDAD",role:"Rosa"},
-  {pool:"LA APP",role:"INRO Viáticos"}
+  {pool:"LA APP",role:"INRO Viáticos"},
+  {pool:"HERRAMIENTAS",role:"MemoTracker · Franco"}
  ],
  nodes:[
-  {id:"s",type:"start",row:0,col:0,t:"Se aprueba el viaje"},
+  {id:"s",type:"start",row:2,col:0,t:"Se aprueba el viaje"},
 
-  {id:"a1",type:"task",row:0,col:1,num:"1.1",t:"Define destino, días y personas",who:"Jefatura de proyectos",
+  {id:"a1",type:"task",row:0,col:0,num:"1.1",t:"Define destino, días y personas",who:"Jefatura de proyectos",
    que:"No cambia. La decisión del viaje sigue siendo de la jefatura y sigue naciendo fuera de la app.",
    docs:["Programación del viaje"],dep:["Proyectos"]},
 
-  {id:"a2",type:"task",row:3,col:2,num:"1.2",t:"Registra el memo eligiendo el centro de costo",who:"Anie",nuevo:true,
-   que:"El centro de costo sale de un catálogo, no se escribe a mano, y queda pegado al memo desde el origen. El correlativo lo genera la base con una secuencia por empresa, año y tipo: INROPRIN-2026-VIA-00001. Ya no hay una numeración por área.",
-   docs:["Memo digital"],tools:["INRO Viáticos"],
-   resuelve:"V6 · correlativo",
-   quote:"El correlativo del memo no está estandarizado: cada área lleva el suyo.",qw:"Lo que decía el As Is"},
+  {id:"q1",type:"task",row:0,col:1,num:"1.2",t:"Autoriza el viaje, y queda registrado",who:"Jefatura",nuevo:true,
+   que:"La jefatura sigue autorizando el viaje como hoy. Lo que cambia es que su visto bueno queda guardado junto al memo, con quién lo dio y cuándo, en vez de vivir en una conversación que no deja rastro.",
+   tools:["INRO Viáticos"],resuelve:"V13"},
 
-  {id:"a3",type:"task",row:6,col:3,num:"1.3",t:"Comprueba si esa persona debe rendiciones",who:"La app",nuevo:true,
+  {id:"a2",type:"task",row:3,col:2,num:"1.3",t:"Registra el memo y asigna a las personas",who:"Kory · Annie",nuevo:true,
+   que:"Un memo, varias personas. Al crearlo se marca a cada una con su monto y su tramo de fechas —que pueden ser distintos dentro del mismo memo: el 594-2026 tiene tres—. Es lo mismo que hace hoy el anexo del Word, solo que ahí queda enterrado en un adjunto que nadie abre. Un solo correo, varios rendidores: la lógica actual no cambia. El centro de costo sale de un catálogo y queda pegado al memo desde el origen.",
+   docs:["Memo digital","Responsables asignados"],tools:["INRO Viáticos"],
+   resuelve:"V6 · V11",
+   dolor:"El correlativo lo genera la base continuando el contador que ya usa la empresa, en el mismo formato NNN-AAAA. No se inventa un esquema nuevo: el MemoTracker tiene que poder seguir reconociéndolo. Kory y Annie no pierden su papel: dejan de tipear y pasan a revisar y agrupar."},
+
+  {id:"a3",type:"task",row:6,col:3,num:"1.4",t:"Comprueba si esa persona debe rendiciones",who:"La app",nuevo:true,
    que:"Antes de dejar abrir el memo, revisa si el asignado arrastra rendiciones cuya fecha de retorno ya pasó, con un margen configurable de días de gracia. El aviso aparece al elegir a la persona, no al final del formulario.",
    tools:["INRO Viáticos"],resuelve:"V3 · V4",
    dolor:"Hoy el parámetro está en modo aviso: advierte y deja continuar. Encenderlo para que frene de verdad es cambiar un valor, pero es una decisión de Dirección."},
 
   {id:"g1",type:"gateway",row:6,col:4,t:"¿Arrastra rendiciones vencidas?"},
 
-  {id:"a4",type:"task",row:0,col:5,num:"1.4",t:"Recibe la solicitud y decide",who:"Jefatura",nuevo:true,
-   que:"El memo queda en borrador y al jefe le llega la solicitud con el correlativo, el monto y el motivo congelados. Puede dar el visto bueno o rechazarlo con una razón escrita, que el que pidió va a leer.",
-   docs:["Solicitud de apertura"],tools:["INRO Viáticos"],resuelve:"V3",
-   dolor:"El visto bueno vale por el monto que se firmó: si después alguien sube el monto del memo, la base rechaza la apertura y hay que volver a pedirlo. Sin eso sería una constancia y no un control."},
+  {id:"x1",type:"task",row:6,col:5,num:"1.5",t:"Manda el memo por correo, como el solicitante",who:"La app",nuevo:true,
+   que:"La app genera el memo, lo adjunta con el nombre exacto que el MemoTracker sabe leer —«Memo NNN-AAAA - CONCEPTO - ÁREA»— y lo envía desde el buzón de quien lo pide, no desde una dirección de sistema. El hilo, el remitente y la cadena de aprobación quedan exactamente como están hoy.",
+   docs:["Memo adjunto, con el nombre que espera"],tools:["Gmail API"],
+   dolor:"Requiere que Workspace autorice a la cuenta de servicio a enviar en nombre del usuario. Es el único permiso nuevo de todo el diseño."},
 
-  {id:"a5",type:"task",row:6,col:6,num:"1.5",t:"Abre el memo y lo hace visible al trabajador",who:"La app",nuevo:true,
-   que:"Recién al abrirse aparece en «Mis memos» de la persona asignada. Un borrador no lo ve nadie más que quien lo administra.",
+  {id:"n1",type:"task",row:7,col:6,num:"T.1",t:"Captura el memo del correo",who:"MemoTracker",
+   que:"Sin cambios. Sigue leyendo el buzón, sacando el número del nombre del adjunto y guardando su fila. La diferencia es que ese nombre ya no lo escribe una persona, así que deja de haber números repetidos ni «PASAJE 429-2026» donde debería decir «429-2026».",
+   tools:["Apps Script","Gmail","Google Sheets"]},
+
+  {id:"a4",type:"task",row:0,col:7,num:"1.6",t:"Recibe la solicitud y decide",who:"Jefatura",
+   que:"Igual que hoy: le llega el correo con el correlativo, el monto y el motivo, y responde en el hilo. No se le pide entrar a ninguna herramienta nueva. Lo que cambia es que lo que recibe ya no lo tipeó nadie.",
+   docs:["Solicitud de apertura"],tools:["Gmail"],resuelve:"V3"},
+
+  {id:"n2",type:"task",row:7,col:8,num:"T.2",t:"Detecta la aprobación y crea la carpeta",who:"MemoTracker",
+   que:"Sin cambios. Encuentra la respuesta del jefe en el hilo, crea la carpeta del memo en Drive y archiva el documento con la captura del correo. Y se queda mirando ese hilo: lo que llegue después por ahí lo sigue archivando en la misma carpeta.",
+   tools:["Apps Script","Google Drive"],docs:["Carpeta del memo"]},
+
+  {id:"x2",type:"task",row:6,col:9,num:"1.7",t:"Lee la aprobación de la hoja del MemoTracker",who:"La app",nuevo:true,
+   que:"Consulta su hoja cada pocos minutos, buscando por el identificador del hilo de Gmail —que es único en los 423 registros, a diferencia del número de memo—. De ahí trae el estado, la fecha de aprobación y el enlace a la carpeta de Drive.",
+   tools:["Google Sheets API"],resuelve:"V12",
+   dolor:"Se lee, nunca se escribe en su archivo. Franco no tiene que tocar una línea de su código."},
+
+  {id:"a5",type:"task",row:6,col:10,num:"1.8",t:"Abre el memo y lo hace visible al trabajador",who:"La app",nuevo:true,
+   que:"Recién al confirmarse la aprobación aparece en «Mis memos» de cada persona asignada. Un borrador no lo ve nadie más que quien lo administra.",
    tools:["INRO Viáticos"]},
 
-  {id:"a6",type:"task",row:2,col:7,num:"1.6",t:"Abona el viático al trabajador",who:"Jenny · Tesorería",
-   que:"No cambia. El desembolso sigue siendo de Tesorería y sigue ocurriendo fuera de la app.",
-   docs:["Constancia de transferencia"],tools:["Banca"]},
+  {id:"a6",type:"task",row:2,col:11,num:"1.9",t:"Abona el viático en una sola planilla",who:"Jenny · Tesorería",
+   que:"No cambia. El desembolso sigue siendo de Tesorería, sigue siendo una planilla del banco con todos los beneficiarios del memo y sigue ocurriendo fuera de la app.",
+   docs:["Constancia de la planilla"],tools:["Banca empresarial"]},
 
-  {id:"b1",type:"task",row:4,col:8,num:"2.1",t:"Viaja y gasta en campo",who:"Trabajador",
+  {id:"n3",type:"task",row:7,col:12,num:"T.3",t:"Registra que el memo se pagó",who:"MemoTracker",
+   que:"Sin cambios hoy. Y cuando Franco construya el sentido contrario —que el memo aprobado le llegue a Tesorería como pendiente de revisión y se registre solo si está conforme—, tampoco cambia nada de este lado: lo que nosotros leemos es la hoja, no el correo.",
+   tools:["Apps Script","InroPay"]},
+
+  {id:"x3",type:"task",row:6,col:13,num:"1.10",t:"Lee la constancia y confirma el monto de cada persona",who:"La app",nuevo:true,
+   que:"La constancia del banco es un PDF de texto, no un escaneo: se lee sin OCR y sin consumir IA. De ahí salen el número de memo, y el nombre, el DNI, el monto y el estado de cada beneficiario. Ese estado importa: una fila RECHAZADA es alguien que no cobró y que por lo tanto no tiene nada que rendir. Se contrasta contra lo que el memo había asignado, y si no coinciden se avisa.",
+   docs:["Constancia de la planilla"],tools:["INRO Viáticos"],resuelve:"V11",
+   dolor:"Un memo se paga en más de una planilla: la de haberes sale de la cuenta BCP y solo alcanza a quien tenga BCP. En el 594-2026 eso dejó fuera a cuatro personas de Interbank por S/ 3,772.00. Por eso la app suma planillas hasta cubrir el memo, y mientras no lo cubra lo marca como pagado en parte, con los nombres de quién falta."},
+
+  {id:"b1",type:"task",row:4,col:14,num:"2.1",t:"Viaja y gasta en campo",who:"Trabajador",
    que:"No cambia. Movilidad entre colegios, alimentación e imprevistos.",
    dep:["Proveedores de provincia"]},
 
-  {id:"b2",type:"task",row:4,col:9,num:"2.2",t:"Fotografía el comprobante en el momento",who:"Trabajador",nuevo:true,
+  {id:"b2",type:"task",row:4,col:15,num:"2.2",t:"Fotografía el comprobante en el momento",who:"Trabajador",nuevo:true,
    que:"En el sitio, con el teléfono, apenas le entregan la boleta. Ya no espera al sobre manila ni a tener un hueco semanas después.",
    tools:["Cámara del teléfono"],resuelve:"V5",
    quote:"Los comprobantes térmicos se borran solos: quien no los fotografía a tiempo se queda sin sustento.",qw:"Lo que decía el As Is"},
 
-  {id:"b3",type:"task",row:6,col:10,num:"2.3",t:"Lee el comprobante y levanta las alertas",who:"La app",nuevo:true,
+  {id:"b3",type:"task",row:6,col:16,num:"2.3",t:"Lee el comprobante y levanta las alertas",who:"La app",nuevo:true,
    que:"Primero un motor de lectura que corre en el propio teléfono y no depende de ninguna cuota: saca RUC, serie, número, fecha, subtotal, IGV y total. Solo si quedan campos sin resolver consulta a la IA. La app sigue funcionando aunque se acabe la cuota diaria.",
    tools:["OCR en el teléfono","IA (opcional)"],resuelve:"V9",
    dolor:"Las alertas son las reglas escritas: RUC que no valida, comprobante repetido, la aritmética que no cuadra, la fecha fuera del rango del memo, el comprobante emitido a otra empresa. Antes vivían en la cabeza de las personas."},
 
-  {id:"b4",type:"task",row:4,col:11,num:"2.4",t:"Confirma el monto y el proveedor",who:"Trabajador",nuevo:true,
+  {id:"b4",type:"task",row:4,col:17,num:"2.4",t:"Confirma el monto y el proveedor",who:"Trabajador",nuevo:true,
    que:"La persona ve lo que la app leyó, con un distintivo por campo que dice de dónde salió cada dato: leído, IA, calculado o escrito por ella. Corrige lo que haga falta. El único campo obligatorio es el monto, porque un Yape o una transferencia son solo eso y también tienen que poder archivarse.",
    tools:["INRO Viáticos"]},
 
-  {id:"b5",type:"task",row:6,col:12,num:"2.5",t:"Guarda el comprobante y su foto",who:"La app",nuevo:true,
+  {id:"b5",type:"task",row:6,col:18,num:"2.5",t:"Guarda el comprobante y su foto",who:"La app",nuevo:true,
    que:"Recién cuando la persona confirma que esa es la foto correcta y ese es el monto, se guarda el gasto y la imagen sube a Drive, ordenada por empresa, período y centro de costo.",
    docs:["Foto del comprobante"],tools:["Google Drive"]},
 
-  {id:"t1",type:"task",row:0,col:12,num:"2.6",t:"Ve a su gente en el tablero",who:"Jefatura",nuevo:true,
+  {id:"t1",type:"task",row:0,col:18,num:"2.6",t:"Ve a su gente en el tablero",who:"Jefatura",nuevo:true,
    que:"Mientras el viaje ocurre, el jefe ve a las personas a su cargo con memos sin cerrar, por cuánto y desde hace cuántos días, ordenadas por antigüedad: el de arriba es al que conviene llamar primero.",
    tools:["INRO Viáticos"],resuelve:"V4",
    quote:"¿Quién controla que rindan? Anda por nosotros. Estamos perdiendo todos los días.",qw:"David, costos y control de gestión"},
 
-  {id:"p1",type:"task",row:4,col:13,num:"2.7",t:"Gasto sin comprobante posible",who:"Trabajador",pend:true,
-   que:"La declaración jurada y la planilla de movilidad existen en el modelo de datos, en las validaciones y en la exportación, con sus topes por día. Pero el trabajador todavía NO puede cargarlas desde la app: la captura solo acepta comprobantes. Y los dos topes están sin configurar.",
+  {id:"p1",type:"task",row:4,col:19,num:"2.7",t:"Gasto sin comprobante posible",who:"Trabajador",pend:true,
+   que:"Pesan más de lo que parece: en las 6,197 líneas de rendición del seguimiento hay 855 declaraciones juradas y 274 planillas de movilidad. Existen en el modelo de datos, en las validaciones y en la exportación. Pero el trabajador todavía NO puede cargarlas desde la app: la captura solo acepta comprobantes.",
    docs:["Declaración jurada","Planilla de movilidad"],
-   dolor:"Es una decisión tomada, no un olvido: se acordó empezar solo con comprobantes. Mientras tanto, este camino sigue siendo de papel."},
+   dolor:"La planilla de movilidad lleva dos firmas —el trabajador y la jefatura que autoriza— y una fila por desplazamiento con fecha, motivo, destino y monto. Su base legal dice que si falta uno de esos datos se cae esa fila y no la planilla entera, que es justo como la app trata los gastos. Falta configurar el tope diario, que es un valor que da Contabilidad."},
 
-  {id:"b6",type:"task",row:4,col:14,num:"2.8",t:"Presenta la rendición desde el teléfono",who:"Trabajador",nuevo:true,
-   que:"No hay plantilla que llenar, ni impresión, ni sobre. La app comprueba antes que no quede nada sin extraer, nada duplicado y ninguna alerta sin confirmar.",
+  {id:"b6",type:"task",row:4,col:20,num:"2.8",t:"Presenta la rendición desde el teléfono",who:"Trabajador",nuevo:true,
+   que:"No hay plantilla que llenar, ni impresión, ni sobre. La app comprueba antes que no quede nada sin extraer, nada duplicado y ninguna alerta sin confirmar. Muestra el total rendido y, aparte, cuánto de eso da crédito fiscal: en la rendición de Wilmer, S/ 132.90 de facturas sobre S/ 201.80 totales. Esa separación hoy se hace a mano en el Excel.",
    tools:["INRO Viáticos"],resuelve:"V7"},
 
-  {id:"c1",type:"task",row:1,col:15,num:"3.1",t:"Revisa en pantalla, gasto por gasto",who:"Control de Gestión",nuevo:true,
+  {id:"c1",type:"task",row:1,col:21,num:"3.1",t:"Revisa en pantalla, gasto por gasto",who:"Control de Gestión",nuevo:true,
    que:"Ve el memo con su monto autorizado, lo rendido, el saldo y cada comprobante con su foto y sus alertas. El centro de costo ya viene del memo, así que no hay que reconstruir a qué proyecto pertenece cada gasto.",
    tools:["INRO Viáticos"],resuelve:"V6 · V7",
    quote:"Los memos se reparten entre varios proyectos y la gente los agrupa como puede. Se confunden. Al final se confunden.",qw:"David, costos y control de gestión"},
 
-  {id:"g2",type:"gateway",row:1,col:16,t:"¿Todo conforme?"},
+  {id:"g2",type:"gateway",row:1,col:22,t:"¿Todo conforme?"},
 
-  {id:"c2",type:"task",row:4,col:17,num:"3.2",t:"Corrige solo lo observado",who:"Trabajador",nuevo:true,
-   que:"La devolución es parcial: vuelven editables únicamente los comprobantes que le observaron, con el motivo escrito de cada uno. Lo que ya estaba conforme queda congelado.",
+  {id:"c2",type:"task",row:4,col:23,num:"3.2",t:"Corrige solo lo observado",who:"Trabajador",nuevo:true,
+   que:"La devolución es parcial: vuelven editables únicamente los comprobantes que le observaron, con el motivo escrito de cada uno. Lo que ya estaba conforme queda congelado. Hoy rebota el PDF entero marcado en rojo y la persona no sabe qué arreglar.",
    tools:["INRO Viáticos"]},
 
-  {id:"c3",type:"task",row:5,col:17,num:"3.3",t:"Descarga el archivo y registra",who:"Rosa",nuevo:true,
+  {id:"c3",type:"task",row:5,col:23,num:"3.3",t:"Descarga el archivo y registra",who:"Rosa",nuevo:true,
    que:"Un archivo por rendición, con una fila por comprobante y el centro de costo ya asignado. Separador de punto y coma y marca de orden de bytes, para que Excel en español lo abra en columnas sin pelear.",
    docs:["Archivo para Contabilidad"],tools:["CONCAR","Excel"],resuelve:"V7 · V10",
    dolor:"Lo que la app no hace es entrar a CONCAR por ella. Sigue habiendo un registro, pero sobre datos que ya no hay que transcribir ni separar a mano.",
    quote:"Hay días que todas estas son para mañana.",qw:"Rosa, contabilidad"},
 
-  {id:"d1",type:"task",row:5,col:18,num:"4.1",t:"Emite la liquidación de la persona",who:"Rosa",nuevo:true,
+  {id:"d1",type:"task",row:5,col:24,num:"4.1",t:"Emite la liquidación de la persona",who:"Rosa",nuevo:true,
    que:"Netea todo lo que esa persona debe contra lo que se le debe, a lo largo de todos sus memos cerrados, y lo congela en un documento. Los montos los calcula la base, no el navegador: es un documento de pago.",
    docs:["Liquidación"],tools:["INRO Viáticos"],
    dolor:"Un memo no puede entrar en dos liquidaciones vigentes de la misma persona. Es lo que impide pagar dos veces."},
 
-  {id:"d2",type:"task",row:5,col:19,num:"4.2",t:"Registra el movimiento de plata",who:"Rosa",nuevo:true,
-   que:"Con su número de operación o voucher. Sin referencia la app no lo acepta: sin eso no hay forma de encontrar el movimiento después, que es justamente para lo que sirve registrarlo.",
+  {id:"d2",type:"task",row:5,col:25,num:"4.2",t:"Registra el movimiento de plata",who:"Rosa",nuevo:true,
+   que:"Con su número de operación o voucher —el 10394730 de la devolución de Wilmer, por ejemplo—. Sin referencia la app no lo acepta: sin eso no hay forma de encontrar el movimiento después, que es justamente para lo que sirve registrarlo. Y el saldo lo calcula la base: S/ 212.00 recibidos menos S/ 201.80 rendidos son S/ 10.20, no lo que alguien escriba.",
    docs:["Constancia del movimiento"],tools:["INRO Viáticos"],resuelve:"V8"},
 
-  {id:"d3",type:"task",row:6,col:20,num:"4.3",t:"Cierra los memos saldados",who:"La app",nuevo:true,
+  {id:"d3",type:"task",row:6,col:26,num:"4.3",t:"Cierra los memos saldados",who:"La app",nuevo:true,
    que:"Un memo llega a cerrado cuando está contabilizado y todas las personas que lo tienen asignado ya cobraron o pagaron su liquidación. Hasta hoy, ninguna rendición llegaba nunca a estar cerrada.",
    tools:["INRO Viáticos"]},
 
-  {id:"e1",type:"task",row:2,col:21,num:"4.4",t:"Libera el fondo del viaje siguiente",who:"Finanzas",
+  {id:"x4",type:"task",row:6,col:27,num:"4.4",t:"Publica el estado de rendición de vuelta",who:"La app",nuevo:true,
+   que:"Escribe en una hoja propia, con una fila por memo: si se rindió, cuánto, quién falta y el saldo. El MemoTracker la trae con IMPORTRANGE cuando Franco quiera. Es la columna de rendición que hoy excluye a los viáticos a propósito, porque no tenía de dónde sacarla.",
+   docs:["Hoja de estado de rendición"],tools:["Google Sheets"],resuelve:"V4 · V11",
+   dolor:"Nunca escribimos dentro de su archivo. Publicamos el nuestro y él decide si lo jala."},
+
+  {id:"e1",type:"task",row:2,col:28,num:"4.5",t:"Libera el fondo del viaje siguiente",who:"Finanzas",
    que:"El desembolso siguiente deja de depender de un cierre que nadie sabía dónde estaba: la liquidación dice si se pagó, cuándo y con qué referencia.",
    dep:["Contabilidad"],resuelve:"V8"},
 
-  {id:"end",type:"end",row:2,col:22,t:"Rendición cerrada"}
+  {id:"end",type:"end",row:2,col:29,t:"Rendición cerrada"}
  ],
- edges:[["s","a1"],["a1","a2"],["a2","a3"],["a3","g1"],
-        ["g1","a4","Sí"],["a4","a5"],["g1","a5","No"],
-        ["a5","a6"],["a6","b1"],["b1","b2"],["b2","b3"],["b3","b4"],["b4","b5"],
+ edges:[["s","a1"],["a1","q1"],["q1","a2"],["a2","a3"],["a3","g1"],
+        ["g1","x1","Sí, con aviso"],["g1","x1","No"],
+        ["x1","n1"],["n1","a4"],["a4","n2"],["n2","x2"],["x2","a5"],
+        ["a5","a6"],["a6","n3"],["n3","x3"],["x3","b1"],
+        ["b1","b2"],["b2","b3"],["b3","b4"],["b4","b5"],
         ["b5","b2"],["b1","t1"],["b5","p1"],["p1","b6"],
         ["b6","c1"],["c1","g2"],["g2","c2","No"],["c2","c1"],["g2","c3","Sí"],
-        ["c3","d1"],["d1","d2"],["d2","d3"],["d3","e1"],["e1","end"]]
+        ["c3","d1"],["d1","d2"],["d2","d3"],["d3","x4"],["x4","e1"],["e1","end"]]
 };
 
+/* ===================== LAS CONEXIONES ===================== */
+const FORMS_HTML=`
+<div class="doc">
 
-/* ===================== BPMN ===================== */
+<section>
+  <p class="kicker">Lo que apareció después</p>
+  <h2>La aplicación ya existe. Está hecha en Excel</h2>
+  <p>El seguimiento de cajas chicas y viáticos de Control de Gestión tiene <b>diecisiete hojas</b>: estado de cuentas, memos por responsable, memos por persona, rendiciones línea por línea, ubicación del personal, movimientos bancarios, matriz de observaciones, datos de proveedores con sus tarifas negociadas, estados de contrato y un tablero de alertas.</p>
+  <p>No es un archivo de apoyo. <b>Es el sistema entero, sostenido a mano.</b> Y eso es la mejor noticia y la peor a la vez: la peor porque explica los sábados y domingos de los que se habló en las entrevistas; la mejor porque significa que el modelo de datos ya está pensado por quienes conocen el proceso, y no hay que inventarlo.</p>
+
+  <h3>El número que hay que llevar a la reunión</h3>
+  <div class="tbox">
+  <table>
+    <thead><tr><th style="width:56%">520 memos-persona · 94 personas · lo que va del año</th><th style="text-align:right">Monto</th></tr></thead>
+    <tbody>
+      <tr><td>Abonado al personal</td><td class="num" style="text-align:right">S/ 295,564.00</td></tr>
+      <tr class="alt"><td>Rendido</td><td class="num" style="text-align:right">S/ 210,432.21</td></tr>
+      <tr><td><b>Diferencia</b></td><td class="num" style="text-align:right"><b>S/ 85,131.79</b></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>No todo eso está perdido —una parte se devolvió y otra sigue en plazo—, pero <b>109 de los 520 están marcados «POR REGULARIZAR»</b>: uno de cada cinco. Y el tablero de alertas del propio archivo tiene un caso con <b>154 días</b> de atraso.</p>
+
+  <h3>Lo que este archivo confirma</h3>
+  <ul>
+    <li><b>El duplicado es EL problema.</b> De las 23 observaciones registradas, <b>22 son facturas o boletas duplicadas</b> y una es una declaración jurada eliminada. La alerta de comprobante repetido que ya tenemos construida cubre el 96% de lo que Control de Gestión observa en la realidad. No era una corazonada: era la respuesta correcta.</li>
+    <li><b>Las cuentas bancarias ya viven por persona</b>, en la hoja de estados de contrato, con su banco, su CCI, su correo y su celular. Exactamente donde propusimos ponerlas.</li>
+    <li><b>La separación del crédito fiscal es real:</b> su hoja distingue «monto rendido» de «monto facturas y boletas», igual que el formato de entrega a rendir.</li>
+    <li><b>El error del memo 194-2026 estaba en el párrafo, no en el anexo.</b> El seguimiento registra S/ 1,500.00 abonados, que es lo que dice la tabla. El «S/ 500.00» del texto era el equivocado.</li>
+  </ul>
+
+  <h3>Lo que este archivo corrige de nuestro modelo</h3>
+  <div class="tbox">
+  <table>
+    <thead><tr><th style="width:26%">Qué</th><th style="width:40%">Lo que dice la realidad</th><th style="width:34%">Qué hay que cambiar</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>Falta el tipo «hospedaje»</b></td>
+        <td>De los 125 memos que administra Annie: <b>65 hospedaje</b>, 45 viáticos, 15 caja chica. Y en el MemoTracker, 189 asuntos dicen HOSPEDAJE contra 150 que dicen VIÁTICOS.</td>
+        <td>Es el tipo de memo <b>más frecuente que existe</b> y no está en la base. Agregarlo.</td>
+      </tr>
+      <tr class="alt">
+        <td><b>Los tipos de documento son doce, no tres</b></td>
+        <td>Factura, boleta, DJ y planilla de movilidad son los cuatro grandes. Pero también hay ticket, recibo por honorarios, voucher, efectivo, constancia de transferencia y <b>Yape</b>.</td>
+        <td>Los fiscales caben en lo que ya existe. Los que no lo son —Yape, efectivo, voucher— necesitan poder guardarse solo con monto y foto.</td>
+      </tr>
+      <tr>
+        <td><b>Falta el estado «por regularizar»</b></td>
+        <td>De 520: presentado 325, <b>por regularizar 109</b>, vigente 72, en revisión 7, observado 5, revisado 2.</td>
+        <td>Nuestros estados no tienen dónde poner un memo vencido sin rendir. Son 109 casos y es justo la deuda que hay que perseguir.</td>
+      </tr>
+      <tr class="alt">
+        <td><b>La caja chica se numera por ciclo</b></td>
+        <td><b>175 ciclos</b> registrados entre 2025 y 2026, numerados <code>NNN-AAAA</code>, repartidos entre seis administradores de caja.</td>
+        <td>Confirma que la reposición abre un ciclo nuevo. Ojo: el memo escribe «CAJA CHICA N° 36» y el seguimiento usa otro formato — hay que unificar.</td>
+      </tr>
+      <tr>
+        <td><b>Hay tarifas negociadas</b></td>
+        <td>La hoja de proveedores trae el monto acordado por servicio y por zona: hospedaje S/ 70, pasaje terrestre S/ 15.</td>
+        <td>Habilita una alerta que no teníamos: cobraron más de lo negociado.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="callout n">
+    <p>Y hay <b>9,470 líneas de rendición</b> ya digitadas, con memo, persona, DNI, fecha, tipo de documento, número y monto. Eso es historia real para arrancar el piloto con datos, no con ejemplos.</p>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">Antes de escribir un campo</p>
+  <h2>De cuáles tengo pruebas y de cuáles no</h2>
+  <p>La pregunta no es si se pueden dibujar los formularios —eso siempre se puede—, sino cuáles se pueden dibujar <b>sin inventar</b>. Esta es la diferencia:</p>
+  <div class="tbox">
+  <table>
+    <thead><tr><th style="width:17%">Tipo</th><th style="width:44%">Lo que tengo verificado</th><th style="width:25%">Lo que falta</th><th style="width:14%">¿Se especifica?</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>Viáticos</b></td>
+        <td>Los cinco documentos del memo 594-2026: memo con anexo de 11 personas, planilla del banco, rendición y devolución. La cadena cuadra al céntimo.</td>
+        <td>Nada</td>
+        <td><span class="st ya">Sí</span></td>
+      </tr>
+      <tr class="alt">
+        <td><b>Pasajes</b></td>
+        <td>Los 6 memos «PASAJE NNN-2026» del MemoTracker, cada uno con su <code>memoReferenciado</code> apuntando al memo padre. Y la regla de negocio: se emite con la fecha de ida y se actualiza con la de retorno, porque al abrirlo no se sabe cuándo vuelve.</td>
+        <td>Un memo de pasajes completo, para ver si su anexo es igual</td>
+        <td><span class="st ya">Sí</span></td>
+      </tr>
+      <tr>
+        <td><b>Transporte</b></td>
+        <td>El formato real de la planilla de movilidad, con su base legal impresa al pie, sus dos firmas y su correlativo. Más las 274 planillas ya registradas en el seguimiento.</td>
+        <td>Solo el valor del tope vigente, que lo tiene Contabilidad</td>
+        <td><span class="st ya">Sí</span></td>
+      </tr>
+      <tr class="alt">
+        <td><b>Caja chica</b></td>
+        <td>El memo 194-2026 de apertura con su anexo; los 175 ciclos numerados del seguimiento con sus seis administradores; la cadencia real de reposición; y 3,593 líneas de rendición de caja ya clasificadas.</td>
+        <td>Nada crítico</td>
+        <td><span class="st ya">Sí</span></td>
+      </tr>
+      <tr>
+        <td><b>Reembolso</b></td>
+        <td>Nada. Lo busqué en las diecisiete hojas: hay «devolución de saldo» y «reintegro de efectivo», que son plata que vuelve a la empresa — lo contrario de un reembolso.</td>
+        <td>Todo: un caso real cualquiera</td>
+        <td><span class="st dec">No todavía</span></td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="callout">
+    <p>Se pueden dibujar los cuatro formularios hoy. Pero dos saldrían de un supuesto, y un formulario mal supuesto no se nota hasta que alguien lo usa en serio y descubre que le falta un campo que siempre existió. <b>Con tres documentos más, los cuatro quedan firmes.</b> Están listados al final.</p>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">El tronco común</p>
+  <h2>Lo que lleva cualquier memo</h2>
+  <p>Todos los tipos comparten la misma cabecera y el mismo anexo. Cambia el contenido, no la forma. En verde lo que ya existe en la base; en ámbar lo que hay que agregar.</p>
+
+  <h3>La cabecera</h3>
+  <p class="campos">
+    <b>correlativo</b> NNN-AAAA, lo genera la base &nbsp;·&nbsp;
+    <b>tipo</b> &nbsp;·&nbsp; <b>empresa</b> &nbsp;·&nbsp; <b>centro de costo</b> del catálogo &nbsp;·&nbsp;
+    <b>proyecto</b> &nbsp;·&nbsp; <b>destino</b> &nbsp;·&nbsp; <b>monto autorizado</b> = suma del anexo &nbsp;·&nbsp;
+    <b>moneda</b> &nbsp;·&nbsp; <b>creado por</b> &nbsp;·&nbsp; <b>aprobado por</b> y <b>cuándo</b> &nbsp;·&nbsp;
+    <b>carpeta de Drive</b> &nbsp;·&nbsp; <i>dirigido a</i> &nbsp;·&nbsp; <i>finalidad</i> &nbsp;·&nbsp; <i>justificación</i>
+  </p>
+  <p>Los tres ámbar son texto del memo que hoy se escribe a mano en el Word y que hace falta para poder generarlo: a quién va dirigido —Gerencia de Administración y Finanzas—, para qué son los fondos y por qué.</p>
+
+  <h3>El anexo, una fila por persona</h3>
+  <p class="campos">
+    <b>persona</b> &nbsp;·&nbsp; <i>monto asignado</i> &nbsp;·&nbsp; <i>fecha desde</i> &nbsp;·&nbsp; <i>fecha hasta</i> &nbsp;·&nbsp; <i>descripción</i>
+  </p>
+  <p>Hoy esta tabla guarda solo qué memo y qué persona. Los cuatro campos en ámbar son los que el anexo del 594-2026 declara y la base no puede sostener: <b>tres montos y tres tramos de fecha distintos dentro del mismo memo</b>. Sin ellos no se puede generar el documento, ni calcular el saldo de cada quien, ni cruzar contra la planilla.</p>
+  <p>El DNI y los datos bancarios no van acá: son de la persona, no del memo. Ver más abajo.</p>
+</section>
+
+<section>
+  <p class="kicker">Las diferencias</p>
+  <h2>Qué cambia en cada tipo</h2>
+
+  <div class="fichas">
+    <div class="ficha ok">
+      <h4>Viáticos</h4>
+      <p class="est"><span class="st ya">Verificado</span></p>
+      <dl>
+        <dt>Campos propios</dt><dd>Destino del viaje; tramo de fechas por persona</dd>
+        <dt>Aprobación</dt><dd>La jefatura, una vez, por el monto total</dd>
+        <dt>Pago</dt><dd>Una planilla <b>por banco</b>, hasta cubrir el memo</dd>
+        <dt>Cierra</dt><dd>Cuando todos rindieron y la liquidación se pagó o se cobró</dd>
+      </dl>
+    </div>
+
+    <div class="ficha ok">
+      <h4>Pasajes</h4>
+      <p class="est"><span class="st ya">Verificado</span></p>
+      <dl>
+        <dt>Campos propios</dt><dd><b>Memo padre</b>, fecha de ida, fecha de retorno <i>editable después</i></dd>
+        <dt>Aprobación</dt><dd>Igual que su memo padre</dd>
+        <dt>Pago</dt><dd>Igual</dd>
+        <dt>Cierra</dt><dd>Con el memo de viáticos al que acompaña</dd>
+      </dl>
+      <p style="font-size:13px;margin:10px 0 0;color:var(--ink-2)">La fecha de retorno nace vacía a propósito: cuando se compra el pasaje todavía no se sabe. Es el único campo del sistema que se edita después de aprobado, y por eso queda registrado quién lo cambió.</p>
+    </div>
+
+    <div class="ficha ok">
+      <h4>Transporte</h4>
+      <p class="est"><span class="st ya">Verificado</span></p>
+      <dl>
+        <dt>Qué es</dt><dd><b>No es un memo.</b> Es una planilla firmada, con una fila por desplazamiento</dd>
+        <dt>Cabecera</dt><dd>Trabajador, DNI, período, fecha de emisión y el <b>correlativo impreso</b> de la planilla</dd>
+        <dt>Por fila</dt><dd>Fecha del gasto, motivo, destino y monto — los cuatro los exige la ley</dd>
+        <dt>Aprobación</dt><dd><b>Sí lleva.</b> Dos firmas: el trabajador y la jefatura que autoriza</dd>
+      </dl>
+      <p style="font-size:13px;margin:10px 0 0;color:var(--ink-2)">En la pizarra se dio por hecho que el transporte no necesitaba aprobación. El formato dice lo contrario: tiene una casilla «AUTORIZADO» firmada por el Project Manager, el mismo que firma los memos.</p>
+    </div>
+
+    <div class="ficha no">
+      <h4>Caja chica</h4>
+      <p class="est"><span class="st falta">Casi · falta el cierre</span></p>
+      <dl>
+        <dt>Campos propios</dt><dd><b>Número de caja</b> —«CAJA CHICA N° 36»—, distinto del correlativo del memo. Y un <b>rol</b> en el anexo: «Ejecutor y Administrador de Caja Chica»</dd>
+        <dt>Asignados</dt><dd><b>Una sola persona</b>, no una cuadrilla. Es la diferencia de forma con viáticos</dd>
+        <dt>Aprobación</dt><dd>Una sola vez, al abrir el fondo</dd>
+        <dt>Cierra</dt><dd>No cierra: se repone. El número de caja es lo que numera el ciclo</dd>
+        <dt>Falta</dt><dd>Una rendición y una reposición del mismo fondo</dd>
+      </dl>
+      <p style="font-size:13px;margin:10px 0 0;color:var(--ink-2)">El «N° 36» resuelve la duda que quedó abierta: la reposición no reabre el memo, abre uno nuevo y avanza el número de caja. La numeración ya existe y viene de antes de 2026.</p>
+    </div>
+
+    <div class="ficha no">
+      <h4>Reembolso</h4>
+      <p class="est"><span class="st dec">Sin documentos</span></p>
+      <dl>
+        <dt>Va al revés</dt><dd>La persona ya gastó; el memo no entrega plata, la devuelve</dd>
+        <dt>Campos propios</dt><dd>Los comprobantes van <b>antes</b> de la aprobación, no después</dd>
+        <dt>Aprobación</dt><dd>Doble, según lo dicho en reunión — sin confirmar</dd>
+        <dt>Falta</dt><dd>Un caso real, cualquiera</dd>
+      </dl>
+      <p style="font-size:13px;margin:10px 0 0;color:var(--ink-2)">Es el único tipo donde el orden se invierte, y por eso es el que más riesgo tiene de quedar mal si se especifica de oído.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">La única regla que estaba escrita</p>
+  <h2>La planilla de movilidad trae su propia ley al pie</h2>
+  <p>Las «reglas no escritas» del As Is resultaron estar escritas, en letra chica, en el pie del propio formulario. La base legal es el inciso a1) del artículo 37° de la Ley del Impuesto a la Renta y el inciso v) del artículo 21° de su reglamento, y dice exactamente qué datos hacen válido cada desplazamiento:</p>
+  <div class="tbox">
+  <table>
+    <thead><tr><th style="width:38%">Lo que la ley exige por desplazamiento</th><th style="width:34%">Dónde va en el formato</th><th style="width:28%">En la app</th></tr></thead>
+    <tbody>
+      <tr><td>Fecha en que se incurrió en el gasto</td><td>Día · Mes · Año, en la fila</td><td><span class="st ya">ya existe</span></td></tr>
+      <tr class="alt"><td>Nombres y apellidos del trabajador</td><td>Cabecera</td><td><span class="st ya">ya existe</span></td></tr>
+      <tr><td>Número de DNI</td><td>Cabecera</td><td><span class="st ya">ya existe</span></td></tr>
+      <tr class="alt"><td>Motivo del desplazamiento</td><td>Columna «Motivo»</td><td><span class="st ya">ya existe</span></td></tr>
+      <tr><td>Destino del desplazamiento</td><td>Columna «Destino»</td><td><span class="st ya">ya existe</span></td></tr>
+      <tr class="alt"><td>Monto gastado</td><td>Columna «Total»</td><td><span class="st ya">ya existe</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="callout n">
+    <h3>Y la regla de qué pasa si falta uno</h3>
+    <p>El pie es preciso, y es una buena noticia: la falta de cualquiera de esos datos <b>«sólo inhabilita la planilla para la sustentación del gasto que corresponde a tal desplazamiento»</b>.</p>
+    <p>O sea: <b>se cae la fila, no la planilla.</b> Es exactamente cómo nuestra app trata los gastos —una alerta por comprobante, y la devolución al trabajador es parcial: solo vuelve editable lo observado—. La ley y el diseño coinciden sin que nadie lo hubiera buscado.</p>
+  </div>
+
+  <h3>El número de la planilla es de un talonario</h3>
+  <p>Arriba a la derecha, en rojo y preimpreso: <b>N° 009979</b>. Y en la rendición de Wilmer, la línea de movilidad decía <b>N° 010212</b>. Es la misma serie: un talonario físico que alguien compra, numerado de fábrica.</p>
+  <p>Eso hay que decidirlo antes de construir. Si la app genera la planilla, o sigue usando los números del talonario —y entonces alguien los transcribe, con el riesgo que ya conocemos— o pasa a una serie propia y el talonario se jubila. Lo segundo es más limpio; lo primero es lo que Contabilidad puede estar esperando ver.</p>
+
+  <div class="callout a">
+    <h3>Lo único que falta, y es un número</h3>
+    <p>El mismo inciso fija un <b>tope diario por trabajador</b>, expresado como un porcentaje de la Remuneración Mínima Vital. Ese es el «tope por día» que en las entrevistas vivía en la cabeza de una persona.</p>
+    <p><b>No voy a poner acá el porcentaje ni la RMV de memoria</b>: son valores que cambian y que, puestos mal, generarían reparos. Los confirma Rosa en una frase, y quedan como parámetro configurable — no escritos en el código.</p>
+    <p>Queda también por confirmar la segunda regla que se mencionó: que el excedente se parte al mes siguiente.</p>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">El caso que lo prueba</p>
+  <h2>Un memo que se contradice a sí mismo</h2>
+  <p>El memo 194-2026 de caja chica dice dos cosas distintas sobre el mismo monto, en la misma página:</p>
+  <div class="tbox">
+  <table>
+    <thead><tr><th style="width:26%">Dónde</th><th style="width:52%">Qué dice</th><th style="width:22%; text-align:right">Monto</th></tr></thead>
+    <tbody>
+      <tr><td>El párrafo</td><td>«solicito la asignación de <b>S/ 500.00</b> como fondo de entrega a rendir (caja chica)»</td><td class="num" style="text-align:right">S/ 500.00</td></tr>
+      <tr class="alt"><td>El anexo</td><td>ANNIE MANTILLA DIAZ · CAJA CHICA N° 36 · <b>S/ 1,500.00</b></td><td class="num" style="text-align:right">S/ 1,500.00</td></tr>
+      <tr><td colspan="2"><b>Diferencia</b></td><td class="num" style="text-align:right"><b>S/ 1,000.00</b></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>El texto y la tabla se escriben por separado, y una de las dos se quedó sin actualizar. El memo salió igual, se aprobó igual y se pagó igual. <b>Nadie lo notó</b> — y no es descuido de nadie: es lo que pasa cuando el mismo número hay que escribirlo dos veces a mano.</p>
+  <p>En el memo de viáticos las dos cifras sí coincidían: S/ 9,064.00 en el párrafo y S/ 9,064.00 en el anexo. O sea que el error aparece a veces, que es la peor frecuencia posible — la que hace que nadie revise.</p>
+
+  <div class="callout n">
+    <h3>Por qué esto decide el diseño</h3>
+    <p>El monto del párrafo <b>no se escribe: se calcula.</b> Es la suma del anexo, y punto. En un documento que ordena un pago, que esas dos cifras puedan diferir no es un detalle de formato.</p>
+    <p>Es el mismo patrón de todo lo demás que fuimos encontrando —el asunto sin número, los «PASAJE 429-2026», el «Memo 594,2026» con coma—. <b>Donde escribe una persona, hay que generar.</b> Este caso es el más caro de los cuatro, porque involucra plata.</p>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">El documento</p>
+  <h2>El memo deja de escribirse y pasa a generarse</h2>
+  <p>El Word que hoy redacta una persona tiene una estructura fija. Con los campos de arriba, sale solo — y eso además es lo que hace funcionar la conexión con el MemoTracker, que reconoce el memo por el nombre del archivo adjunto.</p>
+  <p><b>Y es una sola plantilla para todos los tipos.</b> Comparando el memo de viáticos con el de caja chica, lo único que cambia son tres cosas: la palabra del asunto, un paréntesis en el párrafo —«fondo de entrega a rendir <i>(caja chica)</i>»— y el título de la segunda columna del anexo, que en viáticos dice DESCRIPCIÓN y en caja chica ENTREGA A RENDIR. Un generador cubre los cinco tipos.</p>
+  <div class="tbox">
+  <table>
+    <thead><tr><th style="width:30%">En el documento</th><th style="width:38%">Como se ve hoy en el 594-2026</th><th style="width:32%">De dónde sale</th></tr></thead>
+    <tbody>
+      <tr><td>Título</td><td>MEMO 594-2026 - GESTIÓN DE PROYECTOS - INROPRIN</td><td>correlativo · área · empresa</td></tr>
+      <tr class="alt"><td>De</td><td>Jose Carlos Haertel S. — Project Manager</td><td>quien lo firma, con su cargo</td></tr>
+      <tr><td>Para</td><td>Liliana Montero Torrejón — Gerente de Administración y Finanzas</td><td>parámetro de la empresa</td></tr>
+      <tr class="alt"><td>Asunto</td><td>Solicitud de abono – Entrega a rendir · Viáticos · Proyecto: Talleres Especializados</td><td>tipo + proyecto</td></tr>
+      <tr><td>Párrafo 1</td><td>«solicito la asignación de <b>S/ 9,064.00</b> como fondo de entrega a rendir, con la finalidad de <b>atender los requerimientos…</b>»</td><td>suma del anexo + finalidad</td></tr>
+      <tr class="alt"><td>Destino de los fondos</td><td>«Gastos de viáticos para alimentación y movilidades para una escuela I.E Guillermo B. Billinghurst – Barranca»</td><td>destino + concepto</td></tr>
+      <tr><td>Justificación</td><td>«responde a la necesidad de asegurar la continuidad operativa…»</td><td>texto, con plantilla por tipo</td></tr>
+      <tr class="alt"><td>Tabla del anexo</td><td>Responsable + DNI · Descripción + fechas · Monto · Banco, cuenta y CCI</td><td>una fila por persona asignada</td></tr>
+      <tr><td>Nombre del archivo</td><td><code>Memo 594-2026 - GASTOS VIÁTICOS - GESTION DE PROYECTOS.docx</code></td><td><b>generado — es lo que lee el MemoTracker</b></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="callout n">
+    <p>Tres cosas se arreglan solas al generarlo: el correlativo deja de repetirse, el nombre del archivo deja de variar, y <b>el anexo deja de ser un adjunto que nadie abre</b> para pasar a ser la misma tabla que la app ya tiene guardada.</p>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">Una corrección</p>
+  <h2>Dónde vive la cuenta bancaria</h2>
+  <p>En la sección anterior de este documento quedó escrito que no hacía falta guardar los números de cuenta. <b>Eso era cierto solo mientras la app se limitara a leer memos.</b> Si además los genera, la cuenta y el CCI tienen que salir de algún lado: van impresos en el anexo.</p>
+  <p>La pregunta correcta no es si guardarlos, sino <b>dónde</b>. Y la respuesta la da el propio documento: el número de cuenta no cambia de un memo a otro. <b>Es de la persona, igual que su DNI.</b></p>
+  <ul>
+    <li>Va una sola vez en la ficha de la persona, no copiado en cada memo.</li>
+    <li>Lo ven solo quien arma memos y Tesorería. Para todos los demás —incluida la jefatura y quien revisa la rendición— no existe.</li>
+    <li>Si alguien cambia de cuenta, se corrige en un lugar y los memos siguientes salen bien. Hoy hay que acordarse de cambiarlo en cada Word.</li>
+  </ul>
+  <p>El anexo del 594-2026 lleva las cuentas completas y los CCI de once personas, en un archivo que circula por correo y queda en una carpeta compartida. Concentrarlo en un solo lugar con permisos no es solo más ordenado: es menos copias dando vueltas.</p>
+</section>
+
+<section>
+  <p class="kicker">Para cerrar el último</p>
+  <h2>Los dos documentos que faltan</h2>
+  <p>De los tres que pedí, uno llegó de sobra: el seguimiento cerró caja chica entera y dejó transporte a medio camino. Quedan dos:</p>
+  <div class="tbox">
+  <table>
+    <thead><tr><th style="width:6%">·</th><th style="width:36%">Qué pedir</th><th style="width:26%">A quién</th><th style="width:32%">Qué desbloquea</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1</td><td>El <b>formato en blanco de la planilla de movilidad</b>, y los topes por día escritos</td><td>Recursos Humanos</td><td>Transporte, y las «reglas no escritas» del As Is. Ya sé que hay 274 registradas; me falta ver el papel</td></tr>
+      <tr class="alt"><td class="num">2</td><td>Un <b>reembolso</b> cualquiera, con su correo y su comprobante</td><td>Quien haya pedido uno</td><td>El único tipo donde el orden se invierte, y el único del que no hay ni rastro en las 17 hojas</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>Mientras tanto se pueden construir <b>viáticos, hospedaje, pasajes y caja chica</b> — cuatro de los cinco tipos, y entre ellos prácticamente todo el volumen del año.</p>
+  <p>Y un dato que corrige lo que se dijo en la reunión: la caja chica <b>no se repone una vez al mes</b>. Los seis ciclos de Gestión de Proyectos se repusieron cada <b>8 a 12 días</b> —el 11 y el 23 de julio, el 4 y el 13 y el 25 de agosto, el 3 de setiembre—. Es el memo más frecuente que existe, y por eso es el que más gana con dejar de escribirse a mano.</p>
+</section>
+
+</div>`;
+
+const FORMS={
+ nombre:"Los formularios",
+ doc:"FORMS_HTML",
+ ctxHtml:`<p>Qué campos lleva cada tipo de memo y qué se puede construir ya. <b>Dos de los cuatro están listos para especificar; dos no</b>, y la diferencia no es de opinión: es que de dos tengo documentos reales en la mano y de los otros dos solo tengo lo que se dijo en una reunión.</p>
+  <p>Lo que está en verde sale de un documento verificado. Lo que está en ámbar es un supuesto razonable que todavía nadie confirmó — y va marcado para que nadie lo construya creyendo que está comprobado.</p>
+  <p>Con el seguimiento de Control de Gestión a la vista, <b>tres de los cinco tipos quedaron firmes</b> y el modelo cambió en cinco puntos. Eso va primero.</p>`
+};
+
+const CONEX={
+ nombre:"Las conexiones",
+ doc:"CONEX_HTML",
+ ctxHtml:`<p>Tres sistemas y cinco conexiones. La regla de diseño es una sola: <b>ninguna conexión obliga a Franco a cambiar su herramienta.</b> Cuatro de las cinco se resuelven leyendo lo que él ya produce; la quinta le devuelve algo que hoy no tiene.</p>
+  <p>Todo lo que sigue está comprobado contra un memo real —el 594-2026— con sus cinco documentos: el memo, la planilla del banco, la rendición y la devolución del saldo. No es un diseño sobre supuestos.</p>`
+};
+
+const CONEX_HTML=`
+<div class="doc">
+
+<section>
+  <p class="kicker">El mapa</p>
+  <h2>Quién le habla a quién</h2>
+  <p>La aplicación no se mete en medio del MemoTracker: se para al costado. Le manda el correo que ya sabe leer, le lee la hoja que ya escribe, y publica aparte lo que a él le falta.</p>
+  <div class="dg">
+    <svg viewBox="0 0 900 366" width="900" height="366" role="img" aria-label="Diagrama de las cinco conexiones entre INRO Viáticos, las herramientas de Franco y SUNAT">
+      <rect x="0" y="0" width="900" height="366" fill="#FFFFFF"/>
+
+      <rect x="22" y="128" width="200" height="104" rx="6" fill="#E9F4EE" stroke="#2E7D5B" stroke-width="1.6"/>
+      <text x="122" y="163" text-anchor="middle" font-family="Barlow Condensed,sans-serif" font-size="17" font-weight="700" fill="#2E7D5B">INRO VIÁTICOS</text>
+      <text x="122" y="184" text-anchor="middle" font-size="12" fill="#5B665E">Next.js · Supabase</text>
+      <text x="122" y="202" text-anchor="middle" font-size="12" fill="#5B665E">Memos, personas,</text>
+      <text x="122" y="217" text-anchor="middle" font-size="12" fill="#5B665E">gastos y liquidaciones</text>
+
+      <rect x="612" y="40" width="266" height="96" rx="6" fill="#EDF3F8" stroke="#2E6FA8" stroke-width="1.6"/>
+      <text x="745" y="70" text-anchor="middle" font-family="Barlow Condensed,sans-serif" font-size="17" font-weight="700" fill="#2E6FA8">MEMOTRACKER</text>
+      <text x="745" y="90" text-anchor="middle" font-size="12" fill="#5B665E">Apps Script · Gmail · Sheets</text>
+      <text x="745" y="108" text-anchor="middle" font-size="12" fill="#5B665E">423 memos · mar–set 2026</text>
+      <text x="745" y="125" text-anchor="middle" font-size="12" fill="#5B665E">Franco · sin cambios</text>
+
+      <rect x="612" y="160" width="266" height="70" rx="6" fill="#EDF3F8" stroke="#2E6FA8" stroke-width="1.6"/>
+      <text x="745" y="188" text-anchor="middle" font-family="Barlow Condensed,sans-serif" font-size="17" font-weight="700" fill="#2E6FA8">INROPAY</text>
+      <text x="745" y="208" text-anchor="middle" font-size="12" fill="#5B665E">Tesorería · constancias del banco</text>
+
+      <rect x="612" y="254" width="266" height="70" rx="6" fill="#F4F6F1" stroke="#8A948C" stroke-width="1.6"/>
+      <text x="745" y="282" text-anchor="middle" font-family="Barlow Condensed,sans-serif" font-size="17" font-weight="700" fill="#5B665E">SUNAT · SIRE</text>
+      <text x="745" y="302" text-anchor="middle" font-size="12" fill="#5B665E">13,095 comprobantes cargados</text>
+
+      <defs>
+        <marker id="cn" viewBox="0 0 9 9" refX="8" refY="4.5" markerWidth="8" markerHeight="8" orient="auto">
+          <path d="M1 1L8 4.5L1 8Z" fill="#4A5A52"/>
+        </marker>
+      </defs>
+
+      <path d="M222 148 H400 V62 H612" fill="none" stroke="#4A5A52" stroke-width="1.5" marker-end="url(#cn)"/>
+      <circle cx="400" cy="62" r="11" fill="#2E7D5B"/><text x="400" y="66.5" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">1</text>
+      <text x="418" y="50" font-size="12" fill="#17201D">Correo con el asunto que ya reconoce</text>
+
+      <path d="M612 114 H436 V170 H222" fill="none" stroke="#4A5A52" stroke-width="1.5" marker-end="url(#cn)"/>
+      <circle cx="436" cy="142" r="11" fill="#2E6FA8"/><text x="436" y="146.5" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">2</text>
+      <text x="454" y="135" font-size="12" fill="#17201D">Aprobación, carpeta y pago</text>
+
+      <path d="M612 195 H340 V192 H222" fill="none" stroke="#4A5A52" stroke-width="1.5" marker-end="url(#cn)"/>
+      <circle cx="340" cy="194" r="11" fill="#2E6FA8"/><text x="340" y="198.5" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">3</text>
+      <text x="358" y="215" font-size="12" fill="#17201D">Las personas y sus montos</text>
+
+      <path d="M222 214 H400 V288 H612" fill="none" stroke="#4A5A52" stroke-width="1.5" marker-end="url(#cn)"/>
+      <circle cx="400" cy="288" r="11" fill="#2E7D5B"/><text x="400" y="292.5" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">4</text>
+      <text x="418" y="310" font-size="12" fill="#17201D">Estado de rendición, para que lo jale</text>
+
+      <path d="M745 324 V344 H122 V232" fill="none" stroke="#4A5A52" stroke-width="1.5" marker-end="url(#cn)"/>
+      <circle cx="430" cy="344" r="11" fill="#8A948C"/><text x="430" y="348.5" text-anchor="middle" font-size="12" font-weight="700" fill="#FFFFFF">5</text>
+      <text x="448" y="338" font-size="12" fill="#17201D">Comprobantes y notas de crédito · ya funciona</text>
+    </svg>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">La prueba</p>
+  <h2>El memo 594-2026, de punta a punta</h2>
+  <p>Todo lo que propone este documento se puede comprobar contra un memo real, con sus cinco documentos en la mano. Este es el viaje de Wilmer Zamora a Barranca, del 9 al 10 de agosto.</p>
+
+  <div class="cadena">
+    <div class="paso">
+      <span class="n">1</span>
+      <span class="q"><b>El memo</b><span>Firmado por José Haertel como Project Manager, dirigido a la Gerencia de Administración y Finanzas. Al correo lo mandó Kory Sobrino, con el asunto «VIATICOS BARRANCA» — sin el número. Su anexo lista <b>once personas</b>, cada una con su DNI, su monto, su cuenta y su propio tramo de fechas.</span></span>
+      <span class="m">S/ 9,064.00<i>11 personas</i></span>
+    </div>
+    <div class="paso">
+      <span class="n">2</span>
+      <span class="q"><b>La planilla del banco</b><span>Planilla 1439, firmada y enviada por Jenny Barreto desde la cuenta BCP de la empresa. Siete beneficiarios, cuatro de S/ 1,164.00 y tres de S/ 212.00. Siete procesados, cero rechazados. <b>Faltan cuatro de los once</b> — y no es un error: ver abajo.</span></span>
+      <span class="m">S/ 5,292.00<i>pagado · 7 de 11</i></span>
+    </div>
+    <div class="paso">
+      <span class="n">3</span>
+      <span class="q"><b>Lo que le tocó a Wilmer</b><span>Fila 5 de la planilla. DNI 73218372, cuenta 191-77845790-0-08, estado PROCESADA.</span></span>
+      <span class="m">S/ 212.00<i>recibido</i></span>
+    </div>
+    <div class="paso">
+      <span class="n">4</span>
+      <span class="q"><b>Su rendición</b><span>Siete documentos en el formato de entrega a rendir, de tres clases distintas.</span>
+        <span class="desglose"><span>facturas 132.90</span><span>movilidad 20.90</span><span>declaración jurada 48.00</span></span>
+      </span>
+      <span class="m">S/ 201.80<i>rendido</i></span>
+    </div>
+    <div class="paso saldo">
+      <span class="n">5</span>
+      <span class="q"><b>La devolución</b><span>Transferencia del 27 de agosto a las 12:08, desde su cuenta de ahorros a la de la empresa. Operación 10394730, con el mensaje «Devolución del Memo 594,2026».</span></span>
+      <span class="m">S/ 10.20<i>212.00 − 201.80</i></span>
+    </div>
+  </div>
+
+  <p>El saldo devuelto <b>calza al céntimo</b> con lo recibido menos lo rendido. Esa es la cuenta que hoy cierra sola porque Wilmer la hizo bien, y que nadie verifica de forma sistemática: los cinco documentos viven en cinco lugares distintos y el único que los junta es quien se sienta a mirarlos.</p>
+
+  <h3>Qué confirma cada eslabón</h3>
+  <ul>
+    <li><b>El pago trae las personas.</b> La planilla es la única fuente leíble por máquina que dice quiénes están detrás del memo y cuánto le tocó a cada uno. Y trae algo más que no habíamos visto: el estado por fila. Si alguien sale RECHAZADA, esa persona no cobró y no debería tener nada que rendir.</li>
+    <li><b>Las tres clases de gasto son reales.</b> Factura, planilla de movilidad y declaración jurada aparecen las tres en una sola rendición de siete líneas. Y solo las facturas —S/ 132.90 de S/ 201.80— dan crédito fiscal: por eso el formato las totaliza aparte.</li>
+    <li><b>La devolución ya tiene su número de operación.</b> 10394730. Es exactamente lo que la app pide para registrar el movimiento, y por eso lo pide: sin esa referencia no hay forma de encontrarlo después.</li>
+  </ul>
+
+  <h3>Los S/ 3,772 que faltaban: un memo se paga en más de una planilla</h3>
+  <p>Cruzando el anexo del memo contra la planilla, la diferencia se explica sola y de una sola manera:</p>
+  <div class="tbox">
+  <table>
+    <thead><tr><th style="width:44%">Banco de la cuenta en el anexo</th><th style="text-align:right">En el memo</th><th style="text-align:right">En la planilla 1439</th><th style="text-align:right">Monto</th></tr></thead>
+    <tbody>
+      <tr><td>BCP</td><td class="num" style="text-align:right">7 personas</td><td class="num" style="text-align:right">las 7</td><td class="num" style="text-align:right">S/ 5,292.00</td></tr>
+      <tr class="alt"><td>Interbank</td><td class="num" style="text-align:right">4 personas</td><td class="num" style="text-align:right">ninguna</td><td class="num" style="text-align:right">S/ 3,772.00</td></tr>
+      <tr><td><b>Total del memo</b></td><td class="num" style="text-align:right"><b>11</b></td><td class="num" style="text-align:right">7</td><td class="num" style="text-align:right"><b>S/ 9,064.00</b></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>La planilla de haberes sale de la cuenta BCP de la empresa y <b>solo alcanza a quien tenga cuenta BCP</b>. Johana Tabraj, De la Cruz Paico, Neciosup y Paulo Salas tienen Interbank, y su plata sale por otra operación, contra el CCI que el mismo anexo declara.</p>
+  <p>No falta dinero. Falta un documento. Pero <b>esa distinción hoy no la puede hacer nadie sin abrir el Word, abrir la constancia y cruzar once nombres a mano.</b></p>
+
+  <div class="callout n">
+    <h3>Qué tiene que hacer la app con esto</h3>
+    <p>Leer una constancia no basta: hay que <b>sumar las planillas hasta cubrir el memo</b>. Mientras la suma sea menor, el memo queda marcado como pagado en parte, con los nombres de quién falta.</p>
+    <p>Eso convierte un hueco invisible en una lista de cuatro personas. Y sirve igual para el caso feo: si una fila sale RECHAZADA o si una interbancaria se cae, aparece exactamente igual.</p>
+  </div>
+
+  <div class="callout">
+    <h3>Dos cosas más que este caso deja ver</h3>
+    <p><b>La referencia se escribe a mano, y se escribe mal.</b> El mensaje de la devolución dice «Memo 594<b>,</b>2026», con coma en vez de guion. Un buscador que espere <code>594-2026</code> no lo encuentra. Es el mismo problema del asunto del correo y de los «PASAJE 429-2026»: donde escribe una persona, hay que generar.</p>
+    <p><b>El anexo lleva las cuentas bancarias completas de once personas</b>, con su CCI. Si la app va a leer memos, hay que decidir antes qué se guarda y qué no. Para cruzar el pago alcanza con el DNI y el monto; el número de cuenta no hace falta guardarlo, y guardarlo sin necesidad es asumir un riesgo a cambio de nada.</p>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">Una por una</p>
+  <h2>Las cinco conexiones</h2>
+  <div class="tbox">
+  <table>
+    <thead><tr><th style="width:3%">#</th><th style="width:22%">Qué mueve</th><th style="width:26%">Cómo</th><th style="width:31%">Qué hace falta</th><th style="width:18%">Estado</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="num">1</td>
+        <td><b>La solicitud del memo</b><br>App → MemoTracker</td>
+        <td>La app envía el correo con la API de Gmail, <b>desde el buzón de quien lo pide</b>, con el memo adjunto nombrado <code>Memo NNN-AAAA - CONCEPTO - ÁREA</code>. Lo que el MemoTracker lee es <b>el nombre del adjunto</b>, no el asunto.</td>
+        <td>Que Workspace autorice a la cuenta de servicio a enviar en nombre del usuario. Es el único permiso nuevo del diseño.</td>
+        <td><span class="st falta">Por construir</span></td>
+      </tr>
+      <tr class="alt">
+        <td class="num">2</td>
+        <td><b>Aprobación, carpeta y pago</b><br>MemoTracker → App</td>
+        <td>Leer su Google Sheet con la cuenta de servicio, cada pocos minutos, buscando por <code>threadId</code>. Trae estado, fecha de aprobación, carpeta de Drive y fecha de pago.</td>
+        <td>Que Franco comparta la hoja como <b>lector</b>. Nada más: no toca su código ni su formato.</td>
+        <td><span class="st ya">Se puede hoy</span></td>
+      </tr>
+      <tr>
+        <td class="num">3</td>
+        <td><b>Las personas y sus montos</b><br>InroPay → App</td>
+        <td>La constancia del banco es un PDF de <b>texto, no un escaneo</b>: se lee sin OCR y sin gastar IA. De ahí salen memo, nombre, DNI, monto y estado por beneficiario. <b>Se suman varias</b>: un memo se paga en una planilla por banco.</td>
+        <td>Acceso de lectura a la carpeta de Drive donde InroPay archiva las constancias.</td>
+        <td><span class="st ya">Probado</span></td>
+      </tr>
+      <tr class="alt">
+        <td class="num">4</td>
+        <td><b>Estado de rendición</b><br>App → MemoTracker</td>
+        <td>La app publica <b>su propia</b> hoja, una fila por memo. Franco la trae con <code>IMPORTRANGE</code> si quiere.</td>
+        <td>Nada de nadie. Lo decide él, cuando quiera.</td>
+        <td><span class="st falta">Por construir</span></td>
+      </tr>
+      <tr>
+        <td class="num">5</td>
+        <td><b>Comprobantes y notas de crédito</b><br>SUNAT → App → todos</td>
+        <td>Consulta diaria al SIRE a las 8 de la mañana. Publica la hoja que ya usa Contabilidad.</td>
+        <td>Falta agregarle la pestaña de notas de crédito que pidió Franco.</td>
+        <td><span class="st ya">Funcionando</span></td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="callout">
+    <h3>El asunto no es lo que se lee</h3>
+    <p>Dábamos por hecho que el MemoTracker reconocía el memo por el asunto del correo. <b>En 341 de los 422 memos el asunto ni siquiera menciona el número.</b> El 594-2026 llegó con el asunto «VIATICOS BARRANCA» y nada más.</p>
+    <p>De dónde lo saca, entonces: del <b>nombre del archivo adjunto</b> —<code>Memo 594-2026 - GASTOS VIÁTICOS - GESTION DE PROYECTOS.docx</code>—, que es lo que Franco describe cuando dice que identifica los archivos, crea la carpeta y los sube. Hay 387 memos con adjuntos registrados.</p>
+    <p>Para la conexión 1 esto cambia el requisito: no basta con armar bien el asunto. <b>La app tiene que generar el memo y adjuntarlo con el nombre exacto.</b> Si se manda solo el asunto, el MemoTracker no lo reconoce.</p>
+  </div>
+
+  <div class="callout n">
+    <h3>Por qué leer la hoja y no escuchar los correos</h3>
+    <p>En la pizarra el bloqueo fue «no me llegan los correos del MemoTracker, sin eso no tengo cómo conectarme». <b>No hacen falta.</b> Su hoja ya trae todo lo que necesitamos, y la cuenta de servicio con permiso de Sheets ya está funcionando en producción desde el 14 de setiembre.</p>
+    <p>Se evaluaron dos alternativas. Un <b>webhook</b> desde su Apps Script tendría menos demora, pero exige que Franco modifique su código y que guardemos un secreto compartido; se deja para cuando la demora de minutos empiece a molestar, no antes. <b>Gmail push con Pub/Sub</b> se descarta: infraestructura nueva para ganar unos minutos sobre un proceso que hoy tarda días.</p>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">La decisión abierta</p>
+  <h2>¿Quién pide el memo?</h2>
+  <p>La idea de que el memo lo pide el personal que viaja describe hacia dónde queremos ir, no lo que pasa hoy. Hoy el circuito de correo no toca al trabajador en ningún punto.</p>
+  <div class="tbox">
+  <table>
+    <thead><tr><th style="width:52%">Quién manda el correo del memo</th><th style="text-align:right">Memos</th><th style="text-align:right">Del total</th></tr></thead>
+    <tbody>
+      <tr><td>Kory Sobrino · Gestión de Proyectos</td><td class="num" style="text-align:right">220</td><td class="num" style="text-align:right">52%</td></tr>
+      <tr class="alt"><td>Annie Mantilla · Administración</td><td class="num" style="text-align:right">182</td><td class="num" style="text-align:right">43%</td></tr>
+      <tr><td>Las otras nueve personas, juntas</td><td class="num" style="text-align:right">21</td><td class="num" style="text-align:right">5%</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>El memo 594-2026 lo firma José Haertel como Project Manager y lo dirige a la Gerencia de Administración y Finanzas; al correo lo mandó Kory. Los siete trabajadores que viajaron no aparecen en ninguna parte del circuito: ni piden, ni reciben, ni responden.</p>
+  <p>Así que la secuencia real es: la necesidad nace del viaje, la jefatura la autoriza <b>por fuera del sistema</b>, y una de dos personas la convierte en memo. Lo que sí es correcto es que hay una autorización de jefatura antes del correo — solo que hoy ocurre en una conversación que no deja rastro.</p>
+
+  <div class="callout n">
+    <h3>Un memo, varias personas asignadas. Eso ya estaba resuelto</h3>
+    <p>Un memo cubre hoy a <b>una cuadrilla entera</b>, y por eso se paga en una sola planilla: el 594-2026 son siete personas en un solo envío de S/ 5,292.00. Esa lógica no hay que tocarla.</p>
+    <p>Y no hace falta inventar nada para conservarla: <b>al crear el memo se marca a las personas que van a poder rendir contra él</b>, con su monto. Una solicitud, un correo, un pago, varios rendidores. Es lo mismo que hace hoy el anexo del Word —solo que ahí queda enterrado en un adjunto que nadie abre— y es exactamente lo que ya modela la base con <code>memo_asignados</code>.</p>
+    <p>El trabajador entra al sistema por donde importa: <b>rindiendo</b>. Ve el memo al que lo asignaron, cuánto queda y cuánto lleva gastado cada uno.</p>
+  </div>
+
+  <div class="callout a">
+    <h3>Lo que sigue abierto, entonces</h3>
+    <p>No es si el trabajador pide o no. Es más chico: <b>dónde queda registrada la autorización de la jefatura</b>, que hoy ocurre en una conversación y no deja rastro en ningún lado. La app puede guardarla al crear el memo, sin cambiar quién lo crea.</p>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">Los cuatro tipos</p>
+  <h2>Viáticos, caja chica, reembolso y transporte</h2>
+  <p>La pizarra los separó bien. Los cuatro caben en la misma estructura —un memo con personas asignadas— y tres de los cuatro ya están en la base sin tocar nada:</p>
+  <div class="tbox">
+  <table>
+    <thead><tr><th style="width:17%">Tipo</th><th style="width:30%">Cómo funciona</th><th style="width:30%">Quién rinde</th><th style="width:23%">En la base</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>Viáticos</b></td>
+        <td>Se abre para un viaje, se paga por adelantado, se rinde y se cierra. Tiene principio y fin.</td>
+        <td>Las personas que viajan, asignadas al crearlo</td>
+        <td><code>VIATICOS</code> <span class="st ya">listo</span></td>
+      </tr>
+      <tr class="alt">
+        <td><b>Pasajes</b></td>
+        <td>Cuando el viaje es aéreo va aparte, porque al abrirlo no se sabe la fecha de retorno.</td>
+        <td>Igual que viáticos</td>
+        <td><code>PASAJES</code> <span class="st ya">listo</span></td>
+      </tr>
+      <tr>
+        <td><b>Caja chica</b></td>
+        <td>Un fondo que <b>no se cierra: se repone</b>. Si tiene S/ 500 y el día 7 se agotó, se rinde y se vuelve a depositar.</td>
+        <td>Quien tiene la caja, más las personas que ella asigne</td>
+        <td><code>CAJA_CHICA</code> <span class="st falta">falta la reposición</span></td>
+      </tr>
+      <tr class="alt">
+        <td><b>Transporte</b></td>
+        <td><b>No es un memo propio.</b> Sale de la caja chica de Administración y no necesita aprobación por gasto: la aprobación fue la del fondo.</td>
+        <td>Muchos colaboradores a la vez, contra la misma caja</td>
+        <td>Gasto <code>MOVILIDAD</code> dentro de un memo <code>CAJA_CHICA</code> <span class="st ya">listo</span></td>
+      </tr>
+      <tr>
+        <td><b>Reembolso</b></td>
+        <td>Va al revés: la persona ya pagó de su bolsillo y pide que le devuelvan. Con factura siempre.</td>
+        <td>Quien gastó</td>
+        <td>Sin probar contra un caso real</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+  <p>El transporte confirma que el modelo aguanta: es un gasto de tipo movilidad —con origen, destino y placa, que la base ya guarda— dentro de una caja chica que tiene a varias personas asignadas. No hace falta un tipo de memo nuevo.</p>
+
+  <div class="callout a">
+    <h3>Lo que el anexo obliga a cambiar en la base</h3>
+    <p>El memo 594-2026 asigna <b>tres montos distintos y tres tramos de fecha distintos</b> dentro del mismo memo: cuatro personas del 9 al 10 de agosto por S/ 212.00, seis del 9 al 19 por S/ 1,164.00, y una del 10 al 19 por S/ 1,232.00.</p>
+    <p>Hoy la tabla que une memo y persona guarda solo el par —qué memo, qué persona— y las fechas viven a nivel del memo entero. Con eso no se puede reproducir el anexo, ni calcular el saldo de cada quien, ni cruzar contra la planilla.</p>
+    <p><b>Le faltan tres campos:</b> el monto asignado, la fecha de inicio y la de fin, por persona. Es una migración chica y sin ella nada de lo anterior funciona.</p>
+  </div>
+
+  <div class="callout a">
+    <h3>El otro hueco: la reposición</h3>
+    <p>Los estados del memo terminan en <code>CERRADO</code>, y de ahí no se vuelve. Eso está bien para un viaje. Para una caja chica que se agota y se repone todos los meses, no: o se reabre algo que ya se cerró —y se pierde la historia de cuánto se repuso y cuándo— o hace falta otra cosa.</p>
+    <p><b>Lo que propongo:</b> cada reposición abre un memo nuevo que <b>apunta al anterior</b>. Así cada ciclo queda cerrado y auditable, y la cadena completa se puede seguir hacia atrás.</p>
+    <p>No es un invento: la hoja de Franco ya tiene una columna <code>memoReferenciado</code>, hoy usada en los 6 memos de pasaje para apuntar a su memo padre. El mecanismo existe y funciona; lo que falta es usarlo también acá.</p>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">La decisión que cambió</p>
+  <h2>El correlativo no era por área</h2>
+  <p>Las dos versiones anteriores estaban equivocadas, cada una a su manera. El mapa decía «cada área lleva el suyo y no hay numeración única en el grupo». La pizarra decidió «va a ser por área, vamos a mantener eso». Los 423 registros dicen otra cosa:</p>
+  <div class="tbox">
+  <table>
+    <thead><tr><th>Área</th><th style="text-align:right">Memos</th><th style="text-align:right">Rango usado en 2026</th><th style="text-align:right">Repetidos</th></tr></thead>
+    <tbody>
+      <tr><td>Gestión de Proyectos</td><td class="num" style="text-align:right">215</td><td class="num" style="text-align:right">225 → 702</td><td class="num" style="text-align:right">0</td></tr>
+      <tr class="alt"><td>Control de Gestión</td><td class="num" style="text-align:right">190</td><td class="num" style="text-align:right">057 → 604</td><td class="num" style="text-align:right">8</td></tr>
+      <tr><td>Postventa</td><td class="num" style="text-align:right">2</td><td class="num" style="text-align:right">005 → 006</td><td class="num" style="text-align:right">0</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>Los rangos se entrelazan de punta a punta y, aun así, <b>un solo número aparece en las dos áreas grandes</b>. Con contadores independientes eso sería imposible en cuatrocientos memos: apunta a un contador compartido que va del 2 al 702 y que alguien lleva a mano.</p>
+  <p>Pero el memo de caja chica que apareció después no deja cerrar esa conclusión. Lleva el número <b>194-2026</b> y está fechado el 1 de abril; el 194-2026 que tiene el MemoTracker es un hospedaje a Mollendo de otra área, de julio. <b>Dos memos distintos, el mismo número, y uno de los dos ni siquiera llegó al MemoTracker.</b></p>
+  <p>Así que el esquema de numeración sigue sin estar claro, y no hace falta aclararlo para decidir. A las 8 repeticiones y los 7 números mal escritos de la hoja se suma ahora una colisión que la hoja ni registra. Lo único que hace falta saber es esto: <b>el número de memo no identifica un memo</b>.</p>
+
+  <div class="callout">
+    <h3>Qué se decide, entonces</h3>
+    <p>La app <b>continúa el mismo contador, en el mismo formato <code>NNN-AAAA</code></b>, arrancando en <b>703</b>. No se inventa un esquema nuevo.</p>
+    <p>Dos razones. La primera: el MemoTracker reconoce el memo por ese patrón dentro del asunto; cambiarlo lo deja ciego de un día para otro. La segunda: las repeticiones no vienen del formato sino de que hay varias manos escribiendo. <b>Un solo emisor las elimina sin tocar nada más.</b></p>
+    <p>Queda descartado el <code>INROPRIN-2026-VIA-00001</code> que proponía el documento anterior.</p>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">Para que nadie pise a nadie</p>
+  <h2>Quién es dueño de cada dato</h2>
+  <p>Un solo dueño por dato, y el resto lo lee. Donde hoy no hay dueño, lo dice la tabla.</p>
+  <div class="tbox">
+  <table>
+    <thead><tr><th style="width:40%">Dato</th><th style="width:30%">Dueño</th><th style="width:30%">El otro lo…</th></tr></thead>
+    <tbody>
+      <tr><td>Que el memo existe, su hilo y su carpeta</td><td>MemoTracker</td><td>La app lo lee</td></tr>
+      <tr class="alt"><td>El correlativo <code>NNN-AAAA</code></td><td><b>INRO Viáticos</b> <span class="st dec">cambia</span></td><td>Le llega en el asunto</td></tr>
+      <tr><td>La aprobación de la jefatura</td><td>MemoTracker, del hilo de correo</td><td>La app la lee</td></tr>
+      <tr class="alt"><td>El pago y su constancia</td><td>InroPay · Tesorería</td><td>La app la lee</td></tr>
+      <tr><td>Quiénes rinden y cuánto le tocó a cada uno</td><td><b>INRO Viáticos</b></td><td>Hoy no lo tiene nadie</td></tr>
+      <tr class="alt"><td>Cada gasto, con su foto y sus alertas</td><td><b>INRO Viáticos</b></td><td>—</td></tr>
+      <tr><td>Saldo por persona y liquidación</td><td><b>INRO Viáticos</b></td><td>—</td></tr>
+      <tr class="alt"><td>Estado de rendición del memo</td><td><b>INRO Viáticos</b></td><td>MemoTracker lo jala</td></tr>
+      <tr><td>Qué comprobantes existen en SUNAT</td><td>SIRE, vía la app</td><td>Contabilidad y Franco lo leen</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">Antes de construir</p>
+  <h2>Lo que hace falta de otras personas</h2>
+  <p>Tres pedidos y una decisión. Ninguno es trabajo de desarrollo, y los cuatro bloquean algo.</p>
+  <h3>A Franco</h3>
+  <ul>
+    <li>Acceso de <b>lectura</b> a la hoja del MemoTracker y a la carpeta donde InroPay archiva las constancias de pago. Con eso se destraban las conexiones 2 y 3.</li>
+    <li>Aviso de que las columnas «Fecha de envío a Tesorería» y «VB Finanzas» están en <code>#REF!</code> en 395 de 423 filas. Es el tramo que la pizarra quería mapear: existe y se rompió.</li>
+  </ul>
+  <h3>A Sistemas · Workspace</h3>
+  <ul>
+    <li>Autorizar a la cuenta de servicio a <b>enviar correo en nombre del usuario</b>. Sin eso, la conexión 1 tendría que mandar desde una dirección de sistema, y el MemoTracker registraría a esa dirección como remitente en vez de a la persona.</li>
+  </ul>
+  <h3>A Dirección</h3>
+  <ul>
+    <li>Si el control de rendiciones vencidas <b>avisa o frena</b>. Hoy avisa y deja continuar. Cambiarlo es cambiar un valor, pero es una política, no una configuración técnica.</li>
+    <li><b>Si la reposición de caja chica abre un memo nuevo</b> que apunta al anterior, o si se reabre el mismo. De eso depende si se puede auditar cuánto se repuso a cada caja durante el año.</li>
+  </ul>
+  <h3>A Kory y a Annie</h3>
+  <ul>
+    <li>Media hora para verlas armar un memo de punta a punta. Entre las dos mandan el 95% de los memos del año: son las que saben dónde está la parte difícil, y son las que más van a notar el cambio.</li>
+  </ul>
+  <div class="callout a">
+    <h3>Lo que Franco va a construir del otro lado</h3>
+    <p>En sus palabras: <i>«la idea es vincular el procesamiento de MemoTracker a InroPay para que aparezca como un pendiente de revisión, y si todo está ok, lo registre automáticamente»</i>.</p>
+    <p>Hoy la información va en un solo sentido: InroPay avisa el pago y MemoTracker anota. Lo que viene es el sentido contrario, que el memo aprobado le llegue a Tesorería como pendiente.</p>
+    <p><b>Eso no nos afecta, y conviene que se sepa:</b> nosotros leemos su hoja, no sus correos. Cuando ese enlace exista, la hoja va a tener mejores estados y nosotros los vamos a ver sin cambiar una línea. Es justamente el argumento para no acoplarnos a los correos.</p>
+  </div>
+
+  <div class="callout a">
+    <h3>Lo que no se decide todavía</h3>
+    <p>La <b>caja chica reiterativa</b> —la que se abre y se cierra todos los meses— quedó abierta en la pizarra: si reabre el mismo memo o abre uno nuevo. Vale la pena saber que la hoja de Franco ya tiene una columna <code>memoReferenciado</code>, hoy usada en los 6 memos de pasaje para apuntar a su memo padre. El mecanismo existe; falta decidir si se usa para esto.</p>
+    <p>Y el <b>reembolso</b> —cuando alguien paga de su bolsillo y pide que le devuelvan— va al revés que todo lo demás. Está en el modelo de datos, pero no se probó contra un caso real.</p>
+  </div>
+</section>
+
+<section>
+  <p class="kicker">El orden</p>
+  <h2>Qué se construye primero</h2>
+  <p>Ordenado por lo que desbloquea, no por lo que es más vistoso. Los dos primeros no dependen de que nadie autorice nada.</p>
+  <div class="tbox">
+  <table>
+    <thead><tr><th style="width:4%">·</th><th style="width:40%">Qué</th><th style="width:34%">Por qué va antes</th><th style="width:22%">Depende de</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1</td><td>Cargar los 7 proyectos con su centro de costo</td><td>Hoy hay cero proyectos en la base, y el reparto por proyecto cuelga de eso</td><td>Nada — el catálogo ya lo tenemos</td></tr>
+      <tr class="alt"><td class="num">2</td><td>Importar los 423 memos por <code>threadId</code></td><td>El piloto arranca con seis meses de historia en vez de cuatro memos de prueba</td><td>Nada — el archivo ya lo tenemos</td></tr>
+      <tr><td class="num">3</td><td>Agregar monto y fechas por persona al memo</td><td>Sin eso no se puede reproducir el anexo ni cruzarlo contra el pago</td><td>Nada — es una migración chica</td></tr>
+      <tr class="alt"><td class="num">4</td><td>Leer las constancias de pago, sumando por banco</td><td>Es lo que confirma quién cobró de verdad y quién quedó fuera</td><td>Carpeta de Drive (Franco)</td></tr>
+      <tr><td class="num">5</td><td>Conexión viva con la hoja del MemoTracker</td><td>Convierte la carga histórica en algo que se mantiene solo</td><td>Lectura de la hoja (Franco)</td></tr>
+      <tr class="alt"><td class="num">6</td><td>Emitir la solicitud por correo</td><td>Cierra el circuito y termina con los correlativos repetidos</td><td>Permiso de Workspace</td></tr>
+      <tr><td class="num">7</td><td>Publicar el estado de rendición</td><td>Es lo que le devolvemos a Franco a cambio de todo lo anterior</td><td>Los pasos 2 y 4</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+</div>`;
+
 /* ===================== BPMN ===================== */
 const $=(s,r=document)=>r.querySelector(s);
 const NS="http://www.w3.org/2000/svg";
@@ -445,7 +1267,6 @@ function renderFlow(f){
     <div class="scroller"><svg id="svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"></svg></div>
   </div></div>`;
 
-  // carriles fijos
   const L=$("#lanes");
   let start=0;
   f.lanes.forEach((l,i)=>{
@@ -456,9 +1277,8 @@ function renderFlow(f){
     if(i===f.lanes.length-1||f.lanes[i+1].pool!==l.pool){
       const yy=PAD+start*LANEH, h=(i-start+1)*LANEH;
       el("rect",{x:0,y:yy,width:POOLW,height:h,fill:"#EDF0E9",stroke:"#D5DAD0","stroke-width":.9},L);
-      // El nombre del pool va rotado dentro del alto del carril. Si no
-      // entra —"CONTROL DE GESTIÓN" en un solo carril— se comprime en vez
-      // de cortarse.
+      // El nombre del pool va rotado dentro del alto del carril. Si no entra
+      // —"CONTROL DE GESTIÓN" en un solo carril— se comprime en vez de cortarse.
       const pn=el("text",{class:"poolname","text-anchor":"middle",transform:`translate(${POOLW/2},${yy+h/2}) rotate(-90)`},L);
       pn.textContent=l.pool;
       const disp=h-14;
@@ -518,7 +1338,7 @@ function renderFlow(f){
     g.addEventListener("click",()=>openNode(n));
     g.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();openNode(n);}});
     if(n.rup)badge(nodeG,b,n.rup.label,"",()=>openRup(n.rup));
-    else if(n.pend)badge(nodeG,b,"Todavía no",  "p",()=>openNode(n));
+    else if(n.pend)badge(nodeG,b,"Todavía no","p",()=>openNode(n));
     else if(n.resuelve)badge(nodeG,b,"Resuelve "+n.resuelve,"n",()=>openNode(n));
   });
 }
@@ -531,8 +1351,6 @@ function badge(parent,b,label,cls,fn){
   g.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();e.stopPropagation();fn();}});
 }
 
-
-/* ===================== PANEL ===================== */
 /* ===================== PANEL ===================== */
 function pills(a,n){return a.map(x=>`<span class="pill${n?" n":""}">${x}</span>`).join("");}
 function openNode(n){
@@ -560,14 +1378,14 @@ function openPanel(o){
 function closePanel(){$("#panel").classList.remove("on");$("#panel").setAttribute("aria-hidden","true");$("#scrim").classList.remove("on");}
 $("#scrim").onclick=closePanel;
 
-
 /* ===================== PESTAÑAS ===================== */
-const VIEWS=[{k:"asis",o:ASIS},{k:"tobe",o:TOBE,p:1}];
+const VIEWS=[{k:"asis",o:ASIS},{k:"tobe",o:TOBE,p:1},{k:"conex",o:CONEX,c:1},{k:"forms",o:FORMS,c:1}];
 let current="asis";
 const tabsEl=$("#tabs");
 VIEWS.forEach(v=>{
   const b=document.createElement("button");
-  b.className="tab"+(v.p?" prop":""); b.setAttribute("role","tab"); b.dataset.k=v.k; b.textContent=v.o.nombre;
+  b.className="tab"+(v.p?" prop":"")+(v.c?" conex":"");
+  b.setAttribute("role","tab"); b.dataset.k=v.k; b.textContent=v.o.nombre;
   b.onclick=()=>{current=v.k;sync();};
   tabsEl.appendChild(b);
 });
@@ -576,7 +1394,10 @@ function sync(){
   closePanel();
   const v=VIEWS.find(x=>x.k===current);
   $("#ctx").innerHTML=v.o.ctxHtml||"";
-  renderFlow(v.o);
+  const esDoc=!!v.o.doc;
+  $("#legend").hidden=esDoc;
+  $("#hint").hidden=esDoc;
+  if(esDoc)$("#view").innerHTML=(v.o.doc==="FORMS_HTML"?FORMS_HTML:CONEX_HTML); else renderFlow(v.o);
   window.scrollTo({top:0,behavior:"instant"});
 }
 document.addEventListener("keydown",e=>{
@@ -590,5 +1411,6 @@ document.addEventListener("keydown",e=>{
 });
 sync();
 </script>
+
 </body>
 </html>
