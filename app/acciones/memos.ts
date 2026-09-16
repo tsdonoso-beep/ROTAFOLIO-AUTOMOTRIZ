@@ -7,6 +7,7 @@ import { elegibleParaCaja, impedimentosParaRendirCaja, periodoDeCaja, resumirCaj
 import { actualizarLegajo } from "./legajo";
 import { aQuienPreguntar } from "@/lib/dominio/autorizacion";
 import { evaluarBloqueoPorPendientes, explicarPendientes } from "@/lib/dominio/memo";
+import { revisarAnexo } from "@/lib/dominio/anexo";
 import { leerParametros } from "@/lib/dominio/parametros";
 import { validarGasto } from "@/lib/dominio/validaciones";
 import type { AccionEvento, EstadoGasto, EstadoMemo, Parametros } from "@/lib/dominio/tipos";
@@ -140,11 +141,18 @@ async function evaluarPendientes(
 export async function crearMemo(datos: {
   tipo: string;
   centro_costo_id: string;
-  asignados: string[];
+  /**
+   * El anexo. Cada fila trae lo suyo: un mismo memo le da S/ 212.00 y dos
+   * días a una persona y S/ 1,164.00 y once a otra.
+   */
+  asignados: Array<{
+    usuario_id: string;
+    nombre?: string;
+    monto: number | null;
+    fecha_desde: string | null;
+    fecha_hasta: string | null;
+  }>;
   destino: string;
-  fecha_salida: string;
-  fecha_retorno_prev: string;
-  monto_autorizado: number;
   abrir: boolean;
   /** Visto bueno de quien puede pasar por encima del bloqueo de §7.3. */
   autorizar_pendientes?: boolean;
@@ -155,11 +163,19 @@ export async function crearMemo(datos: {
   const permiso = autoriza(solicitante, "crear_memo");
   if (!permiso.ok) return { ok: false, error: permiso.motivo };
 
-  if (!datos.asignados.length) {
-    return { ok: false, error: "Asigna al menos una persona al memo." };
-  }
-  if (!(datos.monto_autorizado > 0)) {
-    return { ok: false, error: "El monto autorizado debe ser mayor que cero." };
+  // El anexo manda: el monto del memo es la suma de lo asignado, y las
+  // fechas de la cabecera abarcan a todos. Nada de esto se teclea aparte,
+  // porque un total escrito a mano puede contradecir a su propio anexo.
+  const anexo = revisarAnexo(datos.asignados.map(a => ({
+    usuarioId: a.usuario_id,
+    nombre: a.nombre ?? "esa persona",
+    monto: a.monto,
+    fechaDesde: a.fecha_desde,
+    fechaHasta: a.fecha_hasta,
+  })));
+
+  if (anexo.reparos.length) {
+    return { ok: false, error: anexo.reparos.join(" ") };
   }
 
   const sb = await clienteServidor();
@@ -170,7 +186,8 @@ export async function crearMemo(datos: {
   // solo advierte; en el piloto arranca apagado. La comprobación se hace
   // igual en el servidor: la advertencia que ve el formulario es una
   // cortesía, no el control.
-  const pendientes = await evaluarPendientes(sb, datos.asignados);
+  const idsAsignados = datos.asignados.map(a => a.usuario_id);
+  const pendientes = await evaluarPendientes(sb, idsAsignados);
   const bloqueantes = pendientes.filter(p => p.bloquea);
 
   // Quien puede autorizar, firma en el acto. Quien no, le pide el visto
@@ -222,7 +239,8 @@ export async function crearMemo(datos: {
   if (errSec) return { ok: false, error: `No se pudo generar el correlativo: ${errSec.message}` };
 
   const abreviaturaTipo: Record<string, string> = {
-    VIATICOS: "VIA", PASAJES: "PAS", CAJA_CHICA: "CCH", OTRO: "OTR",
+    VIATICOS: "VIA", PASAJES: "PAS", CAJA_CHICA: "CCH",
+    HOSPEDAJE: "HOS", REEMBOLSO: "REE", OTRO: "OTR",
   };
   const correlativo = `${abrev}-${anio}-${abreviaturaTipo[datos.tipo] ?? "OTR"}-${String(sec).padStart(5, "0")}`;
 
@@ -234,9 +252,9 @@ export async function crearMemo(datos: {
       empresa_id: cc.empresa_id,
       centro_costo_id: datos.centro_costo_id,
       destino: datos.destino || null,
-      fecha_salida: datos.fecha_salida || null,
-      fecha_retorno_prev: datos.fecha_retorno_prev || null,
-      monto_autorizado: datos.monto_autorizado,
+      fecha_salida: anexo.desde,
+      fecha_retorno_prev: anexo.hasta,
+      monto_autorizado: anexo.total,
       // Un memo a la espera del visto bueno nace en borrador aunque se
       // haya pedido abrirlo: todavía no es un compromiso de nadie.
       estado: datos.abrir && !esperaVistoBueno ? "ABIERTO" : "BORRADOR",
@@ -248,12 +266,18 @@ export async function crearMemo(datos: {
   if (error) return { ok: false, error: error.message };
 
   const { error: errAsig } = await sb.from("memo_asignados").insert(
-    datos.asignados.map(u => ({ memo_id: memo.id, usuario_id: u }))
+    datos.asignados.map(a => ({
+      memo_id: memo.id,
+      usuario_id: a.usuario_id,
+      monto: a.monto,
+      fecha_desde: a.fecha_desde,
+      fecha_hasta: a.fecha_hasta,
+    }))
   );
   if (errAsig) return { ok: false, error: errAsig.message };
 
   await registrarEvento(sb, "MEMO", memo.id, "CREAR", solicitante.usuarioId, null, {
-    correlativo, monto_autorizado: datos.monto_autorizado, asignados: datos.asignados,
+    correlativo, monto_autorizado: anexo.total, asignados: idsAsignados,
     // Si se abrió pese a rendiciones vencidas, queda escrito qué se pasó por
     // alto y quién lo autorizó. Es el rastro que va a pedir Auditoría.
     ...(pendientes.length ? { pendientes: pendientes.map(p => p.motivo) } : {}),
