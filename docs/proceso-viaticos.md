@@ -462,3 +462,76 @@ Ordenados por lo que desbloquean, no por tamaño.
 | Entrevistas con Rosa, Carolina y David | El As Is |
 | Reunión con Franco | MemoTracker, InroPay y el resto de sus automatizaciones |
 | Sesión de pizarra con jefatura | Los cinco tipos y el circuito de aprobación |
+
+---
+
+## 14. La carga histórica, y lo que enseñó
+
+Ejecutada el 16/09/2026 sobre la base real, por el canal administrativo de
+Supabase —no por la aplicación—, porque es una carga de historia y no el
+camino normal de nadie. Salta RLS a propósito y queda anotado acá.
+
+| | Antes | Después |
+|---|---|---|
+| Usuarios | 99 | **157** (124 activos, 33 cesados, 58 sin login) |
+| Memos de viáticos | 0 | **199** · S/ 284,107.00 |
+| Filas de anexo | 5 (prueba) | **486** |
+
+Las fechas van del 02/06/2026 al 22/09/2026. Tres memos quedaron sin fechas
+porque el seguimiento no las trae.
+
+### La prueba que importaba
+
+El memo 594-2026 existe en Word, con su anexo de once personas. La base lo
+reconstruyó sola desde el seguimiento: 4 × 212 + 6 × 1,164 + 1 × 1,232 =
+**S/ 9,064**, el mismo número del papel, persona por persona. No es un total
+que cuadra por casualidad: es la misma gente con el mismo monto.
+
+### Por qué el anexo no era un lujo
+
+Con los datos cargados, el control de vencidos cambia de tamaño:
+
+| Persona | Le corresponde | Total de los memos |
+|---|---|---|
+| Jhonn Rivera Vallenas | S/ 2,978 | S/ 12,597 |
+| Jose Luis Idone | S/ 2,597 | S/ 6,129 |
+
+Sin el anexo, la aplicación le reclamaría a Jhonn cuatro veces lo que debe,
+porque el memo es compartido y el monto del memo no es el monto de nadie.
+
+### Lo que no cuadra, y está bien que no cuadre
+
+Cuatro de los 199 no cierran, y los cuatro por el origen:
+
+- **332-2026** (S/ 98) y **354-2026** (S/ 649) — su única fila de anexo
+  viene sin monto en la hoja.
+- **691-2026** (S/ 212) — dos personas, una sin monto.
+- **612-2026** (S/ 648) — dos filas de S/ 216. Falta un tercero: 3 × 216 = 648.
+
+`memo_cuadra()` los deja a la vista en vez de repartir el faltante o
+inventar una fila. Se completan desde la aplicación cuando alguien sepa el
+dato; adivinarlo sería peor que el hueco.
+
+### Anomalías del origen, cargadas tal cual
+
+- **591-2028** — error de tipeo en el año. Se carga como está escrito; lo
+  corrige quien lo emitió, no el cargador.
+- **667-2026-1** y **667-2026-2** — un memo partido en dos.
+- **546-2026** — la llegada antes de la salida, en el memo y en sus diez
+  filas de anexo. Las dos fechas quedan en null: violarían
+  `memo_asignados_tramo_coherente`, y una fecha imposible no es un dato.
+- **«LINK DE CARPETA»** no es una URL sino el *nombre* de la carpeta
+  (`PM - Memo 311-2026 - GASTOS VIATICOS BARRANCA - Talleres Especializados`).
+  Por eso no entró a `drive_folder_id` — pero es exactamente el nombre que
+  tendrá que generar el memo en Word (#15).
+
+### Lo que falta de esta misma carga
+
+- **Fase 2**: los 125 memos de hospedaje y caja chica de la hoja
+  «2. Seguimiento Memos Annie». Necesitan que existan las cajas primero.
+- Las **51 cuentas bancarias** a `datos_bancarios`, que van con #15.
+- Limpiar los **5 memos de prueba** (S/ 1,000,000 · S/ 1,412,424 · S/ 0.00,
+  con el correlativo viejo `INROPRIN-2026-CCH-*`) y recién entonces
+  `validate constraint memos_caja_chica_tiene_caja`.
+- Tres personas tienen memo pero no contrato en la hoja 4, así que su anexo
+  quedó incompleto: DNI 71255046, 73938247 y 72921464.
