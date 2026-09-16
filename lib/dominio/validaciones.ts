@@ -18,6 +18,10 @@ export interface GastoAValidar {
   igv?: number | null;
   total?: number | null;
   placa?: string | null;
+  /** El porqué del desplazamiento. La ley lo exige aparte del destino. */
+  mov_motivo?: string | null;
+  /** El recorrido. En la planilla real: «OFICINA - DOMICILIO». */
+  mov_destino?: string | null;
   confianza_extraccion?: Record<string, number> | null;
 }
 
@@ -286,6 +290,42 @@ export function validarGasto(g: GastoAValidar, ctx: ContextoValidacion): Alerta[
     }
   }
 
+  // ── Lo que la ley exige de cada desplazamiento ────────────────
+  //
+  // El pie de la planilla de movilidad cita el inciso a1) del artículo 37° de
+  // la Ley del Impuesto a la Renta y enumera qué datos hacen válido cada
+  // desplazamiento: fecha, nombres y apellidos, DNI, motivo, destino y monto.
+  // Y aclara que la falta de cualquiera de ellos «sólo inhabilita la planilla
+  // para la sustentación del gasto que corresponde a tal desplazamiento».
+  //
+  // Se cae la fila, no la planilla. Por eso la alerta es por gasto y no por
+  // rendición, y por eso nombra lo que falta: el que la lee tiene que poder
+  // arreglarlo sin ir a preguntar.
+  //
+  // Los dos datos que faltan en esta lista —nombres y DNI— no son del gasto
+  // sino de la persona, y se comprueban una vez y no en cada fila.
+  //
+  // Es bloqueante porque una fila sin estos datos no sustenta nada: dejarla
+  // pasar no ahorra trabajo, lo traslada a Contabilidad y le cuesta plata a
+  // la empresa. Se puede capturar incompleta en el campo; lo que no se puede
+  // es presentarla así.
+  if (g.clase === "MOVILIDAD") {
+    const faltan = [
+      g.fecha_emision ? null : "la fecha del gasto",
+      g.mov_motivo?.trim() ? null : "el motivo del desplazamiento",
+      g.mov_destino?.trim() ? null : "el destino del desplazamiento",
+      total != null && total > 0 ? null : "el monto gastado",
+    ].filter((x): x is string => x !== null);
+
+    if (faltan.length > 0) {
+      alertas.push({
+        codigo: "MOVILIDAD_SIN_SUSTENTO",
+        severidad: "bloqueante",
+        mensaje: `Sin ${listar(faltan)}, este desplazamiento no sustenta el gasto ante SUNAT.`,
+      });
+    }
+  }
+
   // ── Placa en gastos vehiculares ───────────────────────────────
   if (esVehicular(g.categoria) && !g.placa) {
     alertas.push({
@@ -307,6 +347,15 @@ export function validarGasto(g: GastoAValidar, ctx: ContextoValidacion): Alerta[
   }
 
   return alertas;
+}
+
+/**
+ * «a, b y c». Con coma antes del último no: en castellano no se usa, y el
+ * mensaje lo lee alguien parado en la calle con el teléfono en la mano.
+ */
+function listar(xs: string[]): string {
+  if (xs.length <= 1) return xs[0] ?? "";
+  return `${xs.slice(0, -1).join(", ")} y ${xs[xs.length - 1]}`;
 }
 
 function esVehicular(categoria: string | null | undefined): boolean {

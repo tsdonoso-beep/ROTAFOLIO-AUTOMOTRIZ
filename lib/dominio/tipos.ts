@@ -167,6 +167,11 @@ export interface Gasto {
   dj_lugar: string | null;
   mov_origen: string | null;
   mov_destino: string | null;
+  /**
+   * La columna MOTIVO de la planilla de movilidad. La ley la nombra aparte
+   * del destino: el motivo es el porqué del viaje, el destino el recorrido.
+   */
+  mov_motivo: string | null;
 
   confianza_extraccion: Record<string, number> | null;
   alertas: Alerta[];
@@ -198,6 +203,7 @@ export type CodigoAlerta =
   | "EXCEDE_AUTORIZADO"
   | "TOPE_DJ_EXCEDIDO"
   | "TOPE_MOVILIDAD"
+  | "MOVILIDAD_SIN_SUSTENTO"
   | "BOLETA_SIN_RUS"
   | "SIN_PLACA"
   | "SIN_SUSTENTO_FORMAL"

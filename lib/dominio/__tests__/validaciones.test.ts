@@ -167,6 +167,65 @@ describe("Topes pendientes de definir (§15)", () => {
     assert.ok(codigos(g, ctx).includes("TOPE_DJ_EXCEDIDO"));
   });
 
+  // ── Lo que la ley exige de cada desplazamiento ────────────────
+  //
+  // Inciso a1) del art. 37° de la Ley del Impuesto a la Renta, citado al pie
+  // de la propia planilla de movilidad.
+
+  const desplazamiento = (extra: Partial<GastoAValidar> = {}): GastoAValidar => ({
+    clase: "MOVILIDAD",
+    fecha_emision: "2026-08-06",
+    mov_motivo: "MOVILIDAD OFICINA - DOMICILIO (VISITA TÉCNICA)",
+    mov_destino: "OFICINA - DOMICILIO",
+    total: 22.4,
+    ...extra,
+  });
+
+  it("un desplazamiento completo sustenta", () => {
+    const ctx = { parametros: params({}) };
+    assert.ok(!codigos(desplazamiento(), ctx).includes("MOVILIDAD_SIN_SUSTENTO"));
+  });
+
+  it("sin motivo no sustenta, y lo dice", () => {
+    const ctx = { parametros: params({}) };
+    const alertas = validarGasto(desplazamiento({ mov_motivo: null }), ctx);
+    const a = alertas.find(x => x.codigo === "MOVILIDAD_SIN_SUSTENTO");
+
+    assert.ok(a, "tiene que avisar");
+    assert.equal(a!.severidad, "bloqueante", "una fila que no sustenta no debe llegar a Contabilidad");
+    assert.ok(a!.mensaje.includes("el motivo del desplazamiento"), a!.mensaje);
+  });
+
+  it("un motivo en blanco no cuenta como motivo", () => {
+    const ctx = { parametros: params({}) };
+    assert.ok(codigos(desplazamiento({ mov_motivo: "   " }), ctx).includes("MOVILIDAD_SIN_SUSTENTO"));
+  });
+
+  it("nombra todo lo que falta, no solo lo primero", () => {
+    const ctx = { parametros: params({}) };
+    const a = validarGasto(
+      desplazamiento({ mov_motivo: null, mov_destino: null, fecha_emision: null }),
+      ctx
+    ).find(x => x.codigo === "MOVILIDAD_SIN_SUSTENTO");
+
+    assert.ok(a!.mensaje.includes("la fecha del gasto"), a!.mensaje);
+    assert.ok(a!.mensaje.includes("el motivo del desplazamiento"), a!.mensaje);
+    assert.ok(a!.mensaje.includes("el destino del desplazamiento"), a!.mensaje);
+    // En castellano el último va con «y», sin coma antes.
+    assert.ok(a!.mensaje.includes("y el destino"), a!.mensaje);
+  });
+
+  it("un monto en cero no es un monto gastado", () => {
+    const ctx = { parametros: params({}) };
+    assert.ok(codigos(desplazamiento({ total: 0 }), ctx).includes("MOVILIDAD_SIN_SUSTENTO"));
+  });
+
+  it("la regla es por fila: no toca a los gastos de otra clase", () => {
+    const ctx = { parametros: params({}) };
+    const dj: GastoAValidar = { clase: "DECLARACION_JURADA", total: 48 };
+    assert.ok(!codigos(dj, ctx).includes("MOVILIDAD_SIN_SUSTENTO"));
+  });
+
   it("acumula el gasto del día antes de comparar contra el tope", () => {
     const ctx: ContextoValidacion = {
       parametros: params({ tope_movilidad_dia: 30 }),
