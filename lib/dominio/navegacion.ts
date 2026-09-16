@@ -53,6 +53,15 @@ export const SECCIONES: Seccion[] = [
     resumen: "Saldos por persona a lo largo de todos sus memos, para pasar a pago",
   },
   {
+    clave: "movilidad",
+    etiqueta: "Movilidad",
+    ruta: "/movilidad",
+    // La llena quien se desplaza, así que se rige por el mismo permiso que
+    // capturar un gasto: es un gasto, solo que con su propio formulario.
+    requiere: "capturar_gasto",
+    resumen: "Planillas del talonario, con una fila por desplazamiento y la firma de la jefatura",
+  },
+  {
     clave: "tablero",
     etiqueta: "Tablero",
     ruta: "/tablero",

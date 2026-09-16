@@ -234,12 +234,22 @@ export const IconoLiquidacion = (p: Props) => (
   </Svg>
 );
 
+/** Movilidad: un trayecto de un punto a otro. */
+export const IconoMovilidad = (p: Props) => (
+  <Svg {...p}>
+    <circle cx="6" cy="18" r="2.2" />
+    <circle cx="18" cy="6" r="2.2" />
+    <path d="M7.6 16.4 16.4 7.6" strokeDasharray="2.5 2" />
+  </Svg>
+);
+
 export const ICONOS_SECCION: Record<string, (p: Props) => React.ReactElement> = {
   memos: IconoMemos,
   administrar: IconoAdministrar,
   revisar: IconoRevisar,
   contabilidad: IconoContabilidad,
   liquidaciones: IconoLiquidacion,
+  movilidad: IconoMovilidad,
   tablero: IconoTablero,
   sistema: IconoSistema,
 };

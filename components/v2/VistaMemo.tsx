@@ -12,7 +12,7 @@ import {
 import { clienteNavegador } from "@/lib/supabase/cliente";
 import { consolidar } from "@/lib/dominio/memo";
 import { impedimentosParaPresentar, MEMO_EDITABLE, puedeEditarGasto } from "@/lib/dominio/estados";
-import { editarGasto, presentarRendicion, registrarDevolucion, type DatosGasto } from "@/app/acciones/memos";
+import { editarGasto, presentarRendicion, type DatosGasto } from "@/app/acciones/memos";
 import type { EstadoGasto, EstadoMemo as TEstadoMemo, Gasto, Parametros } from "@/lib/dominio/tipos";
 
 interface Props {
