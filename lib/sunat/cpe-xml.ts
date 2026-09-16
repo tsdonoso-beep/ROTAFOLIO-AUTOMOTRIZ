@@ -63,24 +63,42 @@ function conPrefijo(nombre: string): string {
 }
 
 /**
+ * El contenido de una etiqueta hoja: texto plano o CDATA.
+ *
+ * SUNAT envuelve todo el texto libre —razón social, descripción del ítem— en
+ * `<![CDATA[...]]>`, porque puede llevar `&`, `<` o comillas sin escapar. Una
+ * captura de «todo lo que no sea `<`» se corta en el `<` del CDATA y devuelve
+ * vacío. Por eso la captura admite tramos CDATA además de texto suelto.
+ *
+ * Que sea una secuencia de (CDATA | no-`<`) y no un `.*` es lo que mantiene a
+ * salvo las etiquetas vacías: ante un `<cbc:ID/>` la captura no cruza hasta un
+ * cierre lejano, sino que no encaja y el buscador sigue de largo.
+ */
+const CONTENIDO = `((?:<!\\[CDATA\\[[\\s\\S]*?\\]\\]>|[^<])*)`;
+
+/** Quita los marcadores de CDATA y los espacios de alrededor. */
+function limpiar(s: string): string | null {
+  const t = s.replace(/<!\[CDATA\[/g, "").replace(/\]\]>/g, "").trim();
+  return t || null;
+}
+
+/**
  * El texto de la primera etiqueta hoja con ese nombre, dentro de un tramo.
  *
- * Sirve para valores sueltos —un ID, una fecha, un monto—: captura solo lo
- * que no tenga etiquetas dentro, que es justo lo que distingue una hoja de
- * un contenedor.
+ * Sirve para valores sueltos —un ID, una fecha, un monto, un nombre—.
  */
 export function valor(xml: string, nombre: string): string | null {
-  const re = new RegExp(`${conPrefijo(nombre)}[^>]*>([^<]*)</(?:[\\w.-]+:)?${nombre}>`);
+  const re = new RegExp(`${conPrefijo(nombre)}[^>]*>${CONTENIDO}</(?:[\\w.-]+:)?${nombre}>`);
   const m = re.exec(xml);
-  return m ? m[1].trim() || null : null;
+  return m ? limpiar(m[1]) : null;
 }
 
 /** Todos los textos hoja con ese nombre, en el orden en que aparecen. */
 export function valores(xml: string, nombre: string): string[] {
-  const re = new RegExp(`${conPrefijo(nombre)}[^>]*>([^<]*)</(?:[\\w.-]+:)?${nombre}>`, "g");
+  const re = new RegExp(`${conPrefijo(nombre)}[^>]*>${CONTENIDO}</(?:[\\w.-]+:)?${nombre}>`, "g");
   const out: string[] = [];
   for (let m = re.exec(xml); m; m = re.exec(xml)) {
-    const t = m[1].trim();
+    const t = limpiar(m[1]);
     if (t) out.push(t);
   }
   return out;

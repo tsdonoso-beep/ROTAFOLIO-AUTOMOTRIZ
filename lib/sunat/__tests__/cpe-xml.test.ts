@@ -90,6 +90,19 @@ describe("primitivas de lectura", () => {
       ["SignatureSP", "F001-1"]);
   });
 
+  test("valor desenvuelve el texto en CDATA", () => {
+    // SUNAT envuelve razón social y descripción en CDATA.
+    assert.equal(valor("<cbc:RegistrationName><![CDATA[ROLAND PRINT S.A.C - INROPRIN]]></cbc:RegistrationName>", "RegistrationName"),
+      "ROLAND PRINT S.A.C - INROPRIN");
+    assert.equal(valor("<cbc:Description><![CDATA[RESINA ABS <AG12A0> & CIA]]></cbc:Description>", "Description"),
+      "RESINA ABS <AG12A0> & CIA");
+  });
+
+  test("una etiqueta vacía no arrastra hasta un cierre lejano", () => {
+    // <cbc:ID/> no debe capturar el ID real que viene después.
+    assert.deepEqual(valores("<cbc:ID/><cac:X><cbc:ID>E001-9</cbc:ID></cac:X>", "ID"), ["E001-9"]);
+  });
+
   test("atributo lee el unitCode de la cantidad", () => {
     assert.equal(atributo('<cbc:InvoicedQuantity unitCode="NIU">4</cbc:InvoicedQuantity>', "InvoicedQuantity", "unitCode"), "NIU");
   });
