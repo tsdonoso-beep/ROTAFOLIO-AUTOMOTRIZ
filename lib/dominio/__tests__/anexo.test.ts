@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { revisarAnexo, sumar, tramos, type FilaDeAnexo } from "../anexo";
+import { revisarAnexo, sumar, tramos, type FilaDeAnexo } from "../anexo.ts";
 
 const fila = (
   id: string, nombre: string, monto: number | null,

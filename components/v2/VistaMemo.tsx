@@ -227,6 +227,22 @@ export default function VistaMemo({
         />
       )}
 
+      {/* ══ El memo en Word ══ */}
+      {puedeAdministrar && (
+        <div style={{ marginBottom: 16 }}>
+          <a href={`/api/memo-word/${memo.id}`} className="btn-ghost"
+            style={{ textDecoration: "none", fontSize: 12.5 }}>
+            Descargar el memo en Word
+          </a>
+          {/* El nombre del adjunto es lo que lee el MemoTracker: en 341 de
+              422 memos el asunto del correo ni trae el número. */}
+          <p style={{ fontSize: 11, color: "var(--text3)", marginTop: 7, lineHeight: 1.45 }}>
+            Se genera con el anexo y el total sumado. El nombre del archivo es
+            el que el MemoTracker lee para reconocerlo.
+          </p>
+        </div>
+      )}
+
       {/* ══ Lo que de verdad cobró cada quien ══ */}
       <PanelConstancias
         memoId={memo.id}
