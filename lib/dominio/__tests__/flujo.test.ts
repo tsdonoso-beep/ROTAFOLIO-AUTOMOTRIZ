@@ -287,7 +287,82 @@ describe("Bloqueo por memos vencidos", () => {
     assert.ok(!r.advierte);
   });
 
+  // ── El anexo del memo (migración 021) ──────────────────────────
+  //
+  // Un memo cubre a varias personas con montos y tramos distintos. Medir el
+  // vencimiento y la deuda contra el memo entero, como se hacía, le atribuye
+  // a cada una lo de todas.
+
+  it("el tramo del anexo manda sobre las fechas del memo", () => {
+    // El memo llega hasta el 19 de agosto, pero a esta persona le tocaron el
+    // 9 y el 10. Contra el memo estaría en plazo; contra su tramo, no.
+    const conAnexo = {
+      ...memo("ABIERTO", "2026-08-19"),
+      fecha_hasta: "2026-08-10",
+      monto_asignado: 212,
+    };
+    const r = evaluarBloqueoPorPendientes([conAnexo], PARAMETROS_POR_DEFECTO, hoy);
+
+    assert.ok(r.advierte, "el 10 de agosto más 15 de gracia ya venció el 4 de setiembre");
+    assert.equal(r.vencidos[0].fecha_retorno_prev, "2026-08-10");
+    assert.equal(r.vencidos[0].dias_vencido, 25);
+  });
+
+  it("sin anexo se sigue midiendo contra la fecha del memo", () => {
+    const r = evaluarBloqueoPorPendientes([memo("ABIERTO", "2026-07-01")], PARAMETROS_POR_DEFECTO, hoy);
+    assert.equal(r.vencidos[0].fecha_retorno_prev, "2026-07-01");
+    assert.equal(r.vencidos[0].monto_asignado, null);
+  });
+
+  it("la deuda es la parte de esta persona, no el memo entero", () => {
+    // El 594-2026 autorizó S/ 9,064.00 entre once personas. A Wilmer le
+    // tocaron S/ 212.00: cobrarle los nueve mil infla la deuda ocho veces.
+    const wilmer = {
+      id: "m594",
+      correlativo: "594-2026",
+      estado: "ABIERTO" as const,
+      monto_autorizado: 9064,
+      fecha_retorno_prev: "2026-08-19",
+      fecha_hasta: "2026-08-10",
+      monto_asignado: 212,
+    };
+    const r = evaluarBloqueoPorPendientes([wilmer], PARAMETROS_POR_DEFECTO, hoy);
+
+    assert.equal(r.monto_total, 212);
+    assert.equal(r.vencidos[0].monto_autorizado, 9064, "el total del memo se conserva para mostrarlo");
+  });
+
+  it("suma las partes de varios memos, cada una la suya", () => {
+    const r = evaluarBloqueoPorPendientes([
+      { ...memo("ABIERTO", "2026-07-01"), fecha_hasta: "2026-07-01", monto_asignado: 212 },
+      { ...memo("ABIERTO", "2026-07-01"), id: "m2", fecha_hasta: "2026-07-01", monto_asignado: 1164 },
+    ], PARAMETROS_POR_DEFECTO, hoy);
+
+    assert.equal(r.vencidos.length, 2);
+    assert.equal(r.monto_total, 1376);
+  });
+
+  it("un tramo sin fecha no inventa un vencimiento", () => {
+    const r = evaluarBloqueoPorPendientes(
+      [{ ...memo("ABIERTO", "2026-07-01"), fecha_retorno_prev: null, fecha_hasta: null }],
+      PARAMETROS_POR_DEFECTO, hoy
+    );
+    assert.equal(r.vencidos.length, 0);
+  });
+
   describe("explicarPendientes", () => {
+    it("el total y la lista hablan del mismo monto", () => {
+      const r = evaluarBloqueoPorPendientes([{
+        id: "m594", correlativo: "594-2026", estado: "ABIERTO" as const,
+        monto_autorizado: 9064, fecha_retorno_prev: "2026-08-19",
+        fecha_hasta: "2026-08-10", monto_asignado: 212,
+      }], PARAMETROS_POR_DEFECTO, hoy);
+
+      const msg = explicarPendientes("Wilmer Zamora", r);
+      assert.ok(msg.includes("212"), msg);
+      assert.ok(!msg.includes("9,064"), `no debe atribuirle el memo entero: ${msg}`);
+    });
+
     it("nombra a la persona, el monto y los memos", () => {
       // Quien crea el memo casi nunca es quien arrastra el pendiente: Annie
       // abre memos para todos y no sabe de memoria qué debe cada uno.

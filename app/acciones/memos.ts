@@ -86,11 +86,17 @@ async function evaluarPendientes(
 
   const { data: filas } = await sb
     .from("memo_asignados")
-    .select("usuario_id, memos ( id, correlativo, estado, monto_autorizado, fecha_retorno_prev )")
+    // El monto y el tramo salen de la fila de asignación, no del memo: un
+    // mismo memo le da S/ 212.00 y dos días a una persona y S/ 1,164.00 y
+    // once a otra. Medir a las dos contra el memo entero le atribuye a cada
+    // una la deuda y el plazo de todas.
+    .select("usuario_id, monto, fecha_hasta, memos ( id, correlativo, estado, monto_autorizado, fecha_retorno_prev )")
     .in("usuario_id", asignados);
 
   type Fila = {
     usuario_id: string;
+    monto: number | string | null;
+    fecha_hasta: string | null;
     memos: {
       id: string; correlativo: string; estado: string;
       monto_autorizado: number; fecha_retorno_prev: string | null;
@@ -111,6 +117,8 @@ async function evaluarPendientes(
         estado: f.memos!.estado as EstadoMemo,
         monto_autorizado: Number(f.memos!.monto_autorizado),
         fecha_retorno_prev: f.memos!.fecha_retorno_prev,
+        fecha_hasta: f.fecha_hasta,
+        monto_asignado: f.monto == null ? null : Number(f.monto),
       }))
       .filter(m => MEMO_PENDIENTE.includes(m.estado));
 

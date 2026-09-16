@@ -104,7 +104,10 @@ export interface MemoVencido {
   id: string;
   correlativo: string;
   monto_autorizado: number;
+  /** La fecha contra la que se midió: la del anexo si existe, si no la del memo. */
   fecha_retorno_prev: string | null;
+  /** Lo que el anexo le asignó a ESTA persona, cuando el memo lo declara. */
+  monto_asignado: number | null;
   dias_vencido: number;
 }
 
@@ -130,6 +133,10 @@ export function evaluarBloqueoPorPendientes(
     estado: EstadoMemo;
     monto_autorizado: number;
     fecha_retorno_prev: string | null;
+    /** Del anexo, para esta persona. Manda sobre la fecha del memo. */
+    fecha_hasta?: string | null;
+    /** Del anexo, para esta persona. Si falta se cae al total del memo. */
+    monto_asignado?: number | null;
   }>,
   parametros: Parametros,
   hoy: Date = new Date()
@@ -138,9 +145,14 @@ export function evaluarBloqueoPorPendientes(
 
   for (const m of memosDelAsignado) {
     if (!MEMO_PENDIENTE.includes(m.estado)) continue;
-    if (!m.fecha_retorno_prev) continue;
 
-    const retorno = new Date(`${m.fecha_retorno_prev.slice(0, 10)}T00:00:00Z`);
+    // El tramo del anexo manda sobre las fechas del memo. Un memo puede
+    // abarcar del 9 al 19 y que a esta persona le tocaran solo el 9 y el 10:
+    // medir contra el 19 le regala nueve días de plazo que nadie le dio.
+    const limite = m.fecha_hasta ?? m.fecha_retorno_prev;
+    if (!limite) continue;
+
+    const retorno = new Date(`${limite.slice(0, 10)}T00:00:00Z`);
     if (Number.isNaN(retorno.getTime())) continue;
 
     const dias = Math.floor((hoy.getTime() - retorno.getTime()) / 86_400_000);
@@ -149,13 +161,20 @@ export function evaluarBloqueoPorPendientes(
         id: m.id,
         correlativo: m.correlativo,
         monto_autorizado: m.monto_autorizado,
-        fecha_retorno_prev: m.fecha_retorno_prev,
+        fecha_retorno_prev: limite,
+        monto_asignado: m.monto_asignado ?? null,
         dias_vencido: dias,
       });
     }
   }
 
-  const monto_total = Math.round(vencidos.reduce((s, v) => s + v.monto_autorizado, 0) * 100) / 100;
+  // Lo que esta persona arrastra es SU parte del memo, no el memo entero. El
+  // 594-2026 autorizó S/ 9,064.00 entre once personas: cobrarle los nueve mil
+  // a cada una infla la deuda ocho veces. Solo cuando el anexo no dice cuánto
+  // le tocó se cae al total, que es lo único que se sabe.
+  const monto_total = Math.round(
+    vencidos.reduce((s, v) => s + (v.monto_asignado ?? v.monto_autorizado), 0) * 100
+  ) / 100;
 
   return {
     bloquea: vencidos.length > 0 && parametros.bloquear_memo_con_pendientes,
@@ -175,8 +194,11 @@ export function evaluarBloqueoPorPendientes(
 export function explicarPendientes(nombre: string, r: ResultadoBloqueo): string {
   if (!r.advierte) return "";
 
+  // Cada memo se lista por la parte de ESTA persona, la misma que se sumó
+  // para el total. Mostrar el total del memo acá y la parte en el total
+  // dejaría un mensaje que se contradice a sí mismo.
   const lista = r.vencidos
-    .map(v => `${v.correlativo} (${v.dias_vencido} días, ${soles(v.monto_autorizado)})`)
+    .map(v => `${v.correlativo} (${v.dias_vencido} días, ${soles(v.monto_asignado ?? v.monto_autorizado)})`)
     .join(", ");
   const cuantos = r.vencidos.length === 1 ? "una rendición vencida" : `${r.vencidos.length} rendiciones vencidas`;
 
