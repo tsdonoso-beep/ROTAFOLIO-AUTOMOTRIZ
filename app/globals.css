@@ -389,3 +389,16 @@ select.fg-input option { background: var(--surface); color: var(--text); }
   }
   .tarjeta-int:hover { transform: none; }
 }
+
+/* ── La bandeja del administrador ──────────────────────────────
+   Dos columnas en escritorio: la lista no se pierde al abrir un
+   expediente. Debajo de 1080px el panel pasa a ser una tarjeta más
+   arriba de la lista, porque a esa anchura una columna de 380px deja
+   la tabla ilegible. */
+@media (min-width: 1080px) {
+  .bandeja-admin { grid-template-columns: minmax(0, 1fr) 380px !important; align-items: start; }
+  .panel-expediente { position: sticky; top: 16px; }
+}
+@media (max-width: 1079px) {
+  .bandeja-admin { display: flex !important; flex-direction: column-reverse; }
+}

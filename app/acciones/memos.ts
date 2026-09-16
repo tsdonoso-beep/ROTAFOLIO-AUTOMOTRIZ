@@ -1075,3 +1075,64 @@ export async function fijarFechaRetorno(
   revalidatePath(`/memos/${memoId}`);
   return { ok: true };
 }
+
+// ════════════════════════════════════════════════════════════════
+// Acciones en lote
+// ════════════════════════════════════════════════════════════════
+//
+// Abrir diez memos de uno en uno es exactamente lo que vuelve infinita la
+// bandeja. Pero un lote que mueve plata no puede fallar en silencio: con
+// Promise.all, si tres de diez fallan se pierde cuáles, y quedan siete
+// aplicados sin que nadie sepa cuáles fueron.
+//
+// Por eso va con allSettled y devuelve el detalle por memo. La pantalla deja
+// marcados los que fallaron, para volver a intentar sólo esos.
+
+export interface ResultadoDeLote {
+  ok: boolean;
+  hechos: number;
+  fallos: Array<{ id: string; error: string }>;
+}
+
+export async function abrirMemosEnLote(ids: string[]): Promise<ResultadoDeLote> {
+  const solicitante = await solicitanteActual();
+  if (!solicitante) {
+    return { ok: false, hechos: 0, fallos: ids.map(id => ({ id, error: "Sesión no válida." })) };
+  }
+
+  const permiso = autoriza(solicitante, "crear_memo");
+  if (!permiso.ok) {
+    return { ok: false, hechos: 0, fallos: ids.map(id => ({ id, error: permiso.motivo })) };
+  }
+
+  const sb = await clienteServidor();
+
+  const resultados = await Promise.allSettled(ids.map(async id => {
+    const { data: memo } = await sb
+      .from("memos").select("id, estado, memo_asignados ( usuario_id )")
+      .eq("id", id).single();
+    if (!memo) throw new Error("no existe o no tienes acceso");
+
+    const t = transicionMemoValida(memo.estado as EstadoMemo, "ABIERTO", solicitante.roles);
+    if (!t.ok) throw new Error(t.motivo);
+    // Abrir un memo sin nadie asignado lo hace visible para nadie.
+    if (((memo.memo_asignados ?? []) as unknown[]).length === 0) {
+      throw new Error("no tiene a nadie asignado");
+    }
+
+    const { error } = await sb.from("memos").update({ estado: "ABIERTO" }).eq("id", id);
+    if (error) throw new Error(error.message);
+
+    await registrarEvento(sb, "MEMO", id, "ABRIR", solicitante.usuarioId, null, { enLote: true });
+    return id;
+  }));
+
+  const fallos = resultados.flatMap((r, i) =>
+    r.status === "rejected"
+      ? [{ id: ids[i], error: r.reason instanceof Error ? r.reason.message : String(r.reason) }]
+      : []
+  );
+
+  revalidatePath("/administrar");
+  return { ok: fallos.length === 0, hechos: ids.length - fallos.length, fallos };
+}
