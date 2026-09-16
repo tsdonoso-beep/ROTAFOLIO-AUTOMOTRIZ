@@ -77,10 +77,10 @@ export const SECCIONES: Seccion[] = [
   },
   {
     clave: "tablero",
-    etiqueta: "Tablero",
+    etiqueta: "Firmas",
     ruta: "/tablero",
     requiere: "autorizar_apertura_con_pendientes",
-    resumen: "Pendientes de tu área y autorizaciones de excepción",
+    resumen: "Lo que espera tu firma, y quién de tu equipo tiene memos sin cerrar",
   },
   {
     clave: "sistema",
