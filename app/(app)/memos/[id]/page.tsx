@@ -22,16 +22,20 @@ export default async function DetalleMemo({ params }: { params: Promise<{ id: st
       fecha_salida, fecha_retorno_prev, observacion_actual,
       centros_costo ( codigo, nombre, drive_folder ),
       empresas ( ruc, razon_social, abreviatura ),
-      memo_asignados ( usuario_id )
+      memo_asignados ( usuario_id, monto, fecha_desde, fecha_hasta )
     `)
     .eq("id", id)
     .single();
 
   if (!memo) notFound();
 
-  const [{ data: gastos }, { data: filasParam }] = await Promise.all([
+  const [{ data: gastos }, { data: filasParam }, { data: devoluciones }] = await Promise.all([
     sb.from("gastos").select("*").eq("memo_id", id).order("creado_en", { ascending: false }),
     sb.from("parametros").select("clave, valor"),
+    sb.from("devoluciones")
+      .select("id, monto, operacion, fecha, nota")
+      .eq("memo_id", id).eq("usuario_id", solicitante.usuarioId)
+      .order("fecha"),
   ]);
 
   const centro = memo.centros_costo as unknown as
@@ -39,8 +43,15 @@ export default async function DetalleMemo({ params }: { params: Promise<{ id: st
   const empresa = memo.empresas as unknown as
     { ruc: string; razon_social: string; abreviatura: string } | null;
 
-  const esAsignado = (memo.memo_asignados ?? [])
-    .some((a: { usuario_id: string }) => a.usuario_id === solicitante.usuarioId);
+  // La fila del anexo de quien está mirando. Un memo de cuadrilla autoriza
+  // S/ 9,064.00 entre once personas: mostrarle ese número a cada una, con su
+  // propia rendición debajo, le dice que le sobran ocho mil soles.
+  const miFila = ((memo.memo_asignados ?? []) as Array<{
+    usuario_id: string; monto: number | null;
+    fecha_desde: string | null; fecha_hasta: string | null;
+  }>).find(a => a.usuario_id === solicitante.usuarioId) ?? null;
+
+  const esAsignado = miFila !== null;
 
   const puedeCapturar = esAsignado
     && autoriza(solicitante, "capturar_gasto").ok;
@@ -57,7 +68,18 @@ export default async function DetalleMemo({ params }: { params: Promise<{ id: st
         fecha_retorno_prev: memo.fecha_retorno_prev,
         observacion_actual: memo.observacion_actual,
         centro: memo.centros_costo as unknown as { codigo: string; nombre: string } | null,
+        cuadrilla: (memo.memo_asignados ?? []).length,
       }}
+      usuarioId={solicitante.usuarioId}
+      asignado={miFila && miFila.monto != null ? {
+        monto: Number(miFila.monto),
+        fecha_desde: miFila.fecha_desde,
+        fecha_hasta: miFila.fecha_hasta,
+      } : null}
+      devoluciones={(devoluciones ?? []).map(d => ({
+        id: d.id, monto: Number(d.monto), operacion: d.operacion,
+        fecha: d.fecha, nota: d.nota,
+      }))}
       memoCaptura={{
         id: memo.id,
         correlativo: memo.correlativo,

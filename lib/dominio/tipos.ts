@@ -31,7 +31,13 @@ export type EstadoGasto =
   | "APROBADO"
   | "CONTABILIZADO";
 
-export type TipoMemo = "VIATICOS" | "PASAJES" | "CAJA_CHICA" | "OTRO";
+export type TipoMemo =
+  | "VIATICOS"
+  | "PASAJES"
+  | "CAJA_CHICA"
+  | "HOSPEDAJE"
+  | "REEMBOLSO"
+  | "OTRO";
 export type ClaseGasto = "COMPROBANTE" | "DECLARACION_JURADA" | "MOVILIDAD";
 export type CategoriaGasto = "ALIMENTACION" | "MOVILIDAD" | "HOSPEDAJE" | "OTRO";
 
@@ -286,7 +292,10 @@ export interface ExtractorComprobantes {
 export type AccionEvento =
   | "CREAR" | "EDITAR" | "ABRIR" | "CAPTURAR" | "EXTRAER"
   | "PRESENTAR" | "OBSERVAR" | "APROBAR" | "CONTABILIZAR"
-  | "CERRAR" | "ANULAR" | "AUTORIZAR_EXCEPCION" | "NOTIFICAR";
+  | "CERRAR" | "ANULAR" | "AUTORIZAR_EXCEPCION" | "NOTIFICAR"
+  // Plata que vuelve a la empresa. Es un hecho del memo, no un cambio de
+  // estado: el memo puede seguir abierto mientras alguien todavía debe.
+  | "DEVOLVER";
 
 export interface Evento {
   id: number;
@@ -341,6 +350,16 @@ export interface ConsolidadoMemo {
    * de la caja chica, donde el memo nace después de los gastos.
    */
   sinAdelanto: boolean;
+  /**
+   * Lo que da derecho a crédito fiscal, que es menos que lo rendido.
+   *
+   * El formato de rendición lo pide con todas sus letras: «monto rendido
+   * (solo FT)». De los S/ 201.80 que rindió Wilmer Zamora, solo S/ 132.90
+   * son factura; la planilla de movilidad y la declaración jurada son gasto
+   * deducible pero no descuentan IGV. Contabilidad necesita los dos números
+   * y hoy la aplicación solo mostraba uno.
+   */
+  credito_fiscal: number;
   por_clase: Record<ClaseGasto, number>;
   cantidad_gastos: number;
   con_alertas: number;

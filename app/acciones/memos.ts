@@ -937,3 +937,79 @@ export async function rendirCajaChica(datos: {
   revalidatePath("/revisar");
   return { ok: true, id: memoId as string };
 }
+
+// ════════════════════════════════════════════════════════════════
+// La devolución del saldo
+// ════════════════════════════════════════════════════════════════
+//
+// Cuando la rendición no llega al monto entregado, la diferencia vuelve a la
+// empresa: la persona transfiere desde su cuenta y manda la captura. Wilmer
+// Zamora devolvió S/ 10.20 con la operación 10394730. Hasta ahora eso vivía
+// en un WhatsApp, y el memo quedaba con un saldo pendiente ya pagado.
+
+export async function registrarDevolucion(datos: {
+  memoId: string;
+  usuarioId: string;
+  monto: number;
+  operacion: string;
+  fecha: string;
+  imagenUrl?: string | null;
+  nota?: string | null;
+}): Promise<Resultado> {
+  const solicitante = await solicitanteActual();
+  if (!solicitante) return { ok: false, error: "Sesión no válida." };
+
+  // Cada quien registra la suya; Administración puede hacerlo por otro
+  // porque muchas veces la captura le llega a ella.
+  const propia = datos.usuarioId === solicitante.usuarioId;
+  const administra =
+    autoriza(solicitante, "crear_memo").ok || autoriza(solicitante, "editar_catalogos").ok;
+  if (!propia && !administra) {
+    return { ok: false, error: "Solo puedes registrar tu propia devolución." };
+  }
+
+  if (!(datos.monto > 0)) {
+    return { ok: false, error: "El monto devuelto debe ser mayor que cero." };
+  }
+  if (!datos.fecha) {
+    return { ok: false, error: "Falta la fecha de la operación." };
+  }
+
+  const sb = await clienteServidor();
+
+  const { error } = await sb.from("devoluciones").insert({
+    memo_id: datos.memoId,
+    usuario_id: datos.usuarioId,
+    monto: datos.monto,
+    operacion: datos.operacion.trim() || null,
+    fecha: datos.fecha,
+    imagen_url: datos.imagenUrl || null,
+    nota: datos.nota?.trim() || null,
+    registrado_por: solicitante.usuarioId,
+  });
+
+  // El índice único sobre el número de operación es lo que impide sumar dos
+  // veces la misma transferencia. Se traduce, porque el mensaje de Postgres
+  // no le dice nada a quien está subiendo una captura.
+  if (error) {
+    if (error.code === "23505") {
+      return {
+        ok: false,
+        error: `La operación ${datos.operacion} ya está registrada. `
+          + "Si son dos transferencias distintas, revisa el número.",
+      };
+    }
+    return { ok: false, error: error.message };
+  }
+
+  await registrarEvento(sb, "MEMO", datos.memoId, "DEVOLVER", solicitante.usuarioId, null, {
+    usuario_id: datos.usuarioId,
+    monto: datos.monto,
+    operacion: datos.operacion,
+    fecha: datos.fecha,
+  });
+
+  revalidatePath(`/memos/${datos.memoId}`);
+  revalidatePath("/memos");
+  return { ok: true };
+}

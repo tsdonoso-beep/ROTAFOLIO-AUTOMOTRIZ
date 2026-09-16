@@ -4,6 +4,7 @@ import type {
   ClaseGasto, ConsolidadoMemo, EstadoMemo, Gasto, Parametros, TipoMemo,
 } from "./tipos.ts";
 import { GASTO_CUENTA_EN_TOTAL, MEMO_PENDIENTE } from "./estados.ts";
+import { SIN_CREDITO_FISCAL } from "./tipos.ts";
 
 // ════════════════════════════════════════════════════════════════
 // Correlativo (§7.1)
@@ -13,6 +14,8 @@ const ABREVIATURA_TIPO: Record<TipoMemo, string> = {
   VIATICOS: "VIA",
   PASAJES: "PAS",
   CAJA_CHICA: "CCH",
+  HOSPEDAJE: "HOS",
+  REEMBOLSO: "REE",
   OTRO: "OTR",
 };
 
@@ -34,7 +37,7 @@ export function armarCorrelativo(p: {
   return `${abrev}-${p.anio}-${ABREVIATURA_TIPO[p.tipo]}-${num}`;
 }
 
-const PATRON_CORRELATIVO = /^[A-Z0-9]+-(\d{4})-(VIA|PAS|CCH|OTR)-(\d{5,})$/;
+const PATRON_CORRELATIVO = /^[A-Z0-9]+-(\d{4})-(VIA|PAS|CCH|HOS|REE|OTR)-(\d{5,})$/;
 
 export function correlativoValido(c: string): boolean {
   return PATRON_CORRELATIVO.test(c);
@@ -44,7 +47,8 @@ export function correlativoValido(c: string): boolean {
 // Consolidado (§6.1 y §14)
 // ════════════════════════════════════════════════════════════════
 
-type GastoParaSuma = Pick<Gasto, "estado" | "clase" | "total" | "alertas">;
+type GastoParaSuma = Pick<Gasto, "estado" | "clase" | "total" | "alertas">
+  & { tipo_comprobante?: string | null };
 
 /**
  * Suma lo rendido y calcula el saldo. Incluye las tres clases de gasto:
@@ -62,11 +66,25 @@ export function consolidar(
     MOVILIDAD: 0,
   };
   let rendido = 0;
+  let credito = 0;
 
   for (const g of cuentan) {
     const monto = g.total ?? 0;
     rendido += monto;
     por_clase[g.clase] += monto;
+
+    // Solo un comprobante con IGV discriminado da crédito fiscal. Una
+    // boleta, un ticket y la constancia de un Yape son gasto real y
+    // deducible, pero no descuentan IGV; la movilidad y la declaración
+    // jurada, tampoco. Sin tipo leído todavía, no se cuenta: suponerlo
+    // factura infla el crédito, y ese número va a la declaración.
+    if (
+      g.clase === "COMPROBANTE" &&
+      g.tipo_comprobante != null &&
+      !SIN_CREDITO_FISCAL.includes(g.tipo_comprobante)
+    ) {
+      credito += monto;
+    }
   }
 
   // Redondeo a céntimos: evita que la suma de decimales binarios muestre
@@ -85,6 +103,7 @@ export function consolidar(
     // sale negativo y todo cae en reembolso—, pero lo que la pantalla debe
     // decir es otra cosa: nadie se pasó de nada.
     sinAdelanto: red(montoAutorizado) === 0,
+    credito_fiscal: red(credito),
     por_clase: {
       COMPROBANTE: red(por_clase.COMPROBANTE),
       DECLARACION_JURADA: red(por_clase.DECLARACION_JURADA),

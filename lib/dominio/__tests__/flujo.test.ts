@@ -396,3 +396,52 @@ describe("Ruta en Drive", () => {
     assert.deepEqual(r, ["INROPRIN", "2026-03", "1.3 Instalación", "INROPRIN-2026-VIA-00412"]);
   });
 });
+
+// ════════════════════════════════════════════════════════════════
+// Lo rendido y lo que da crédito fiscal son dos números distintos
+// ════════════════════════════════════════════════════════════════
+//
+// La rendición de Wilmer Zamora, del memo 594-2026, tal como está en el
+// formato: recibió S/ 212.00, rindió S/ 201.80 y devolvió S/ 10.20. De lo
+// rendido, solo la factura descuenta IGV.
+//
+//   facturas             132.90   ← lo único que da crédito fiscal
+//   planilla movilidad    20.90
+//   declaración jurada    48.00
+//                       ───────
+//   rendido              201.80
+
+describe("crédito fiscal", () => {
+  const g = (
+    clase: "COMPROBANTE" | "DECLARACION_JURADA" | "MOVILIDAD",
+    total: number,
+    tipo_comprobante: string | null = null
+  ) => ({ estado: "VALIDADO" as const, clase, total, alertas: [], tipo_comprobante });
+
+  const wilmer = [
+    g("COMPROBANTE", 132.90, "01"),
+    g("MOVILIDAD", 20.90),
+    g("DECLARACION_JURADA", 48.00),
+  ];
+
+  it("la rendición de Wilmer calza al céntimo y separa el crédito", () => {
+    const c = consolidar(212, wilmer);
+    assert.equal(c.rendido, 201.80);
+    assert.equal(c.credito_fiscal, 132.90);
+    assert.equal(c.devolucion, 10.20);
+  });
+
+  it("una boleta es gasto deducible pero no da crédito fiscal", () => {
+    const c = consolidar(212, [g("COMPROBANTE", 100, "03")]);
+    assert.equal(c.rendido, 100);
+    assert.equal(c.credito_fiscal, 0);
+  });
+
+  it("la constancia de un Yape tampoco: es un pago real sin sustento formal", () => {
+    assert.equal(consolidar(212, [g("COMPROBANTE", 100, "00")]).credito_fiscal, 0);
+  });
+
+  it("sin tipo leído todavía no se cuenta: suponerlo factura infla la declaración", () => {
+    assert.equal(consolidar(212, [g("COMPROBANTE", 100, null)]).credito_fiscal, 0);
+  });
+});
