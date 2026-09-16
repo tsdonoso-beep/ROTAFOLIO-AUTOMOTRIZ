@@ -537,11 +537,41 @@ dato; adivinarlo sería peor que el hueco.
   Por eso no entró a `drive_folder_id` — pero es exactamente el nombre que
   tendrá que generar el memo en Word (#15).
 
+### Las cuentas bancarias y los cargos (16/09/2026)
+
+Cargados desde la misma hoja «4. Estados Contrato Personal Pa», ahora que el
+generador del memo los necesita.
+
+| | Resultado |
+|---|---|
+| Cuentas en `datos_bancarios` | **69** de 85 intentadas · 60 con CCI |
+| Bancos | BCP, BBVA, Interbank, Scotiabank y Falabella |
+| Personas con cargo | **96** |
+
+Las 16 que no entraron son gente que figura en la hoja de contratos pero
+nunca apareció en un memo, así que no existe como usuario. No es un error:
+se crearán cuando tengan un memo.
+
+**Tres cosas que aparecieron al limpiar el origen, y que valen más que la
+carga misma:**
+
+1. **Un CCI está en dos personas.** El `01117400020131877401` figura tanto en
+   Benjamín Chavarría (BBVA) como en Luis Felipe Neciosup (Interbank). Los
+   tres primeros dígitos del CCI son el código del banco en el sistema de
+   pagos, y `011` es BBVA: el CCI es de Chavarría y Neciosup lo tiene por un
+   copiado mal. Se cargó el de Chavarría y el de Neciosup quedó en null.
+   **Una transferencia con ese CCI le habría llegado a otra persona**, y
+   Neciosup es beneficiario del 594-2026 por S/ 1,164.00.
+   → Confirmar su CCI real con Contabilidad.
+2. **Una cuenta sin banco**: el DNI 72747927 tiene número de cuenta y la
+   columna del banco vacía. No se adivinó; esa fila no entró.
+3. **Basura de Excel** en los números de cuenta: colas «.0» de celdas
+   numéricas y un apóstrofe pegado delante. Se limpian en la carga.
+
 ### Lo que falta de esta misma carga
 
 - **Fase 2**: los 125 memos de hospedaje y caja chica de la hoja
   «2. Seguimiento Memos Annie». Necesitan que existan las cajas primero.
-- Las **51 cuentas bancarias** a `datos_bancarios`, que van con #15.
 - Limpiar los **5 memos de prueba** (S/ 1,000,000 · S/ 1,412,424 · S/ 0.00,
   con el correlativo viejo `INROPRIN-2026-CCH-*`) y recién entonces
   `validate constraint memos_caja_chica_tiene_caja`.
