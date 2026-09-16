@@ -53,6 +53,13 @@ export const SECCIONES: Seccion[] = [
     resumen: "Saldos por persona a lo largo de todos sus memos, para pasar a pago",
   },
   {
+    clave: "caja",
+    etiqueta: "Caja chica",
+    ruta: "/caja",
+    requiere: "ver_memos_propios",
+    resumen: "Los fondos, su saldo y los ciclos con que se van reponiendo",
+  },
+  {
     clave: "movilidad",
     etiqueta: "Movilidad",
     ruta: "/movilidad",

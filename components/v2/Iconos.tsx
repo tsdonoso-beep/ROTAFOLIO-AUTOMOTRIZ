@@ -249,6 +249,7 @@ export const ICONOS_SECCION: Record<string, (p: Props) => React.ReactElement> = 
   revisar: IconoRevisar,
   contabilidad: IconoContabilidad,
   liquidaciones: IconoLiquidacion,
+  caja: IconoBandeja,
   movilidad: IconoMovilidad,
   tablero: IconoTablero,
   sistema: IconoSistema,
