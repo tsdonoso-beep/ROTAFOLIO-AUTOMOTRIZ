@@ -721,14 +721,42 @@ export async function editarGasto(gastoId: string, datos: DatosGasto): Promise<R
   const { data: filasParam } = await sb.from("parametros").select("clave, valor");
   const parametros: Parametros = leerParametros(filasParam);
 
+  // La fila del anexo de ESTA persona: su monto y su tramo. Es contra eso
+  // que se mide su rendición, no contra la cabecera del memo, que en el
+  // 594-2026 abarca a once personas y S/ 9,064.00.
+  let asignado: { monto: number | null; fecha_desde: string | null; fecha_hasta: string | null } | null = null;
+  if (memo && gasto.memo_id) {
+    const { data: fila } = await sb
+      .from("memo_asignados")
+      .select("monto, fecha_desde, fecha_hasta")
+      .eq("memo_id", gasto.memo_id)
+      .eq("usuario_id", gasto.usuario_id)
+      .maybeSingle();
+    if (fila) {
+      asignado = {
+        monto: fila.monto == null ? null : Number(fila.monto),
+        fecha_desde: fila.fecha_desde,
+        fecha_hasta: fila.fecha_hasta,
+      };
+    }
+  }
+
   // "Lo ya rendido sin contar este gasto": si este gasto todavía sumaba
   // al total (VALIDADO o CON_ALERTA), se descuenta para no contarlo dos
   // veces contra el monto autorizado.
+  //
+  // Cuando la persona tiene su propia asignación, se suman solo SUS gastos:
+  // compararlos con los de toda la cuadrilla contra su monto personal daría
+  // por excedida a la primera persona que rinda.
   let rendidoPrevio = 0;
   if (memo) {
-    const { data: otros } = await sb
+    let q = sb
       .from("gastos").select("estado, total")
       .eq("memo_id", gasto.memo_id).neq("id", gastoId);
+    if (asignado?.monto != null && asignado.monto > 0) {
+      q = q.eq("usuario_id", gasto.usuario_id);
+    }
+    const { data: otros } = await q;
     rendidoPrevio = (otros ?? [])
       .filter(g => GASTO_CUENTA_EN_TOTAL.includes(g.estado as EstadoGasto))
       .reduce((s, g) => s + Number(g.total ?? 0), 0);
@@ -756,6 +784,7 @@ export async function editarGasto(gastoId: string, datos: DatosGasto): Promise<R
         fecha_salida: memo.fecha_salida,
         fecha_retorno_prev: memo.fecha_retorno_prev,
         rendido_previo: rendidoPrevio,
+        asignado,
       } : undefined,
       duplicadoComprobante,
       duplicadoImagen: false,
