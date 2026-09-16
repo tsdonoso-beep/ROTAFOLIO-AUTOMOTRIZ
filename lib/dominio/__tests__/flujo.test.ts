@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  impedimentosParaPresentar, puedeEditarGasto, transicionGastoValida, transicionMemoValida,
+  impedimentosParaPresentar, puedeEditarGasto, puedeFijarRetorno, transicionGastoValida, transicionMemoValida,
 } from "../estados.ts";
 import { autoriza, puede, veTodo } from "../permisos.ts";
 import { armarCorrelativo, consolidar, correlativoValido, evaluarBloqueoPorPendientes, explicarPendientes, rutaDrive } from "../memo.ts";
@@ -443,5 +443,37 @@ describe("crédito fiscal", () => {
 
   it("sin tipo leído todavía no se cuenta: suponerlo factura infla la declaración", () => {
     assert.equal(consolidar(212, [g("COMPROBANTE", 100, null)]).credito_fiscal, 0);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════
+// La fecha de retorno de un memo de pasajes
+// ════════════════════════════════════════════════════════════════
+//
+// «Se emite con la fecha de ida y se actualiza después con la de retorno,
+// porque al abrirlo no se sabe cuándo vuelve la persona.» Es el único campo
+// del sistema que se toca después de aprobado.
+
+describe("la fecha de retorno de los pasajes", () => {
+  it("se puede fijar aunque el memo ya esté aprobado", () => {
+    assert.equal(puedeFijarRetorno("PASAJES", "APROBADA").ok, true);
+    assert.equal(puedeFijarRetorno("PASAJES", "CONTABILIZADA").ok, true);
+    assert.equal(puedeFijarRetorno("PASAJES", "ABIERTO").ok, true);
+  });
+
+  it("no en un memo cerrado: eso ya se contabilizó", () => {
+    const r = puedeFijarRetorno("PASAJES", "CERRADO");
+    assert.equal(r.ok, false);
+    assert.ok(!r.ok && r.motivo.includes("ya se contabilizó"));
+  });
+
+  it("tampoco en uno anulado", () => {
+    assert.equal(puedeFijarRetorno("PASAJES", "ANULADO").ok, false);
+  });
+
+  it("y en los otros tipos la fecha va desde el principio", () => {
+    const r = puedeFijarRetorno("VIATICOS", "ABIERTO");
+    assert.equal(r.ok, false);
+    assert.ok(!r.ok && r.motivo.includes("Solo un memo de pasajes"));
   });
 });

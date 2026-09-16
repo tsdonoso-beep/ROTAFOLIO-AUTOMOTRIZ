@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { clienteServidor, solicitanteActual } from "@/lib/supabase/servidor";
 import { autoriza } from "@/lib/dominio/permisos";
-import { GASTO_CUENTA_EN_TOTAL, MEMO_PENDIENTE, impedimentosParaPresentar, puedeEditarGasto, transicionMemoValida } from "@/lib/dominio/estados";
+import { GASTO_CUENTA_EN_TOTAL, MEMO_PENDIENTE, impedimentosParaPresentar, puedeEditarGasto, puedeFijarRetorno, transicionMemoValida } from "@/lib/dominio/estados";
 import { elegibleParaCaja, impedimentosParaRendirCaja, periodoDeCaja, resumirCaja } from "@/lib/dominio/cajachica";
 import { actualizarLegajo } from "./legajo";
 import { aQuienPreguntar } from "@/lib/dominio/autorizacion";
@@ -154,6 +154,12 @@ export async function crearMemo(datos: {
   }>;
   destino: string;
   abrir: boolean;
+  /**
+   * El memo del que este depende. Un memo de pasajes cuelga de su viático
+   * padre: los seis del MemoTracker lo hacen, y sin el enlace el pasaje es
+   * un gasto suelto que nadie sabe a qué viaje pertenece.
+   */
+  memo_referido_id?: string | null;
   /** Visto bueno de quien puede pasar por encima del bloqueo de §7.3. */
   autorizar_pendientes?: boolean;
 }): Promise<Resultado> {
@@ -255,6 +261,7 @@ export async function crearMemo(datos: {
       fecha_salida: anexo.desde,
       fecha_retorno_prev: anexo.hasta,
       monto_autorizado: anexo.total,
+      memo_referido_id: datos.memo_referido_id || null,
       // Un memo a la espera del visto bueno nace en borrador aunque se
       // haya pedido abrirlo: todavía no es un compromiso de nadie.
       estado: datos.abrir && !esperaVistoBueno ? "ABIERTO" : "BORRADOR",
@@ -1011,5 +1018,60 @@ export async function registrarDevolucion(datos: {
 
   revalidatePath(`/memos/${datos.memoId}`);
   revalidatePath("/memos");
+  return { ok: true };
+}
+
+// ════════════════════════════════════════════════════════════════
+// La fecha de retorno de un memo de pasajes
+// ════════════════════════════════════════════════════════════════
+//
+// «Se emite con la fecha de ida y se actualiza después con la de retorno,
+// porque al abrirlo no se sabe cuándo vuelve la persona.» Es el único campo
+// del sistema que se edita después de aprobado, y queda en la bitácora
+// precisamente por eso.
+
+export async function fijarFechaRetorno(
+  memoId: string, fecha: string
+): Promise<Resultado> {
+  const solicitante = await solicitanteActual();
+  if (!solicitante) return { ok: false, error: "Sesión no válida." };
+
+  const permiso = autoriza(solicitante, "crear_memo");
+  if (!permiso.ok) return { ok: false, error: permiso.motivo };
+
+  if (!fecha) return { ok: false, error: "Falta la fecha de retorno." };
+
+  const sb = await clienteServidor();
+
+  const { data: memo } = await sb
+    .from("memos")
+    .select("id, tipo, estado, fecha_salida, fecha_retorno_prev")
+    .eq("id", memoId)
+    .single();
+  if (!memo) return { ok: false, error: "El memo no existe o no tienes acceso." };
+
+  const puede = puedeFijarRetorno(memo.tipo, memo.estado as EstadoMemo);
+  if (!puede.ok) return { ok: false, error: puede.motivo };
+
+  // Volver antes de salir no es una fecha: es un error de tipeo, y la base
+  // lo rechazaría igual más adelante.
+  if (memo.fecha_salida && fecha < memo.fecha_salida) {
+    return {
+      ok: false,
+      error: `El retorno (${fecha}) no puede ser anterior a la salida `
+        + `(${memo.fecha_salida}).`,
+    };
+  }
+
+  const { error } = await sb
+    .from("memos").update({ fecha_retorno_prev: fecha }).eq("id", memoId);
+  if (error) return { ok: false, error: error.message };
+
+  await registrarEvento(sb, "MEMO", memoId, "EDITAR", solicitante.usuarioId,
+    { fecha_retorno_prev: memo.fecha_retorno_prev },
+    { fecha_retorno_prev: fecha, motivo: "retorno de pasajes confirmado" });
+
+  revalidatePath(`/administrar/${memoId}`);
+  revalidatePath(`/memos/${memoId}`);
   return { ok: true };
 }

@@ -10,6 +10,8 @@ import { revisarAnexo, tramos } from "@/lib/dominio/anexo";
 interface Props {
   centros: Array<{ id: string; codigo: string; nombre: string }>;
   personas: Array<{ id: string; nombre: string; dni: string; email: string | null }>;
+  /** Viáticos vivos a los que puede colgarse un memo de pasajes. */
+  padres?: Array<{ id: string; correlativo: string; destino: string | null }>;
   puedeAutorizarPendientes: boolean;
 }
 
@@ -35,7 +37,9 @@ const enDias = (n: number) =>
 
 const porOmision = (): Fila => ({ monto: "", desde: hoy(), hasta: enDias(7) });
 
-export default function FormularioMemo({ centros, personas, puedeAutorizarPendientes }: Props) {
+export default function FormularioMemo({
+  centros, personas, padres = [], puedeAutorizarPendientes,
+}: Props) {
   const router = useRouter();
   const [pendiente, iniciar] = useTransition();
   const [error, setError] = useState("");
@@ -48,6 +52,7 @@ export default function FormularioMemo({ centros, personas, puedeAutorizarPendie
   // deseleccionarla y volver a marcarla no le pierde lo ya escrito.
   const [filas, setFilas] = useState<Record<string, Fila>>({});
   const [autorizar, setAutorizar] = useState(false);
+  const [padre, setPadre] = useState("");
   const [listoConAviso, setListoConAviso] = useState("");
 
   // La respuesta se guarda junto con la selección que la produjo. Así el
@@ -116,6 +121,7 @@ export default function FormularioMemo({ centros, personas, puedeAutorizarPendie
     iniciar(async () => {
       const r = await crearMemo({
         tipo, centro_costo_id: centro, destino, abrir,
+        memo_referido_id: tipo === "PASAJES" ? (padre || null) : null,
         asignados: deAnexo.map(f => ({
           usuario_id: f.usuarioId, nombre: f.nombre, monto: f.monto,
           fecha_desde: f.fechaDesde, fecha_hasta: f.fechaHasta,
@@ -212,6 +218,29 @@ export default function FormularioMemo({ centros, personas, puedeAutorizarPendie
           <p style={{ marginTop: 6, fontSize: 11, color: "var(--text3)", lineHeight: 1.45 }}>
             Sale del catálogo. El rendidor ya no lo escribe a mano.
           </p>
+
+          {/* Un memo de pasajes es hijo de un viático: se emite con la fecha
+              de ida y se completa después con la de vuelta, porque al abrirlo
+              nadie sabe cuándo termina la obra. */}
+          {tipo === "PASAJES" && (
+            <div style={{ marginTop: 16 }}>
+              <label className="fg-label">Viático del que depende</label>
+              <select className="fg-input" value={padre}
+                onChange={e => setPadre(e.target.value)}>
+                <option value="">— sin memo padre —</option>
+                {padres.map(m => (
+                  <option key={m.id} value={m.id}>
+                    {m.correlativo}{m.destino ? ` — ${m.destino}` : ""}
+                  </option>
+                ))}
+              </select>
+              <p style={{ marginTop: 6, fontSize: 11, color: "var(--text3)", lineHeight: 1.45 }}>
+                Sin padre, el pasaje queda como un gasto suelto que nadie sabe
+                a qué viaje pertenece. La fecha de retorno se completa después,
+                cuando se sepa.
+              </p>
+            </div>
+          )}
         </Tarjeta>
 
         <Tarjeta>

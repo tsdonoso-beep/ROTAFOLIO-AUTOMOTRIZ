@@ -18,8 +18,9 @@ export default async function DetalleMemo({ params }: { params: Promise<{ id: st
   const { data: memo } = await sb
     .from("memos")
     .select(`
-      id, correlativo, estado, destino, monto_autorizado,
+      id, correlativo, tipo, estado, destino, monto_autorizado,
       fecha_salida, fecha_retorno_prev, observacion_actual,
+      padre:memos!memos_memo_referido_id_fkey ( id, correlativo ),
       centros_costo ( codigo, nombre, drive_folder ),
       empresas ( ruc, razon_social, abreviatura ),
       memo_asignados ( usuario_id, monto, fecha_desde, fecha_hasta )
@@ -61,7 +62,9 @@ export default async function DetalleMemo({ params }: { params: Promise<{ id: st
       memo={{
         id: memo.id,
         correlativo: memo.correlativo,
+        tipo: memo.tipo,
         estado: memo.estado,
+        padre: memo.padre as unknown as { id: string; correlativo: string } | null,
         destino: memo.destino,
         monto_autorizado: Number(memo.monto_autorizado),
         fecha_salida: memo.fecha_salida,
@@ -99,6 +102,7 @@ export default async function DetalleMemo({ params }: { params: Promise<{ id: st
       gastos={(gastos ?? []) as unknown as Gasto[]}
       parametros={leerParametros(filasParam)}
       puedeCapturar={puedeCapturar}
+      puedeAdministrar={autoriza(solicitante, "crear_memo").ok}
     />
   );
 }

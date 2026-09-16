@@ -5,6 +5,7 @@ import Link from "next/link";
 import Captura, { type MemoDisponible } from "./Captura";
 import GastoFila from "./GastoFila";
 import PanelDevolucion from "./PanelDevolucion";
+import RetornoDePasajes from "./RetornoDePasajes";
 import { Aviso, Cifra, EstadoMemo, Medidor, Tarjeta, Vacio, soles } from "./Encabezado";
 import {
   IconoAlerta, IconoAtras, IconoComentario, IconoComprobante, IconoCheck,
@@ -18,6 +19,9 @@ import type { EstadoGasto, EstadoMemo as TEstadoMemo, Gasto, Parametros } from "
 interface Props {
   memo: {
     id: string; correlativo: string; estado: TEstadoMemo; destino: string | null;
+    tipo?: string;
+    /** El viático del que cuelga este memo, si es de pasajes. */
+    padre?: { id: string; correlativo: string } | null;
     monto_autorizado: number; fecha_salida: string | null; fecha_retorno_prev: string | null;
     observacion_actual: string | null;
     centro: { codigo: string; nombre: string } | null;
@@ -27,6 +31,7 @@ interface Props {
   gastos: Gasto[];
   parametros: Parametros;
   puedeCapturar: boolean;
+  puedeAdministrar?: boolean;
   usuarioId?: string;
   /** Lo que le tocó a quien mira: su monto y su tramo. */
   asignado?: { monto: number; fecha_desde: string | null; fecha_hasta: string | null } | null;
@@ -40,7 +45,7 @@ interface Props {
 
 export default function VistaMemo({
   memo, gastos, parametros, puedeCapturar, memoCaptura,
-  usuarioId, asignado = null, devoluciones = [],
+  puedeAdministrar = false, usuarioId, asignado = null, devoluciones = [],
 }: Props) {
   const router = useRouter();
   const [pendiente, iniciar] = useTransition();
@@ -203,6 +208,18 @@ export default function VistaMemo({
           )}
         </div>
       </Tarjeta>
+
+      {/* ══ El retorno de un memo de pasajes ══ */}
+      {memo.tipo === "PASAJES" && (
+        <RetornoDePasajes
+          memoId={memo.id}
+          estado={memo.estado}
+          fechaSalida={memo.fecha_salida}
+          fechaRetorno={memo.fecha_retorno_prev}
+          padre={memo.padre ?? null}
+          puedeEditar={puedeAdministrar}
+        />
+      )}
 
       {/* ══ La devolución del saldo ══ */}
       {usuarioId && (
