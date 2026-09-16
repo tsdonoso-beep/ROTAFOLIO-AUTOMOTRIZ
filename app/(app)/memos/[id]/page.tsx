@@ -23,7 +23,8 @@ export default async function DetalleMemo({ params }: { params: Promise<{ id: st
       padre:memos!memos_memo_referido_id_fkey ( id, correlativo ),
       centros_costo ( codigo, nombre, drive_folder ),
       empresas ( ruc, razon_social, abreviatura ),
-      memo_asignados ( usuario_id, monto, fecha_desde, fecha_hasta )
+      memo_asignados ( usuario_id, monto, fecha_desde, fecha_hasta, usuarios ( nombre ) ),
+      pagos ( id, banco, planilla, fecha, pago_lineas ( usuario_id, monto, procesada ) )
     `)
     .eq("id", id)
     .single();
@@ -103,6 +104,22 @@ export default async function DetalleMemo({ params }: { params: Promise<{ id: st
       parametros={leerParametros(filasParam)}
       puedeCapturar={puedeCapturar}
       puedeAdministrar={autoriza(solicitante, "crear_memo").ok}
+      beneficiarios={((memo.memo_asignados ?? []) as unknown as Array<{
+        usuario_id: string; monto: number | null; usuarios: { nombre: string } | null;
+      }>).map(a => ({
+        usuarioId: a.usuario_id,
+        nombre: a.usuarios?.nombre ?? "—",
+        asignado: a.monto == null ? null : Number(a.monto),
+      }))}
+      constancias={((memo.pagos ?? []) as unknown as Array<{
+        id: string; banco: string; planilla: string | null; fecha: string | null;
+        pago_lineas: Array<{ usuario_id: string; monto: number; procesada: boolean }>;
+      }>).map(p => ({
+        id: p.id, banco: p.banco, planilla: p.planilla, fecha: p.fecha,
+        lineas: (p.pago_lineas ?? []).map(l => ({
+          usuarioId: l.usuario_id, monto: Number(l.monto), procesada: l.procesada,
+        })),
+      }))}
     />
   );
 }

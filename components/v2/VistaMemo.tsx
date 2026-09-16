@@ -6,6 +6,8 @@ import Captura, { type MemoDisponible } from "./Captura";
 import GastoFila from "./GastoFila";
 import PanelDevolucion from "./PanelDevolucion";
 import RetornoDePasajes from "./RetornoDePasajes";
+import PanelConstancias from "./PanelConstancias";
+import type { Beneficiario, Constancia } from "@/lib/dominio/pago";
 import { Aviso, Cifra, EstadoMemo, Medidor, Tarjeta, Vacio, soles } from "./Encabezado";
 import {
   IconoAlerta, IconoAtras, IconoComentario, IconoComprobante, IconoCheck,
@@ -33,6 +35,9 @@ interface Props {
   puedeCapturar: boolean;
   puedeAdministrar?: boolean;
   usuarioId?: string;
+  /** A quién cubre el memo, para cruzarlo contra lo que pagó el banco. */
+  beneficiarios?: Beneficiario[];
+  constancias?: Constancia[];
   /** Lo que le tocó a quien mira: su monto y su tramo. */
   asignado?: { monto: number; fecha_desde: string | null; fecha_hasta: string | null } | null;
   devoluciones?: Array<{
@@ -46,6 +51,7 @@ interface Props {
 export default function VistaMemo({
   memo, gastos, parametros, puedeCapturar, memoCaptura,
   puedeAdministrar = false, usuarioId, asignado = null, devoluciones = [],
+  beneficiarios = [], constancias = [],
 }: Props) {
   const router = useRouter();
   const [pendiente, iniciar] = useTransition();
@@ -220,6 +226,15 @@ export default function VistaMemo({
           puedeEditar={puedeAdministrar}
         />
       )}
+
+      {/* ══ Lo que de verdad cobró cada quien ══ */}
+      <PanelConstancias
+        memoId={memo.id}
+        autorizado={Number(memo.monto_autorizado)}
+        beneficiarios={beneficiarios}
+        constancias={constancias}
+        puedeRegistrar={puedeAdministrar}
+      />
 
       {/* ══ La devolución del saldo ══ */}
       {usuarioId && (
