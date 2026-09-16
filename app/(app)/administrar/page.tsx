@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { clienteServidor, solicitanteActual } from "@/lib/supabase/servidor";
 import { autoriza } from "@/lib/dominio/permisos";
 import { Encabezado } from "@/components/v2/Encabezado";
-import { IconoAdministrar, IconoMas } from "@/components/v2/Iconos";
+import { IconoMas } from "@/components/v2/Iconos";
 import BandejaAdmin, { type FilaAdmin } from "@/components/v2/BandejaAdmin";
 import { consolidar } from "@/lib/dominio/memo";
 import { cobertura } from "@/lib/dominio/pago";

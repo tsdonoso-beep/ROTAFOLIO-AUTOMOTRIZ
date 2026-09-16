@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import Logo from "../Logo";
+import Buscador from "./Buscador";
 import ApiKeyConfig from "../ApiKeyConfig";
 import { ICONOS_SECCION, IconoSalir } from "./Iconos";
 import { clienteNavegador } from "@/lib/supabase/cliente";
@@ -79,9 +80,14 @@ export default function Cabecera({ nombre, roles, onApiKey }: Props) {
           </span>
         </Link>
 
-        {/* Navegación — en móvil pasa a la fila de abajo */}
-        <nav className="hidden md:flex" style={{ gap: 3, marginLeft: 10, flex: 1 }}>
-          {secciones.map(s => {
+        <Buscador />
+
+        {/* Navegación — en móvil pasa a la fila de abajo.
+            Con diez secciones la fila ya no cabe, así que se muestran las
+            cinco primeras —que son las del trabajo diario— y el resto va a
+            un menú. El orden lo decide navegacion.ts, que es el del proceso. */}
+        <nav className="hidden lg:flex" style={{ gap: 2, marginLeft: 6 }}>
+          {secciones.slice(0, LAS_QUE_CABEN).map(s => {
             const activa = esActiva(s.ruta);
             const Icono = ICONOS_SECCION[s.clave];
             return (
@@ -96,11 +102,18 @@ export default function Cabecera({ nombre, roles, onApiKey }: Props) {
                   color: activa ? "var(--accent-texto)" : "var(--text2)",
                   transition: "background var(--rapido) var(--curva), color var(--rapido) var(--curva)",
                 }}>
-                {Icono && <Icono size={17} />}
+                {Icono && <Icono size={16} />}
                 {s.etiqueta}
               </Link>
             );
           })}
+
+          {secciones.length > LAS_QUE_CABEN && (
+            <MenuDeSecciones
+              secciones={secciones.slice(LAS_QUE_CABEN)}
+              activa={secciones.slice(LAS_QUE_CABEN).some(x => esActiva(x.ruta))}
+            />
+          )}
         </nav>
 
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 9 }}>
@@ -211,5 +224,88 @@ export default function Cabecera({ nombre, roles, onApiKey }: Props) {
         </nav>
       )}
     </header>
+  );
+}
+
+/**
+ * Las secciones que no caben en la fila.
+ *
+ * Con diez secciones la barra crece hasta empujar el buscador fuera de la
+ * pantalla. Las del trabajo diario quedan a la vista y el resto vive acá:
+ * son las que se visitan una vez por semana, no cada hora.
+ */
+const LAS_QUE_CABEN = 5;
+
+function MenuDeSecciones({ secciones, activa }: {
+  secciones: Array<{ clave: string; etiqueta: string; ruta: string; resumen: string }>;
+  activa: boolean;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const caja = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const fuera = (e: MouseEvent) => {
+      if (caja.current && !caja.current.contains(e.target as Node)) setAbierto(false);
+    };
+    document.addEventListener("mousedown", fuera);
+    return () => document.removeEventListener("mousedown", fuera);
+  }, []);
+
+  return (
+    <div ref={caja} style={{ position: "relative" }}>
+      <button onClick={() => setAbierto(v => !v)} aria-expanded={abierto} aria-haspopup="menu"
+        style={{
+          display: "flex", alignItems: "center", gap: 5, padding: "8px 12px",
+          borderRadius: "var(--radio-s)", border: "none", cursor: "pointer",
+          fontFamily: "var(--font-sora), sans-serif", fontSize: 13.5, fontWeight: 600,
+          background: abierto || activa ? "var(--accent-suave)" : "transparent",
+          color: abierto || activa ? "var(--accent-texto)" : "var(--text2)",
+        }}>
+        Más
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d={abierto ? "M6 14.5 12 8.5l6 6" : "M6 9.5l6 6 6-6"} />
+        </svg>
+      </button>
+
+      {abierto && (
+        <div role="menu" style={{
+          position: "absolute", top: "calc(100% + 7px)", right: 0, zIndex: 60, width: 268,
+          background: "var(--surface)", border: "1px solid var(--border2)",
+          borderRadius: "var(--radio)", boxShadow: "var(--sombra3)", overflow: "hidden",
+        }}>
+          {secciones.map(s => {
+            const Icono = ICONOS_SECCION[s.clave];
+            return (
+              <Link key={s.clave} href={s.ruta} role="menuitem"
+                onClick={() => setAbierto(false)}
+                style={{
+                  display: "flex", gap: 10, padding: "11px 14px", textDecoration: "none",
+                  borderBottom: "1px solid var(--border)", alignItems: "flex-start",
+                }}>
+                {Icono && (
+                  <span style={{ color: "var(--text3)", marginTop: 2 }}>
+                    <Icono size={16} />
+                  </span>
+                )}
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span className="font-display" style={{
+                    display: "block", fontSize: 13, fontWeight: 600, color: "var(--text)",
+                  }}>
+                    {s.etiqueta}
+                  </span>
+                  <span style={{
+                    display: "block", fontSize: 11.5, color: "var(--text3)",
+                    marginTop: 2, lineHeight: 1.4,
+                  }}>
+                    {s.resumen}
+                  </span>
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
