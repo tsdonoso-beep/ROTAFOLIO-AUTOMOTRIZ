@@ -395,54 +395,66 @@ Enumeraciones actuales:
 
 ## 12. Los cambios pendientes
 
-Ordenados por lo que desbloquean, no por tamaño.
+Revisado contra el código y la base el 16/09/2026. Lo tachado ya está.
 
-### Migraciones
+### Migraciones — hechas
 
-1. **`memo_asignados` necesita `monto`, `fecha_desde` y `fecha_hasta`.**
-   Hoy guarda solo el par memo↔persona. Sin esto no se puede reproducir el
-   anexo, ni calcular el saldo de cada quien, ni cruzar contra la planilla. El
-   594-2026 tiene tres montos y tres tramos distintos en el mismo memo.
-2. **`tipo_memo` += `HOSPEDAJE`** — el tipo más frecuente que existe.
-   Evaluar también `REEMBOLSO` cuando llegue un caso.
-3. **`estado_memo` += un estado para el vencido sin rendir** («POR REGULARIZAR»
-   en el seguimiento: 109 de 520).
-4. **Cargar los 7 proyectos** con su código, centro de costo y abreviatura. Hoy
-   hay cero y `memo_distribucion` cuelga de eso.
-5. **Tabla de caja chica**: número de ciclo, responsable, fondo, y el enlace al
-   ciclo anterior.
-6. **Cuenta bancaria, CCI y banco en `usuarios`**, con RLS que los limite a
-   ADMIN_MEMOS y Tesorería.
-7. **Planilla de movilidad como contenedor**: número de planilla y firma de
-   autorización, con una fila de gasto por desplazamiento.
-8. **Tabla de proveedores** con la tarifa negociada por zona y servicio
-   (hospedaje S/ 70, pasaje terrestre S/ 15) — habilita la alerta de «cobraron
-   más de lo acordado».
+1. ~~`memo_asignados` con `monto`, `fecha_desde` y `fecha_hasta`~~ — migración 021.
+2. ~~`tipo_memo` += `HOSPEDAJE`~~ — migración 022.
+3. ~~Estado para el vencido sin rendir~~ — **no se hizo, y a propósito**. Iba a
+   ser un valor más de `estado_memo`, pero nadie transiciona hacia
+   «POR REGULARIZAR»: es una consecuencia de que la fecha pasó. Se calcula.
+4. ~~Cargar los proyectos~~ — no hacían falta: los `centros_costo` YA son los
+   proyectos. Faltaban tres, y entraron en la 024 con su abreviatura.
+5. ~~Tabla de caja chica con ciclos~~ — migración 025.
+6. ~~Banco, cuenta y CCI~~ — migración 023, en `datos_bancarios` y no en
+   `usuarios`: RLS es por fila, no por columna.
+7. ~~Planilla de movilidad como contenedor~~ — migración 026, con su base legal.
 
-### Features
+### Lo que falta, y qué desbloquea
 
-9. **Lector de constancias de pago** — suma planillas por banco hasta cubrir el
-   memo; mientras no lo cubra, «pagado en parte» con los nombres de quién falta.
-10. **Importar los 423 memos** por `threadId`, con su carpeta y sus fechas.
-11. **Importar las 9,470 líneas de rendición** históricas.
-12. **Generador del memo** en Word, con el nombre de archivo exacto.
-13. **Emisión del correo** como el solicitante (Gmail API).
-14. **Conexión viva con la hoja del MemoTracker.**
-15. **Publicar el estado de rendición** para que Franco lo jale.
-16. **Pestaña de notas de crédito** en la hoja de SUNAT — Franco la pidió y las
-    273 ya están calzadas.
-17. **Validar la fecha del comprobante contra el tramo de la persona**, no
-    contra el del memo.
-18. **Alerta de tarifa excedida** contra la tabla de proveedores.
-19. **Tope diario de movilidad** como parámetro configurable.
-20. **Mostrar el total rendido y, aparte, lo que da crédito fiscal.**
+**Lo primero de todo, y no estaba en esta lista:**
+
+0. **La solicitud no existe en la aplicación.** El flujo empieza cuando el
+   personal le pide a su jefatura y la jefatura lo comunica para que se
+   apruebe (§3). Nada de eso está: `crear_memo` lo pueden solo ADMIN_MEMOS y
+   ADMIN_SISTEMA, no hay estado anterior a `BORRADOR`, y no hay una sola
+   línea de correo en el repositorio. Un jefe de área hoy entra a la
+   aplicación y **no tiene dónde pedir nada**. Lo único que sí existe es la
+   *excepción*: `autorizaciones_memo`, el visto bueno para abrirle plata a
+   quien no rindió, y ese sí está conectado de punta a punta.
+
+Lo demás, ordenado por lo que desbloquea:
+
+8. **Lector de constancias de pago** — suma planillas por banco hasta cubrir
+   el memo.
+9. **Generador del memo** en Word, con el nombre de archivo exacto. Va con las
+   51 cuentas bancarias, que sin esto no tienen para qué estar cargadas.
+10. **Emisión del correo** como el solicitante (Gmail API) — es la otra mitad
+    del punto 0.
+11. **Conexión viva con la hoja del MemoTracker** y **publicar el estado de
+    rendición** para que Franco lo jale.
+12. **Pestaña de notas de crédito** en la hoja de SUNAT — Franco la pidió, las
+    273 ya están calzadas y es lo único entregable antes de la reunión.
+13. **Validar la fecha del comprobante contra el tramo de la persona**, no
+    contra el del memo. Ya se puede: las fechas por persona están cargadas.
+    Verificado que hoy `validaciones.ts` no lo hace.
+14. **Tabla de proveedores** con la tarifa por zona y servicio (hospedaje
+    S/ 70, pasaje terrestre S/ 15) y su **alerta de tarifa excedida**.
+15. **Importar las 9,470 líneas de rendición** históricas.
+16. **Fase 2 del import**: los 125 memos de hospedaje y caja chica.
+17. **Tope diario de movilidad** — el parámetro existe; falta el número, que
+    lo debe Contabilidad.
+18. **Mostrar el total rendido y, aparte, lo que da crédito fiscal.**
+19. **Conseguir un reembolso real** — es el último tipo sin verificar.
 
 ### Deuda conocida, anterior a todo esto
 
 - **Detracción en NULL** en las 13,095 filas de SUNAT.
 - Tipos 50 / 53 / 54 sin nombre en la hoja publicada.
 - RUCs de consorcio: bloquean 3 de los 8 CECOs activos.
-- **Forzar cambio de contraseña a los 98 usuarios** que comparten la del piloto.
+- **Forzar cambio de contraseña a los usuarios** que comparten la del piloto.
+- Limpiar los 5 memos de prueba y validar `memos_caja_chica_tiene_caja`.
 - Error de lint preexistente en `components/ApiKeyConfig.tsx`.
 
 ---
