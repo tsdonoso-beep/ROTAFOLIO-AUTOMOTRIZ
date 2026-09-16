@@ -245,6 +245,7 @@ export const IconoMovilidad = (p: Props) => (
 
 export const ICONOS_SECCION: Record<string, (p: Props) => React.ReactElement> = {
   memos: IconoMemos,
+  solicitudes: IconoComentario,
   administrar: IconoAdministrar,
   revisar: IconoRevisar,
   contabilidad: IconoContabilidad,

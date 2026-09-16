@@ -25,6 +25,13 @@ export const SECCIONES: Seccion[] = [
     resumen: "Tus rendiciones abiertas y los comprobantes que llevas cargados",
   },
   {
+    clave: "solicitudes",
+    etiqueta: "Pedidos",
+    ruta: "/solicitudes",
+    requiere: "solicitar_memo",
+    resumen: "Pedir un memo y seguir el visto bueno de la jefatura",
+  },
+  {
     clave: "administrar",
     etiqueta: "Administrar",
     ruta: "/administrar",
