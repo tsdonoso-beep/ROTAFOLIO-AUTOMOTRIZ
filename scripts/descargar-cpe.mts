@@ -119,6 +119,27 @@ async function entrar(page: Page) {
   }
 }
 
+/**
+ * Hace clic en un texto, sin importar en qué frame esté.
+ *
+ * El menú de SOL se dibuja dentro de un iframe; buscar el texto solo en el
+ * documento principal no lo encuentra y el clic expira. Esto recorre todos los
+ * frames —el principal incluido— hasta hallarlo.
+ */
+async function clicEnAlgunMarco(page: Page, texto: string, timeoutMs = 20000): Promise<boolean> {
+  const fin = Date.now() + timeoutMs;
+  while (Date.now() < fin) {
+    for (const f of page.frames()) {
+      try {
+        const loc = f.locator(`text=${texto}`).first();
+        if (await loc.count()) { await loc.click({ timeout: 5000 }); return true; }
+      } catch { /* el marco puede estar navegando; se reintenta */ }
+    }
+    await page.waitForTimeout(500);
+  }
+  return false;
+}
+
 // ── Navegar a la consulta y bajar ─────────────────────────────────
 
 /**
@@ -163,12 +184,18 @@ async function ponerFecha(marco: Frame, indice: number, valor: string) {
 async function consultarYBajar(page: Page): Promise<Array<{ nombre: string; datos: Buffer; tipo: string }>> {
   console.log("Menú → Empresas → Consulta de Facturas y Notas Electrónicas…");
   await evidencia(page, "menu-inicio");
+  console.log(`  · frames: ${page.frames().map(f => f.url() || "(vacío)").join(" | ")}`);
 
-  await page.locator("text=Empresas").first().click().catch(() => {});
-  await page.waitForTimeout(1000);
+  if (!await clicEnAlgunMarco(page, "Empresas")) console.log("  ⚠ no encontré «Empresas»");
+  await page.waitForTimeout(1500);
   await evidencia(page, "empresas");
 
-  await page.locator("text=Consulta de Facturas y Notas Electrónicas").first().click();
+  if (!await clicEnAlgunMarco(page, "Consulta de Facturas y Notas Electrónicas")) {
+    // Alternativa: la ruta por menú, si el acceso directo no está.
+    await clicEnAlgunMarco(page, "Comprobantes de pago");
+    await page.waitForTimeout(1000);
+    await clicEnAlgunMarco(page, "Consultar Factura y Nota");
+  }
   await page.waitForTimeout(3000);
   await evidencia(page, "consulta-abierta");
 
