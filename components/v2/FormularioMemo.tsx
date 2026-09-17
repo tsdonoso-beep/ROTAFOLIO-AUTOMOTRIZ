@@ -3,13 +3,20 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Aviso, Tarjeta } from "./Encabezado";
-import { IconoAlerta, IconoAtras, IconoCheck } from "./Iconos";
+import { IconoAlerta, IconoAtras } from "./Iconos";
 import { crearMemo, revisarPendientes, type PendientesDeAsignado } from "@/app/acciones/memos";
 import { revisarAnexo, tramos } from "@/lib/dominio/anexo";
+import SelectorDePersonas from "./SelectorDePersonas";
+import type { Cuadrilla } from "@/lib/dominio/personas";
 
 interface Props {
   centros: Array<{ id: string; codigo: string; nombre: string }>;
-  personas: Array<{ id: string; nombre: string; dni: string; email: string | null }>;
+  personas: Array<{
+    id: string; nombre: string; dni: string; email: string | null;
+    cargo?: string | null; area?: string | null;
+  }>;
+  /** Las cuadrillas de memos recientes, para copiarlas en vez de teclearlas. */
+  cuadrillas?: Cuadrilla[];
   /** Viáticos vivos a los que puede colgarse un memo de pasajes. */
   padres?: Array<{ id: string; correlativo: string; destino: string | null }>;
   puedeAutorizarPendientes: boolean;
@@ -38,7 +45,7 @@ const enDias = (n: number) =>
 const porOmision = (): Fila => ({ monto: "", desde: hoy(), hasta: enDias(7) });
 
 export default function FormularioMemo({
-  centros, personas, padres = [], puedeAutorizarPendientes,
+  centros, personas, padres = [], cuadrillas = [], puedeAutorizarPendientes,
 }: Props) {
   const router = useRouter();
   const [pendiente, iniciar] = useTransition();
@@ -98,9 +105,6 @@ export default function FormularioMemo({
   const grupos = tramos(deAnexo);
 
   const listo = Boolean(centro) && anexo.reparos.length === 0;
-
-  const alternar = (id: string) =>
-    setAsignados(a => a.includes(id) ? a.filter(x => x !== id) : [...a, id]);
 
   const editar = (id: string, campo: keyof Fila, valor: string) =>
     setFilas(f => ({ ...f, [id]: { ...(f[id] ?? porOmision()), [campo]: valor } }));
@@ -244,39 +248,14 @@ export default function FormularioMemo({
         </Tarjeta>
 
         <Tarjeta>
-          <label className="fg-label">¿Quién rinde?</label>
-          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-            {personas.map(p => {
-              const activo = asignados.includes(p.id);
-              return (
-                <button key={p.id} onClick={() => alternar(p.id)} style={{
-                  display: "flex", alignItems: "center", gap: 11, padding: "10px 13px",
-                  borderRadius: 10, cursor: "pointer", textAlign: "left",
-                  border: `1px solid ${activo ? "var(--accent)" : "var(--border2)"}`,
-                  background: activo ? "rgba(0,162,152,0.05)" : "#FFFFFF",
-                }}>
-                  <span style={{
-                    width: 20, height: 20, borderRadius: 5, flexShrink: 0,
-                    border: `1px solid ${activo ? "var(--accent)" : "var(--border2)"}`,
-                    background: activo ? "var(--accent)" : "#FFFFFF",
-                    color: "#FFFFFF", fontSize: 12,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                  }}>
-                    {activo && <IconoCheck size={13} />}
-                  </span>
-                  <span style={{ flex: 1 }}>
-                    <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)", display: "block" }}>
-                      {p.nombre}
-                    </span>
-                    <span style={{ fontSize: 11, color: "var(--text3)" }}>
-                      <span className="mono">{p.dni}</span>
-                      {p.email && ` · ${p.email}`}
-                    </span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          <SelectorDePersonas
+            rotulo="¿Quién rinde?"
+            personas={personas}
+            elegidas={asignados}
+            onCambio={setAsignados}
+            cuadrillas={cuadrillas}
+            centroCostoId={centro}
+          />
         </Tarjeta>
 
         {pendientes.length > 0 && (

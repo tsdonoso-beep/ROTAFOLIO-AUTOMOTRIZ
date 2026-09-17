@@ -12,7 +12,9 @@ export default async function NuevaSolicitud() {
 
   const [{ data: centros }, { data: personas }, { data: yo }] = await Promise.all([
     sb.from("centros_costo").select("id, codigo, nombre").eq("activo", true).order("codigo"),
-    sb.from("usuarios").select("id, nombre, dni").eq("activo", true).order("nombre"),
+    sb.from("usuarios")
+      .select("id, nombre, dni, cargo, areas ( nombre )")
+      .eq("activo", true).order("nombre"),
     sb.from("usuarios")
       .select("jefatura_id, jefe:usuarios!usuarios_jefatura_id_fkey ( nombre )")
       .eq("id", solicitante.usuarioId).single(),
@@ -23,7 +25,10 @@ export default async function NuevaSolicitud() {
   return (
     <FormularioSolicitud
       centros={centros ?? []}
-      personas={(personas ?? []).map(p => ({ id: p.id, nombre: p.nombre, dni: p.dni }))}
+      personas={(personas ?? []).map(p => ({
+        id: p.id, nombre: p.nombre, dni: p.dni, cargo: p.cargo,
+        area: (p.areas as unknown as { nombre: string } | null)?.nombre ?? null,
+      }))}
       yo={solicitante.usuarioId}
       // Se dice de entrada a quién le va a llegar. Si no hay jefatura
       // registrada, se dice también: es lo que va a trabar la firma.

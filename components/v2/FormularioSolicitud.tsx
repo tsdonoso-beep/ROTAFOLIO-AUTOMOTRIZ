@@ -3,13 +3,17 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Aviso, Tarjeta, soles } from "./Encabezado";
-import { IconoAlerta, IconoAtras, IconoCheck } from "./Iconos";
+import { IconoAlerta, IconoAtras } from "./Iconos";
 import { crearSolicitud } from "@/app/acciones/solicitudes";
 import { revisarAnexo } from "@/lib/dominio/anexo";
+import SelectorDePersonas from "./SelectorDePersonas";
 
 interface Props {
   centros: Array<{ id: string; codigo: string; nombre: string }>;
-  personas: Array<{ id: string; nombre: string; dni: string }>;
+  personas: Array<{
+    id: string; nombre: string; dni: string;
+    cargo?: string | null; area?: string | null;
+  }>;
   yo: string;
   jefeNombre: string | null;
 }
@@ -62,8 +66,6 @@ export default function FormularioSolicitud({ centros, personas, yo, jefeNombre 
   const anexo = revisarAnexo(deAnexo);
   const listo = Boolean(centro) && motivo.trim().length > 0 && anexo.reparos.length === 0;
 
-  const alternar = (id: string) =>
-    setElegidas(a => a.includes(id) ? a.filter(x => x !== id) : [...a, id]);
   const editar = (id: string, campo: keyof Fila, valor: string) =>
     setFilas(f => ({ ...f, [id]: { ...(f[id] ?? porOmision()), [campo]: valor } }));
 
@@ -163,40 +165,13 @@ export default function FormularioSolicitud({ centros, personas, yo, jefeNombre 
         </Tarjeta>
 
         <Tarjeta>
-          <label className="fg-label">¿Para quién?</label>
-          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-            {personas.map(p => {
-              const activo = elegidas.includes(p.id);
-              return (
-                <button key={p.id} onClick={() => alternar(p.id)} style={{
-                  display: "flex", alignItems: "center", gap: 11, padding: "10px 13px",
-                  borderRadius: 10, cursor: "pointer", textAlign: "left",
-                  border: `1px solid ${activo ? "var(--accent)" : "var(--border2)"}`,
-                  background: activo ? "rgba(0,162,152,0.05)" : "#FFFFFF",
-                }}>
-                  <span style={{
-                    width: 20, height: 20, borderRadius: 5, flexShrink: 0,
-                    border: `1px solid ${activo ? "var(--accent)" : "var(--border2)"}`,
-                    background: activo ? "var(--accent)" : "#FFFFFF",
-                    color: "#FFFFFF", display: "flex",
-                    alignItems: "center", justifyContent: "center",
-                  }}>
-                    {activo && <IconoCheck size={13} />}
-                  </span>
-                  <span style={{ flex: 1 }}>
-                    <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)" }}>
-                      {p.nombre}{p.id === yo && " (tú)"}
-                    </span>
-                    <span className="mono" style={{
-                      fontSize: 11, color: "var(--text3)", display: "block",
-                    }}>
-                      {p.dni}
-                    </span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          <SelectorDePersonas
+            rotulo="¿Para quién?"
+            personas={personas}
+            elegidas={elegidas}
+            onCambio={setElegidas}
+            yo={yo}
+          />
         </Tarjeta>
 
         {elegidas.length > 0 && (
