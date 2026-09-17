@@ -83,6 +83,28 @@ async function evidencia(page: Page, nombre: string) {
   }
 }
 
+/**
+ * Navega con reintentos.
+ *
+ * e-menu.sunat.gob.pe corta la conexión (ERR_CONNECTION_RESET) a veces desde
+ * IPs de datacenter; un par de reintentos con espera suele pasar. Si insiste,
+ * es un bloqueo de verdad y hay que decirlo, no seguir como si nada.
+ */
+async function irConReintento(page: Page, url: string, intentos = 4) {
+  let ultimo: unknown;
+  for (let i = 1; i <= intentos; i++) {
+    try {
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
+      return;
+    } catch (e) {
+      ultimo = e;
+      console.log(`  · intento ${i}/${intentos} falló: ${e instanceof Error ? e.message.split("\n")[0] : e}`);
+      await page.waitForTimeout(3000 * i);
+    }
+  }
+  throw ultimo;
+}
+
 // ── Login ─────────────────────────────────────────────────────────
 
 /**
@@ -94,7 +116,7 @@ async function evidencia(page: Page, nombre: string) {
  */
 async function entrar(page: Page) {
   console.log(`Entrando a SOL como ${RUC} / ${USUARIO_SOL}…`);
-  await page.goto(LOGIN_URL, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await irConReintento(page, LOGIN_URL);
   // MenuInternet, sin sesión, rebota a la pantalla de login: se espera el
   // formulario en vez de asumir que ya está.
   await page.waitForSelector("#txtRuc", { timeout: 60000 });
@@ -322,8 +344,17 @@ function decodificar(buf: Buffer): string {
 
 // ── Principal ─────────────────────────────────────────────────────
 
-const navegador = await chromium.launch({ headless: true });
-const contexto = await navegador.newContext({ acceptDownloads: true });
+const navegador = await chromium.launch({
+  headless: true,
+  args: ["--disable-blink-features=AutomationControlled"],
+});
+const contexto = await navegador.newContext({
+  acceptDownloads: true,
+  locale: "es-PE",
+  // Un User-Agent de navegador real: el WAF de SUNAT resetea la conexión ante
+  // un headless sin UA. Con esto se presenta como un Chrome normal.
+  userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+});
 const page = await contexto.newPage();
 
 try {
