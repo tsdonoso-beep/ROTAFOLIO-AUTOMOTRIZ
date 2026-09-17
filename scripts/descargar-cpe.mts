@@ -297,22 +297,38 @@ async function consultarYBajar(page: Page): Promise<Array<{ nombre: string; dato
   // #criterio.tipoConsulta + hidden name=tipoConsulta). Se maneja como un
   // humano: clic en el visible y clic en la opción.
   await elegirTipo(marco, TIPO_CONSULTA);
+
+  // Confirmar qué quedó puesto de verdad en el formulario.
+  const leer = async (n: string) => (await marco.locator(`input[name="${n}"]`).first().inputValue().catch(() => "?"));
+  console.log(`  · form: fec_desde=${await leer("fec_desde")} fec_hasta=${await leer("fec_hasta")} tipo(hidden)=${await leer("tipoConsulta")}`);
   await evidencia(page, "consulta-lista");
 
   // Aceptar: es un <input type="button"> con su texto en value.
   await clicAceptar(marco);
-  await marco.locator('a:has-text("Descargar Factura")').first().waitFor({ timeout: 60000 }).catch(() => {});
+  await page.waitForTimeout(5000);
+
+  // Tras Aceptar, los resultados pueden recargar el frame (nuevo token): se
+  // vuelve a tomar el frame actual en vez de usar el viejo, que quedaría
+  // desprendido y contaría 0.
+  const res = await marcoConsulta(page);
+  await res.locator('a:has-text("Descargar")').first().waitFor({ timeout: 45000 }).catch(() => {});
   await evidencia(page, "resultados");
 
+  // Radiografía de resultados: qué hay realmente en la tabla.
+  const descargas = await res.locator('a:has-text("Descargar")').count();
+  const texto = (await res.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ").slice(0, 300);
+  console.log(`  · resultados: enlaces «Descargar»=${descargas}`);
+  console.log(`  · texto: ${texto}`);
+
   if (DEBUG) {
-    const cuantos = await marco.locator('a:has-text("Descargar Factura")').count();
+    const cuantos = await res.locator('a:has-text("Descargar Factura")').count();
     console.log(`Modo depuración: se ven ${cuantos} comprobantes. No se baja nada.`);
     return [];
   }
 
   const salida: Array<{ nombre: string; datos: Buffer; tipo: string }> = [];
-  const xml = marco.locator('a:has-text("Descargar Factura")');
-  const pdf = marco.locator('a:has-text("Descargar PDF")');
+  const xml = res.locator('a:has-text("Descargar Factura")');
+  const pdf = res.locator('a:has-text("Descargar PDF")');
   const n = await xml.count();
   console.log(`Bajando ${n} comprobantes (XML + PDF)…`);
 
