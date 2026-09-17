@@ -104,10 +104,19 @@ async function entrar(page: Page) {
   // El botón dice «Iniciar sesión»; históricamente su id es btnAceptar. Se
   // prueba por id y, si no, por texto.
   const boton = (await page.$("#btnAceptar")) ? "#btnAceptar" : "text=Iniciar sesión";
-  await Promise.all([
-    page.waitForLoadState("networkidle", { timeout: 60000 }).catch(() => {}),
-    page.click(boton),
-  ]);
+  await page.click(boton);
+
+  // Tras el login, SUNAT rebota por api-seguridad (?code=...) y recién
+  // después aterriza en el menú (MenuInternet.htm). El primer run se quedó en
+  // esa pantalla intermedia: hay que esperar a que la cadena termine, no al
+  // primer «networkidle».
+  await page.waitForURL(/MenuInternet\.htm/i, { timeout: 60000 }).catch(() => {});
+  if (!/MenuInternet/i.test(page.url())) {
+    // La sesión ya quedó puesta por el rebote; se fuerza el menú.
+    await page.goto("https://e-menu.sunat.gob.pe/cl-ti-itmenu/MenuInternet.htm", { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => {});
+  }
+  await page.waitForLoadState("networkidle", { timeout: 30000 }).catch(() => {});
+  console.log(`  · tras login, URL: ${page.url()}`);
   await evidencia(page, "post-login");
 
   const cuerpo = (await page.content()).toLowerCase();
@@ -116,6 +125,9 @@ async function entrar(page: Page) {
   }
   if (/usuario o clave|clave incorrecta|no coinciden/.test(cuerpo)) {
     throw new Error("SOL rechazó las credenciales. Revisa 'post-login'.");
+  }
+  if (!/MenuInternet|e-menu\.sunat/i.test(page.url())) {
+    throw new Error(`No se llegó al menú tras el login; quedó en ${page.url()}. Revisa 'post-login'.`);
   }
 }
 
