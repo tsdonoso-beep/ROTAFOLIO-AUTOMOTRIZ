@@ -239,17 +239,25 @@ async function elegirTipo(marco: Frame, etiqueta: string) {
   await visible.press("Enter").catch(() => {});
 }
 
-/** Clic en el botón Aceptar (un <input type="button"> con el texto en value). */
+/**
+ * Clic en el botón «Aceptar» —el que muestra la tabla—, nunca en «Solicitud
+ * de descarga masiva».
+ *
+ * Los dos son botones y el genérico `input[type=button]` caía en el de descarga
+ * masiva, que dispara el flujo asíncrono por correo y deja la pantalla sin la
+ * tabla de resultados. Por eso se busca «Aceptar» por su texto/atributos
+ * exactos y se evita el genérico.
+ */
 async function clicAceptar(marco: Frame) {
-  const opciones = [
-    'input[type="button"][value*="ceptar" i]',
-    'input[type="submit"][value*="ceptar" i]',
-    'button:has-text("Aceptar")',
-    'input[type="button"]',
+  const intentos = [
+    () => marco.locator('input[value="Aceptar"], input[value=" Aceptar "]'),
+    () => marco.locator('img[alt="Aceptar"], img[title="Aceptar"], [title="Aceptar"]'),
+    () => marco.getByText("Aceptar", { exact: true }),
+    () => marco.locator('a:has-text("Aceptar")'),
   ];
-  for (const sel of opciones) {
-    const b = marco.locator(sel).first();
-    if (await b.count()) { await b.click({ timeout: 10000 }).catch(() => {}); return; }
+  for (const get of intentos) {
+    const loc = get().first();
+    if (await loc.count()) { await loc.click({ timeout: 10000 }).catch(() => {}); return; }
   }
   console.log("  ⚠ no encontré el botón Aceptar");
 }
