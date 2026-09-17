@@ -313,20 +313,28 @@ async function consultarYBajar(page: Page): Promise<Array<{ nombre: string; dato
 
   // Aceptar: es un <input type="button"> con su texto en value.
   await clicAceptar(marco);
-  await page.waitForTimeout(5000);
 
-  // Tras Aceptar, los resultados pueden recargar el frame (nuevo token): se
-  // vuelve a tomar el frame actual en vez de usar el viejo, que quedaría
-  // desprendido y contaría 0.
-  const res = await marcoConsulta(page);
-  await res.locator('a:has-text("Descargar")').first().waitFor({ timeout: 45000 }).catch(() => {});
+  // Tras Aceptar, la tabla de resultados carga en OTRO frame (anidado), no en
+  // el del formulario. Se busca en TODOS los frames el que tenga los enlaces
+  // «Descargar Factura», sondeando hasta que aparezcan.
+  let res: Frame = marco;
+  let descargas = 0;
+  for (let i = 0; i < 25; i++) {
+    for (const f of page.frames()) {
+      try {
+        const c = await f.locator('a:has-text("Descargar Factura")').count();
+        if (c > descargas) { descargas = c; res = f; }
+      } catch { /* frame navegando */ }
+    }
+    if (descargas > 0) break;
+    await page.waitForTimeout(2000);
+  }
   await evidencia(page, "resultados");
-
-  // Radiografía de resultados: qué hay realmente en la tabla.
-  const descargas = await res.locator('a:has-text("Descargar")').count();
-  const texto = (await res.locator("body").innerText().catch(() => "")).replace(/\s+/g, " ").slice(0, 300);
-  console.log(`  · resultados: enlaces «Descargar»=${descargas}`);
-  console.log(`  · texto: ${texto}`);
+  console.log(`  · resultados: ${descargas} enlaces «Descargar Factura» en ${res.url().slice(0, 70)}`);
+  if (descargas === 0) {
+    // Si no hay enlaces, radiografiar para ver dónde quedó la tabla.
+    await radiografia(page);
+  }
 
   if (DEBUG) {
     const cuantos = await res.locator('a:has-text("Descargar Factura")').count();
