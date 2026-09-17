@@ -20,13 +20,14 @@
 //   • Descarga (DEBUG=0): baja XML+PDF, los archiva en Drive y guarda el
 //     detalle.
 
-import { chromium, type Page, type Download } from "playwright";
+import { chromium, type Page, type Frame, type Download } from "playwright";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import { google } from "googleapis";
 import { createClient } from "@supabase/supabase-js";
 import { normalizarClavePrivada, correoDeServicio } from "../lib/drive/servidor.ts";
+import { leerZip } from "../lib/sunat/zip.ts";
 import { leerComprobanteXml } from "../lib/sunat/cpe-xml.ts";
 import { prepararLote } from "../lib/sunat/cpe-importacion.ts";
 
@@ -121,46 +122,93 @@ async function entrar(page: Page) {
 // ── Navegar a la consulta y bajar ─────────────────────────────────
 
 /**
+ * Encuentra el iframe donde vive la consulta.
+ *
+ * El módulo se sirve de ww1.sunat.gob.pe/ol-ti-itconscpemype y se carga dentro
+ * de un iframe del menú. Se reconoce por su contenido —«Tipo de Consulta»— y no
+ * por un id, que cambia entre versiones.
+ */
+async function marcoConsulta(page: Page, intentos = 25): Promise<Frame> {
+  for (let i = 0; i < intentos; i++) {
+    for (const f of page.frames()) {
+      try {
+        if (await f.locator("text=Tipo de Consulta").count()) return f;
+        if (/ol-ti-itconscpemype/.test(f.url())) return f;
+      } catch { /* el marco puede estar navegando */ }
+    }
+    await page.waitForTimeout(1000);
+  }
+  return page.mainFrame();
+}
+
+/** Pone una fecha en un campo que suele ser de solo lectura (lo abre por JS). */
+async function ponerFecha(marco: Frame, indice: number, valor: string) {
+  const campo = marco.locator('input[type="text"]').nth(indice);
+  await campo.evaluate((el, v) => {
+    const i = el as HTMLInputElement;
+    i.removeAttribute("readonly");
+    i.value = v as string;
+    i.dispatchEvent(new Event("change", { bubbles: true }));
+  }, valor);
+}
+
+/**
  * Llega a «Consultar Factura y Nota», pide el rango y devuelve las descargas.
  *
- * AFINAR: el menú de SOL vive en iframes y se arma con JavaScript; la ruta
- * exacta —Empresas → Comprobantes de pago → SEE-SOL → Factura Electrónica →
- * Consultar Factura y Nota— y los selectores de la tabla se fijan con la
- * evidencia del primer run de depuración. La descarga es fila por fila: el
- * enlace «Descargar Factura (XML)» y el «Descargar PDF» de cada comprobante.
+ * El menú «¿Qué necesitas hacer?» está en el documento principal; la consulta,
+ * en un iframe. Las fechas se escriben directo (dd/mm/yyyy) en vez de pelear
+ * con el calendario emergente. Aceptar trae la tabla, y de cada fila cuelgan
+ * los enlaces «Descargar Factura (XML)» y «Descargar PDF».
  */
 async function consultarYBajar(page: Page): Promise<Array<{ nombre: string; datos: Buffer; tipo: string }>> {
-  console.log("Navegando a Consultar Factura y Nota…");
+  console.log("Menú → Empresas → Consulta de Facturas y Notas Electrónicas…");
   await evidencia(page, "menu-inicio");
 
-  if (DEBUG) return [];
+  await page.locator("text=Empresas").first().click().catch(() => {});
+  await page.waitForTimeout(1000);
+  await evidencia(page, "empresas");
+
+  await page.locator("text=Consulta de Facturas y Notas Electrónicas").first().click();
+  await page.waitForTimeout(3000);
+  await evidencia(page, "consulta-abierta");
+
+  const marco = await marcoConsulta(page);
+  console.log(`  · marco de la consulta: ${marco.url() || "(principal)"}`);
+
+  await ponerFecha(marco, 0, FECHA_INICIO);
+  await ponerFecha(marco, 1, FECHA_FIN);
+  await marco.locator("select").first().selectOption({ label: TIPO_CONSULTA }).catch(async () => {
+    // Si el texto exacto no calza, se elige por su valor visible.
+    await marco.locator("select").first().selectOption({ label: TIPO_CONSULTA.replace("FE ", "") }).catch(() => {});
+  });
+  await evidencia(page, "consulta-lista");
+
+  // Aceptar: puede ser un input, un botón o una imagen con ese texto.
+  const aceptar = marco.locator('input[value="Aceptar"], button:has-text("Aceptar"), a:has-text("Aceptar"), [title="Aceptar"]').first();
+  await aceptar.click();
+  await marco.locator('a:has-text("Descargar")').first().waitFor({ timeout: 60000 }).catch(() => {});
+  await evidencia(page, "resultados");
+
+  if (DEBUG) {
+    const cuantos = await marco.locator('a:has-text("Descargar Factura")').count();
+    console.log(`Modo depuración: se ven ${cuantos} comprobantes. No se baja nada.`);
+    return [];
+  }
 
   const salida: Array<{ nombre: string; datos: Buffer; tipo: string }> = [];
+  const xml = marco.locator('a:has-text("Descargar Factura")');
+  const pdf = marco.locator('a:has-text("Descargar PDF")');
+  const n = await xml.count();
+  console.log(`Bajando ${n} comprobantes (XML + PDF)…`);
 
-  // AFINAR ↓↓↓ — se completa con la evidencia del run de depuración.
-  //   1. Entrar al menú Comprobantes de pago → ... → Consultar Factura y Nota
-  //      (ubicar y cambiar al iframe correcto con page.frameLocator).
-  //   2. Llenar Fecha Inicio/Fin, elegir el Tipo de Consulta, clic Aceptar.
-  //   3. Recorrer las filas y, por cada una, capturar las dos descargas:
-  //
-  //   const marco = page.frameLocator("iframe#... ");
-  //   await marco.locator("#fechaInicio").fill(FECHA_INICIO);
-  //   await marco.locator("#fechaFin").fill(FECHA_FIN);
-  //   ... elegir TIPO_CONSULTA ... clic Aceptar ...
-  //   const filas = marco.locator("tabla filas");
-  //   for (const fila of await filas.all()) {
-  //     salida.push(await bajar(page, () => fila.locator("a:has-text('XML')").click()));
-  //     salida.push(await bajar(page, () => fila.locator("a:has-text('PDF')").click()));
-  //   }
-  // AFINAR ↑↑↑
-
-  console.log(`(pendiente de fijar selectores; rango ${FECHA_INICIO}–${FECHA_FIN}, ${TIPO_CONSULTA})`);
+  for (let i = 0; i < n; i++) {
+    try { salida.push(await bajar(page, () => xml.nth(i).click())); } catch (e) { console.log(`  · XML fila ${i + 1}: ${e instanceof Error ? e.message : e}`); }
+    try { salida.push(await bajar(page, () => pdf.nth(i).click())); } catch (e) { console.log(`  · PDF fila ${i + 1}: ${e instanceof Error ? e.message : e}`); }
+  }
   return salida;
 }
 
 /** Dispara una descarga y la devuelve como buffer con su nombre. */
-// Se usa desde consultarYBajar una vez fijados los selectores (bloque AFINAR).
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function bajar(page: Page, accion: () => Promise<void>): Promise<{ nombre: string; datos: Buffer; tipo: string }> {
   const [descarga] = await Promise.all([
     page.waitForEvent("download", { timeout: 60000 }) as Promise<Download>,
@@ -171,7 +219,8 @@ async function bajar(page: Page, accion: () => Promise<void>): Promise<{ nombre:
   for await (const t of stream) trozos.push(t as Buffer);
   const nombre = descarga.suggestedFilename();
   const tipo = /\.pdf$/i.test(nombre) ? "application/pdf"
-    : /\.xml$/i.test(nombre) ? "application/xml" : "application/octet-stream";
+    : /\.(xml|zip)$/i.test(nombre) ? (/\.zip$/i.test(nombre) ? "application/zip" : "application/xml")
+    : "application/octet-stream";
   return { nombre, datos: Buffer.concat(trozos), tipo };
 }
 
@@ -254,7 +303,18 @@ try {
     }
     console.log(`Archivados en Drive: ${nuevos} nuevos, ${existentes} ya estaban.`);
 
-    const xmls = archivos.filter(f => /\.xml$/i.test(f.nombre)).map(f => decodificar(f.datos));
+    // El enlace «Descargar Factura (XML)» puede dar el XML suelto o un ZIP que
+    // lo contiene (junto al css/xsl de presentación). Se cubren los dos.
+    const xmls: string[] = [];
+    for (const f of archivos) {
+      if (/\.zip$/i.test(f.nombre)) {
+        for (const a of leerZip(f.datos)) {
+          if (/\.xml$/i.test(a.nombre)) xmls.push(decodificar(a.contenido));
+        }
+      } else if (/\.xml$/i.test(f.nombre)) {
+        xmls.push(decodificar(f.datos));
+      }
+    }
     await guardarDetalle(xmls);
   }
 } catch (e) {
