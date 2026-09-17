@@ -1,0 +1,93 @@
+# Bajar los XML de los comprobantes desde el portal de SUNAT
+#
+# El detalle de ítems no lo da ninguna API: sale del XML, y al XML solo se
+# llega por la pantalla «Consultar Factura y Nota» de SOL, que tiene login.
+# Por eso esto maneja un navegador (Playwright), y corre acá y no en Apps
+# Script —que no puede manejar un navegador— ni en Vercel —que corta al minuto.
+#
+# Reusa los secretos que ya están: el usuario y clave de SOL son los mismos
+# del SIRE. El repositorio es público: nada de esto va en un archivo.
+#
+# Arranca en modo depuración (debug=true): entra, llega a la pantalla y sube
+# capturas y HTML como artefacto, sin bajar nada. Con eso se fijan los
+# selectores. Cuando estén, se corre con debug=false para bajar de verdad.
+
+name: SUNAT descargar XML
+
+on:
+  workflow_dispatch:
+    inputs:
+      debug:
+        description: "Solo entrar y capturar la pantalla, sin bajar (para fijar selectores)."
+        type: boolean
+        required: false
+        default: true
+      fecha_inicio:
+        description: "Desde (dd/mm/yyyy). Vacío = hace 30 días."
+        required: false
+        default: ""
+      fecha_fin:
+        description: "Hasta (dd/mm/yyyy). Vacío = hoy."
+        required: false
+        default: ""
+      tipo_consulta:
+        description: "Tipo de consulta del portal (ej. FE Recibidas)."
+        required: false
+        default: "FE Recibidas"
+
+permissions:
+  contents: read
+
+jobs:
+  descargar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      # Solo Chromium, que es lo que usa el script, con sus dependencias de
+      # sistema. Evita bajar los otros navegadores.
+      - run: npx playwright install --with-deps chromium
+
+      - name: Entrar a SOL y (si no es depuración) bajar los XML
+        env:
+          SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
+          SUNAT_INROPRIN_USUARIO: ${{ secrets.SUNAT_INROPRIN_USUARIO }}
+          SUNAT_INROPRIN_CLAVE: ${{ secrets.SUNAT_INROPRIN_CLAVE }}
+          SUNAT_INROPRIN_CLIENT_ID: ${{ secrets.SUNAT_INROPRIN_CLIENT_ID }}
+          # La carpeta de Drive donde se archivan los comprobantes. Si no se
+          # pone el secreto, el script usa la del proyecto por omisión.
+          SUNAT_DRIVE_FOLDER: ${{ secrets.SUNAT_DRIVE_FOLDER }}
+          GOOGLE_SA_EMAIL: ${{ secrets.GOOGLE_SA_EMAIL }}
+          GOOGLE_SA_PRIVATE_KEY: ${{ secrets.GOOGLE_SA_PRIVATE_KEY }}
+          # Solo hacen falta para guardar; en depuración no se tocan.
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          PROJECT_URL: ${{ secrets.PROJECT_URL }}
+          ANON_KEY: ${{ secrets.ANON_KEY }}
+          ROBOT_CORREO: ${{ secrets.ROBOT_CORREO }}
+          ROBOT_CLAVE: ${{ secrets.ROBOT_CLAVE }}
+          DEBUG: ${{ inputs.debug && '1' || '0' }}
+          FECHA_INICIO: ${{ inputs.fecha_inicio }}
+          FECHA_FIN: ${{ inputs.fecha_fin }}
+          TIPO_CONSULTA: ${{ inputs.tipo_consulta }}
+        run: node --experimental-strip-types scripts/descargar-cpe.mts
+
+      # Las capturas y el HTML de cada paso, para ver el portal real y fijar
+      # los selectores. Se suben aunque el paso anterior falle.
+      - name: Subir capturas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capturas-sunat
+          path: capturas/
+          if-no-files-found: warn
+          retention-days: 7
