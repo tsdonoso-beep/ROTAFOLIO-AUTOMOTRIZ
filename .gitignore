@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Artefactos del scraper de SUNAT (capturas de depuración y descargas)
+/capturas/
+/descargas/
