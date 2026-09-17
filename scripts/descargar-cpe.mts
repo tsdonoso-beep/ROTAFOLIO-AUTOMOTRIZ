@@ -176,30 +176,38 @@ async function clicEnAlgunMarco(page: Page, texto: string, timeoutMs = 20000): P
 
 // ── Navegar a la consulta y bajar ─────────────────────────────────
 
-/**
- * Encuentra el iframe donde vive la consulta.
- *
- * El módulo se sirve de ww1.sunat.gob.pe/ol-ti-itconscpemype y se carga dentro
- * de un iframe del menú. Se reconoce por su contenido —«Tipo de Consulta»— y no
- * por un id, que cambia entre versiones.
- */
-async function marcoConsulta(page: Page, intentos = 25): Promise<Frame> {
-  for (let i = 0; i < intentos; i++) {
-    for (const f of page.frames()) {
-      try {
-        if (await f.locator("text=Tipo de Consulta").count()) return f;
-        if (/ol-ti-itconscpemype/.test(f.url())) return f;
-      } catch { /* el marco puede estar navegando */ }
-    }
-    await page.waitForTimeout(1000);
-  }
-  return page.mainFrame();
-}
-
 // Los campos de texto de SUNAT no siempre traen type="text": muchos son
 // <input> a secas, que `input[type="text"]` no captura. Se toma todo input que
 // no sea de los tipos que claramente no son de texto.
 const SEL_TEXTO = 'input:not([type="hidden"]):not([type="button"]):not([type="submit"]):not([type="image"]):not([type="checkbox"]):not([type="radio"]):not([type="password"])';
+
+/**
+ * Encuentra el iframe donde vive el formulario de la consulta.
+ *
+ * El módulo (ol-ti-itconscpemype) se carga en un iframe del menú, pero el
+ * formulario en sí vive en un iframe ANIDADO dentro de ese: el frame externo
+ * matchea la URL pero no tiene campos. Por eso no basta con la URL —así se
+ * eligió un frame vacío y salieron «0 comprobantes»—: se busca el frame que de
+ * verdad tiene el `select` de tipo y los campos de fecha, y se espera a que
+ * cargue.
+ */
+async function marcoConsulta(page: Page, intentos = 30): Promise<Frame> {
+  let respaldo: Frame | null = null;
+  let maxInputs = -1;
+  for (let i = 0; i < intentos; i++) {
+    for (const f of page.frames()) {
+      try {
+        const selects = await f.locator("select").count();
+        const inputs = await f.locator(SEL_TEXTO).count();
+        // El formulario tiene el select de «Tipo de Consulta» y ≥2 fechas.
+        if (selects >= 1 && inputs >= 2) return f;
+        if (inputs > maxInputs) { maxInputs = inputs; respaldo = f; }
+      } catch { /* el marco puede estar navegando */ }
+    }
+    await page.waitForTimeout(1000);
+  }
+  return respaldo ?? page.mainFrame();
+}
 
 /** Pone una fecha en un campo que suele ser de solo lectura (lo abre por JS). */
 async function ponerFecha(marco: Frame, indice: number, valor: string) {
