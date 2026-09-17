@@ -248,7 +248,10 @@ async function consultarYBajar(page: Page): Promise<Array<{ nombre: string; dato
 
   const marco = await marcoConsulta(page);
   console.log(`  · marco de la consulta: ${marco.url() || "(principal)"}`);
-  console.log(`  · inputs de texto: ${await marco.locator(SEL_TEXTO).count()} · selects: ${await marco.locator("select").count()}`);
+
+  // Radiografía: qué hay de verdad en cada frame, para fijar los selectores
+  // sin adivinar. Se imprime al log; en depuración es la evidencia clave.
+  if (DEBUG) await radiografia(page);
 
   await ponerFecha(marco, 0, FECHA_INICIO);
   await ponerFecha(marco, 1, FECHA_FIN);
@@ -287,6 +290,52 @@ async function consultarYBajar(page: Page): Promise<Array<{ nombre: string; dato
     try { salida.push(await bajar(page, () => pdf.nth(i).click())); } catch (e) { console.log(`  · PDF fila ${i + 1}: ${e instanceof Error ? e.message : e}`); }
   }
   return salida;
+}
+
+/**
+ * Imprime la estructura de cada frame: inputs, selects y enlaces.
+ *
+ * Es para diagnosticar a ciegas desde el log de Actions: dice en qué frame
+ * está el formulario, cómo se llaman sus campos, si el «Tipo de Consulta» es
+ * un select o un widget, y cómo son los enlaces de descarga.
+ */
+async function radiografia(page: Page) {
+  for (const f of page.frames()) {
+    let inputs = 0, selects = 0, descargas = 0, tipo = false;
+    try {
+      inputs = await f.locator("input").count();
+      selects = await f.locator("select").count();
+      descargas = await f.locator("text=Descargar").count();
+      tipo = (await f.locator("text=Tipo de Consulta").count()) > 0;
+    } catch { continue; }
+    if (inputs === 0 && selects === 0 && descargas === 0 && !tipo) continue;
+
+    console.log(`\n▚ FRAME ${f.url().slice(0, 90)}`);
+    console.log(`   inputs=${inputs} selects=${selects} descargas=${descargas} tipoConsulta=${tipo}`);
+    try {
+      const campos = await f.locator("input,select,textarea").evaluateAll(els =>
+        els.slice(0, 25).map(el => {
+          const e = el as HTMLInputElement | HTMLSelectElement;
+          const tag = e.tagName.toLowerCase();
+          const tipo = (e as HTMLInputElement).type || "";
+          const opts = tag === "select"
+            ? " opts=[" + Array.from((e as HTMLSelectElement).options).map(o => o.text.trim()).join("|") + "]"
+            : "";
+          return `${tag}#${e.id || "-"}[name=${e.name || "-"} type=${tipo}]${opts}`;
+        }));
+      campos.forEach(c => console.log(`     · ${c}`));
+    } catch { /* frame ajeno */ }
+
+    if (descargas > 0) {
+      try {
+        const links = await f.locator("a").evaluateAll(els =>
+          els.filter(a => /descargar/i.test(a.textContent || "")).slice(0, 4)
+            .map(a => `${(a.textContent || "").trim().slice(0, 40)} → ${(a as HTMLAnchorElement).getAttribute("href")?.slice(0, 60) || "(js)"}`));
+        links.forEach(l => console.log(`     ↓ ${l}`));
+      } catch { /* nada */ }
+    }
+  }
+  console.log("");
 }
 
 /** Dispara una descarga y la devuelve como buffer con su nombre. */
