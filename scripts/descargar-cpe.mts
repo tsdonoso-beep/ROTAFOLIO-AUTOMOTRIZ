@@ -196,9 +196,14 @@ async function marcoConsulta(page: Page, intentos = 25): Promise<Frame> {
   return page.mainFrame();
 }
 
+// Los campos de texto de SUNAT no siempre traen type="text": muchos son
+// <input> a secas, que `input[type="text"]` no captura. Se toma todo input que
+// no sea de los tipos que claramente no son de texto.
+const SEL_TEXTO = 'input:not([type="hidden"]):not([type="button"]):not([type="submit"]):not([type="image"]):not([type="checkbox"]):not([type="radio"]):not([type="password"])';
+
 /** Pone una fecha en un campo que suele ser de solo lectura (lo abre por JS). */
 async function ponerFecha(marco: Frame, indice: number, valor: string) {
-  const campo = marco.locator('input[type="text"]').nth(indice);
+  const campo = marco.locator(SEL_TEXTO).nth(indice);
   await campo.evaluate((el, v) => {
     const i = el as HTMLInputElement;
     i.removeAttribute("readonly");
@@ -235,6 +240,7 @@ async function consultarYBajar(page: Page): Promise<Array<{ nombre: string; dato
 
   const marco = await marcoConsulta(page);
   console.log(`  · marco de la consulta: ${marco.url() || "(principal)"}`);
+  console.log(`  · inputs de texto: ${await marco.locator(SEL_TEXTO).count()} · selects: ${await marco.locator("select").count()}`);
 
   await ponerFecha(marco, 0, FECHA_INICIO);
   await ponerFecha(marco, 1, FECHA_FIN);
