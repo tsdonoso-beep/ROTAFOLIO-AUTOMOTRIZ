@@ -42,7 +42,6 @@ function pedir(...nombres: string[]): string {
 const RUC       = process.env.SUNAT_RUC?.trim() || "20512201611";
 const USUARIO   = pedir("SUNAT_INROPRIN_USUARIO");     // el secundario de SOL, ej. APISIREE
 const CLAVE     = pedir("SUNAT_INROPRIN_CLAVE");
-const CLIENT_ID = pedir("SUNAT_INROPRIN_CLIENT_ID");   // el mismo del SIRE
 
 // El usuario del portal es el secundario solo, sin el RUC pegado adelante.
 const USUARIO_SOL = USUARIO.startsWith(RUC) ? USUARIO.slice(RUC.length) : USUARIO;
@@ -53,9 +52,11 @@ const TIPO_CONSULTA = process.env.TIPO_CONSULTA?.trim() || "FE Recibidas";
 // La carpeta de Drive del proyecto donde se archivan los comprobantes.
 const CARPETA_DRIVE = process.env.SUNAT_DRIVE_FOLDER?.trim() || "1RnyGimYdnhbQ3nKxGOoBc_iRz38fxCnX";
 
-// La página de login de SOL, tal como la sirve el portal: lleva el client_id.
+// La entrada del menú de SOL. Sin sesión, rebota sola a la pantalla de login
+// con el client_id y el redirect_uri correctos del menú —los del API SIRE no
+// sirven para el login web: dejan el ?code= colgado sin volver al menú—.
 const LOGIN_URL = process.env.SOL_LOGIN_URL?.trim()
-  || `https://api-seguridad.sunat.gob.pe/v1/clientessol/${CLIENT_ID}/oauth2/loginMenuSol?lang=es-PE&showDni=true`;
+  || "https://e-menu.sunat.gob.pe/cl-ti-itmenu/MenuInternet.htm";
 
 function ddmmyyyy(d: Date): string {
   const p = (n: number) => String(n).padStart(2, "0");
@@ -94,6 +95,9 @@ async function evidencia(page: Page, nombre: string) {
 async function entrar(page: Page) {
   console.log(`Entrando a SOL como ${RUC} / ${USUARIO_SOL}…`);
   await page.goto(LOGIN_URL, { waitUntil: "domcontentloaded", timeout: 60000 });
+  // MenuInternet, sin sesión, rebota a la pantalla de login: se espera el
+  // formulario en vez de asumir que ya está.
+  await page.waitForSelector("#txtRuc", { timeout: 60000 });
   await evidencia(page, "login");
 
   await page.fill("#txtRuc", RUC);
@@ -111,10 +115,6 @@ async function entrar(page: Page) {
   // esa pantalla intermedia: hay que esperar a que la cadena termine, no al
   // primer «networkidle».
   await page.waitForURL(/MenuInternet\.htm/i, { timeout: 60000 }).catch(() => {});
-  if (!/MenuInternet/i.test(page.url())) {
-    // La sesión ya quedó puesta por el rebote; se fuerza el menú.
-    await page.goto("https://e-menu.sunat.gob.pe/cl-ti-itmenu/MenuInternet.htm", { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => {});
-  }
   await page.waitForLoadState("networkidle", { timeout: 30000 }).catch(() => {});
   console.log(`  · tras login, URL: ${page.url()}`);
   await evidencia(page, "post-login");
