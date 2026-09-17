@@ -41,14 +41,19 @@ var COL = {
 };
 
 function onOpen() {
-  SpreadsheetApp.getUi()
+  var menu = SpreadsheetApp.getUi()
     .createMenu('Monitoreo SUNAT')
     .addItem('Abrir tablero', 'abrirTablero')
     .addSeparator()
     .addItem('Enviarme el resumen ahora', 'enviarResumen')
     .addItem('Avisarme todos los días', 'instalarAvisoDiario')
-    .addItem('Dejar de avisarme', 'quitarAvisoDiario')
-    .addToUi();
+    .addItem('Dejar de avisarme', 'quitarAvisoDiario');
+
+  // El desglose de ítems vive en Desglose.gs; cuelga de este mismo menú para
+  // que no haya dos. Si ese archivo no está, el menú sigue funcionando igual.
+  if (typeof itemsMenuDesglose_ === 'function') menu = itemsMenuDesglose_(menu);
+
+  menu.addToUi();
 }
 
 function abrirTablero() {

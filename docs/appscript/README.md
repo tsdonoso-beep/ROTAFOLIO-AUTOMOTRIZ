@@ -91,6 +91,46 @@ la aplicación. Cuando arranque el piloto se llena sola, y ahí el tablero
 empieza a poder decir *quién* rindió la factura que una nota de crédito acaba
 de anular. Esa es la pregunta que ninguna hoja puede responder por su cuenta.
 
+## Desglose de comprobantes (los ítems de cada factura)
+
+`Desglose.gs` agrega al mismo menú el desglose: convierte cada factura en sus
+líneas —qué se compró, cuánto y a qué precio— y las escribe en una pestaña
+**DETALLE**, una fila por ítem.
+
+### Por qué así y no «scrapeando» SUNAT
+
+El detalle de ítems **no lo devuelve ninguna API de SUNAT**: la única fuente
+es el XML de cada comprobante. Se puede llegar al XML de dos maneras:
+
+- **Scrapeando el portal SOL** desde el script. Es lo que hacen las macros que
+  se venden. Funciona, pero es frágil (cualquier cambio del portal lo rompe),
+  hay que guardar la Clave SOL dentro del script, y la descarga masiva es
+  asíncrona —pide, espera un correo, y recién ahí baja—. Alto mantenimiento.
+- **Sobre el ZIP ya bajado** (lo que hace esto). Una persona baja el ZIP en
+  SUNAT una vez —un clic, lo mismo que ya hacían— y lo deja en una carpeta de
+  Drive. El script hace todo lo demás, y no depende del HTML de SUNAT: solo
+  del formato del XML, que es un estándar y cambia poco.
+
+De la descarga en adelante es **automático de verdad**: con el disparador de
+tiempo activado, nadie tiene que abrir el script.
+
+### Cómo se usa
+
+1. **La carpeta.** Crea una carpeta en Drive para los ZIP. Copia su ID de la
+   URL (`.../folders/ESTE_ID`) y ponlo en `CARPETA_ZIPS`, al inicio de
+   `Desglose.gs`. Revisa también que `RUC_EMPRESA` sea el de la empresa.
+2. **Pega el archivo.** En Apps Script, el **+** · **Script**, llámalo
+   `Desglose` y pega el contenido de `Desglose.gs`. Guarda y recarga la hoja.
+3. **Baja el ZIP** en SUNAT (Comprobantes de pago → SEE-SOL → Consultar
+   Factura y Nota → Descarga masiva, «Recibidas») y déjalo en la carpeta.
+4. **Menú → «Desglosar ZIPs de Drive (ítems)»**. Lee los ZIP, escribe los
+   ítems en DETALLE y mueve el ZIP a una subcarpeta `procesados`.
+5. **Para que corra solo:** menú → «Activar desglose automático». Cada hora
+   revisa la carpeta. Tú solo dejas el ZIP.
+
+Reprocesar un ZIP no duplica: un ítem ya escrito se reconoce por
+tipo-serie-número-proveedor-línea y se salta.
+
 ## Si algo falla
 
 **«La hoja no trae estas columnas…»** — cambiaron los títulos en la fuente. El
