@@ -12,17 +12,20 @@ import { ultimasConsultas, ultimosCambios } from "@/lib/datos/consultas-sunat";
 import CambiosSunat from "@/components/v2/CambiosSunat";
 import HistoricoSunat from "@/components/v2/HistoricoSunat";
 import { periodosGuardados } from "@/app/acciones/historico-sunat";
+import ImportarCpe from "@/components/v2/ImportarCpe";
+import { periodosDeItems } from "@/app/acciones/items-sunat";
 
 export default async function CredencialesSunat() {
   const solicitante = await solicitanteActual();
   if (!solicitante) redirect("/ingresar");
   if (!autoriza(solicitante, "editar_catalogos").ok) redirect("/");
 
-  const [empresas, consultas, periodos, cambios] = await Promise.all([
+  const [empresas, consultas, periodos, cambios, periodosItems] = await Promise.all([
     estadoDeCredenciales(),
     ultimasConsultas(),
     periodosGuardados(),
     ultimosCambios(),
+    periodosDeItems(),
   ]);
 
   return (
@@ -56,6 +59,10 @@ export default async function CredencialesSunat() {
 
       <div style={{ marginTop: 16 }}>
         <HistoricoSunat periodos={periodos} />
+      </div>
+
+      <div style={{ marginTop: 16 }}>
+        <ImportarCpe empresas={empresas.map(e => e.empresa)} periodos={periodosItems} />
       </div>
 
       <div style={{ marginTop: 16 }}>
