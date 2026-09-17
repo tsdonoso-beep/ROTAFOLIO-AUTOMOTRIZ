@@ -197,10 +197,9 @@ async function marcoConsulta(page: Page, intentos = 30): Promise<Frame> {
   for (let i = 0; i < intentos; i++) {
     for (const f of page.frames()) {
       try {
-        const selects = await f.locator("select").count();
+        // El formulario tiene el campo de fecha «fec_desde»: es la marca segura.
+        if (await f.locator('input[name="fec_desde"]').count()) return f;
         const inputs = await f.locator(SEL_TEXTO).count();
-        // El formulario tiene el select de «Tipo de Consulta» y ≥2 fechas.
-        if (selects >= 1 && inputs >= 2) return f;
         if (inputs > maxInputs) { maxInputs = inputs; respaldo = f; }
       } catch { /* el marco puede estar navegando */ }
     }
@@ -209,15 +208,50 @@ async function marcoConsulta(page: Page, intentos = 30): Promise<Frame> {
   return respaldo ?? page.mainFrame();
 }
 
-/** Pone una fecha en un campo que suele ser de solo lectura (lo abre por JS). */
-async function ponerFecha(marco: Frame, indice: number, valor: string) {
-  const campo = marco.locator(SEL_TEXTO).nth(indice);
+/** Pone una fecha en el campo con ese `name`, abriéndolo si es de solo lectura. */
+async function ponerFechaPorNombre(marco: Frame, nombre: string, valor: string) {
+  const campo = marco.locator(`input[name="${nombre}"]`).first();
   await campo.evaluate((el, v) => {
     const i = el as HTMLInputElement;
     i.removeAttribute("readonly");
     i.value = v as string;
+    i.dispatchEvent(new Event("input", { bubbles: true }));
     i.dispatchEvent(new Event("change", { bubbles: true }));
-  }, valor);
+    i.dispatchEvent(new Event("blur", { bubbles: true }));
+  }, valor).catch((e: unknown) => console.log(`  ⚠ no se pudo poner ${nombre}: ${e instanceof Error ? e.message.split("\n")[0] : e}`));
+}
+
+/**
+ * Elige el Tipo de Consulta, que es un combobox (input visible + hidden), no
+ * un <select>. Se hace como un humano: clic en el visible y clic en la opción.
+ */
+async function elegirTipo(marco: Frame, etiqueta: string) {
+  const visible = marco.locator('[id="criterio.tipoConsulta"]').first();
+  if (!(await visible.count())) { console.log("  ⚠ no encontré el campo de tipo"); return; }
+  await visible.click().catch(() => {});
+  await marco.page().waitForTimeout(800);
+  const opcion = marco.locator(
+    `li:has-text("${etiqueta}"), .ui-menu-item:has-text("${etiqueta}"), option:has-text("${etiqueta}"), a:has-text("${etiqueta}")`
+  ).first();
+  if (await opcion.count()) { await opcion.click().catch(() => {}); return; }
+  // Respaldo: teclear el texto y Enter.
+  await visible.fill(etiqueta).catch(() => {});
+  await visible.press("Enter").catch(() => {});
+}
+
+/** Clic en el botón Aceptar (un <input type="button"> con el texto en value). */
+async function clicAceptar(marco: Frame) {
+  const opciones = [
+    'input[type="button"][value*="ceptar" i]',
+    'input[type="submit"][value*="ceptar" i]',
+    'button:has-text("Aceptar")',
+    'input[type="button"]',
+  ];
+  for (const sel of opciones) {
+    const b = marco.locator(sel).first();
+    if (await b.count()) { await b.click({ timeout: 10000 }).catch(() => {}); return; }
+  }
+  console.log("  ⚠ no encontré el botón Aceptar");
 }
 
 /**
@@ -253,24 +287,21 @@ async function consultarYBajar(page: Page): Promise<Array<{ nombre: string; dato
   // sin adivinar. Se imprime al log; en depuración es la evidencia clave.
   if (DEBUG) await radiografia(page);
 
-  await ponerFecha(marco, 0, FECHA_INICIO);
-  await ponerFecha(marco, 1, FECHA_FIN);
-  await marco.locator("select").first().selectOption({ label: TIPO_CONSULTA }).catch(async () => {
-    // Si el texto exacto no calza, se elige por su valor visible.
-    await marco.locator("select").first().selectOption({ label: TIPO_CONSULTA.replace("FE ", "") }).catch(() => {});
-  });
+  // Fechas: por su nombre real (fec_desde / fec_hasta), no por posición —la
+  // radiografía mostró que hay varios inputs de texto y contar posiciones caía
+  // en los equivocados—.
+  await ponerFechaPorNombre(marco, "fec_desde", FECHA_INICIO);
+  await ponerFechaPorNombre(marco, "fec_hasta", FECHA_FIN);
+
+  // Tipo de Consulta: no es un <select> sino un combobox (input visible
+  // #criterio.tipoConsulta + hidden name=tipoConsulta). Se maneja como un
+  // humano: clic en el visible y clic en la opción.
+  await elegirTipo(marco, TIPO_CONSULTA);
   await evidencia(page, "consulta-lista");
 
-  // Aceptar: en SUNAT no es un <button> estándar sino un elemento legacy con
-  // onclick. Se busca por el texto —que es lo que se ve— y, si no, por los
-  // tipos de botón e imagen habituales.
-  const porTexto = marco.locator('text="Aceptar"').first();
-  if (await porTexto.count()) {
-    await porTexto.click({ timeout: 15000 }).catch(() => {});
-  } else {
-    await marco.locator('input[type="submit"], input[type="button"], input[value*="Aceptar" i], img[alt*="Aceptar" i], [onclick*="ceptar"]').first().click({ timeout: 15000 }).catch(() => {});
-  }
-  await marco.locator('text=Descargar').first().waitFor({ timeout: 60000 }).catch(() => {});
+  // Aceptar: es un <input type="button"> con su texto en value.
+  await clicAceptar(marco);
+  await marco.locator('a:has-text("Descargar Factura")').first().waitFor({ timeout: 60000 }).catch(() => {});
   await evidencia(page, "resultados");
 
   if (DEBUG) {
