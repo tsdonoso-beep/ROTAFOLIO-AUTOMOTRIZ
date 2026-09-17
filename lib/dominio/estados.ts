@@ -179,3 +179,36 @@ export function impedimentosParaPresentar(gastos: Array<{
 
   return impedimentos;
 }
+
+// ════════════════════════════════════════════════════════════════
+// La fecha de retorno de un memo de pasajes
+// ════════════════════════════════════════════════════════════════
+//
+// Un memo de pasajes se emite con la fecha de ida y se completa después con
+// la de vuelta, porque al abrirlo nadie sabe cuándo termina la obra. Es el
+// único dato del sistema que se edita después de aprobado, y por eso no cabe
+// en MEMO_EDITABLE: esa lista dice qué memos admiten tocar sus gastos, que es
+// otra cosa.
+//
+// Se permite hasta que el memo se cierra o se anula. Después no: un memo
+// cerrado ya se contabilizó, y mover su fecha cambiaría un asiento.
+
+export function puedeFijarRetorno(
+  tipo: string, estado: EstadoMemo
+): { ok: true } | { ok: false; motivo: string } {
+  if (tipo !== "PASAJES") {
+    return {
+      ok: false,
+      motivo: "Solo un memo de pasajes completa su fecha de retorno después: "
+        + "en los demás la fecha va desde el principio.",
+    };
+  }
+  if (MEMO_TERMINAL.includes(estado)) {
+    return {
+      ok: false,
+      motivo: "Este memo ya está cerrado. Mover su fecha ahora cambiaría algo "
+        + "que ya se contabilizó.",
+    };
+  }
+  return { ok: true };
+}

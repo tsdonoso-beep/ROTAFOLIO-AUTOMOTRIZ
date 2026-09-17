@@ -395,54 +395,66 @@ Enumeraciones actuales:
 
 ## 12. Los cambios pendientes
 
-Ordenados por lo que desbloquean, no por tamaño.
+Revisado contra el código y la base el 16/09/2026. Lo tachado ya está.
 
-### Migraciones
+### Migraciones — hechas
 
-1. **`memo_asignados` necesita `monto`, `fecha_desde` y `fecha_hasta`.**
-   Hoy guarda solo el par memo↔persona. Sin esto no se puede reproducir el
-   anexo, ni calcular el saldo de cada quien, ni cruzar contra la planilla. El
-   594-2026 tiene tres montos y tres tramos distintos en el mismo memo.
-2. **`tipo_memo` += `HOSPEDAJE`** — el tipo más frecuente que existe.
-   Evaluar también `REEMBOLSO` cuando llegue un caso.
-3. **`estado_memo` += un estado para el vencido sin rendir** («POR REGULARIZAR»
-   en el seguimiento: 109 de 520).
-4. **Cargar los 7 proyectos** con su código, centro de costo y abreviatura. Hoy
-   hay cero y `memo_distribucion` cuelga de eso.
-5. **Tabla de caja chica**: número de ciclo, responsable, fondo, y el enlace al
-   ciclo anterior.
-6. **Cuenta bancaria, CCI y banco en `usuarios`**, con RLS que los limite a
-   ADMIN_MEMOS y Tesorería.
-7. **Planilla de movilidad como contenedor**: número de planilla y firma de
-   autorización, con una fila de gasto por desplazamiento.
-8. **Tabla de proveedores** con la tarifa negociada por zona y servicio
-   (hospedaje S/ 70, pasaje terrestre S/ 15) — habilita la alerta de «cobraron
-   más de lo acordado».
+1. ~~`memo_asignados` con `monto`, `fecha_desde` y `fecha_hasta`~~ — migración 021.
+2. ~~`tipo_memo` += `HOSPEDAJE`~~ — migración 022.
+3. ~~Estado para el vencido sin rendir~~ — **no se hizo, y a propósito**. Iba a
+   ser un valor más de `estado_memo`, pero nadie transiciona hacia
+   «POR REGULARIZAR»: es una consecuencia de que la fecha pasó. Se calcula.
+4. ~~Cargar los proyectos~~ — no hacían falta: los `centros_costo` YA son los
+   proyectos. Faltaban tres, y entraron en la 024 con su abreviatura.
+5. ~~Tabla de caja chica con ciclos~~ — migración 025.
+6. ~~Banco, cuenta y CCI~~ — migración 023, en `datos_bancarios` y no en
+   `usuarios`: RLS es por fila, no por columna.
+7. ~~Planilla de movilidad como contenedor~~ — migración 026, con su base legal.
 
-### Features
+### Lo que falta, y qué desbloquea
 
-9. **Lector de constancias de pago** — suma planillas por banco hasta cubrir el
-   memo; mientras no lo cubra, «pagado en parte» con los nombres de quién falta.
-10. **Importar los 423 memos** por `threadId`, con su carpeta y sus fechas.
-11. **Importar las 9,470 líneas de rendición** históricas.
-12. **Generador del memo** en Word, con el nombre de archivo exacto.
-13. **Emisión del correo** como el solicitante (Gmail API).
-14. **Conexión viva con la hoja del MemoTracker.**
-15. **Publicar el estado de rendición** para que Franco lo jale.
-16. **Pestaña de notas de crédito** en la hoja de SUNAT — Franco la pidió y las
-    273 ya están calzadas.
-17. **Validar la fecha del comprobante contra el tramo de la persona**, no
-    contra el del memo.
-18. **Alerta de tarifa excedida** contra la tabla de proveedores.
-19. **Tope diario de movilidad** como parámetro configurable.
-20. **Mostrar el total rendido y, aparte, lo que da crédito fiscal.**
+**Lo primero de todo, y no estaba en esta lista:**
+
+0. **La solicitud no existe en la aplicación.** El flujo empieza cuando el
+   personal le pide a su jefatura y la jefatura lo comunica para que se
+   apruebe (§3). Nada de eso está: `crear_memo` lo pueden solo ADMIN_MEMOS y
+   ADMIN_SISTEMA, no hay estado anterior a `BORRADOR`, y no hay una sola
+   línea de correo en el repositorio. Un jefe de área hoy entra a la
+   aplicación y **no tiene dónde pedir nada**. Lo único que sí existe es la
+   *excepción*: `autorizaciones_memo`, el visto bueno para abrirle plata a
+   quien no rindió, y ese sí está conectado de punta a punta.
+
+Lo demás, ordenado por lo que desbloquea:
+
+8. **Lector de constancias de pago** — suma planillas por banco hasta cubrir
+   el memo.
+9. **Generador del memo** en Word, con el nombre de archivo exacto. Va con las
+   51 cuentas bancarias, que sin esto no tienen para qué estar cargadas.
+10. **Emisión del correo** como el solicitante (Gmail API) — es la otra mitad
+    del punto 0.
+11. **Conexión viva con la hoja del MemoTracker** y **publicar el estado de
+    rendición** para que Franco lo jale.
+12. **Pestaña de notas de crédito** en la hoja de SUNAT — Franco la pidió, las
+    273 ya están calzadas y es lo único entregable antes de la reunión.
+13. **Validar la fecha del comprobante contra el tramo de la persona**, no
+    contra el del memo. Ya se puede: las fechas por persona están cargadas.
+    Verificado que hoy `validaciones.ts` no lo hace.
+14. **Tabla de proveedores** con la tarifa por zona y servicio (hospedaje
+    S/ 70, pasaje terrestre S/ 15) y su **alerta de tarifa excedida**.
+15. **Importar las 9,470 líneas de rendición** históricas.
+16. **Fase 2 del import**: los 125 memos de hospedaje y caja chica.
+17. **Tope diario de movilidad** — el parámetro existe; falta el número, que
+    lo debe Contabilidad.
+18. **Mostrar el total rendido y, aparte, lo que da crédito fiscal.**
+19. **Conseguir un reembolso real** — es el último tipo sin verificar.
 
 ### Deuda conocida, anterior a todo esto
 
 - **Detracción en NULL** en las 13,095 filas de SUNAT.
 - Tipos 50 / 53 / 54 sin nombre en la hoja publicada.
 - RUCs de consorcio: bloquean 3 de los 8 CECOs activos.
-- **Forzar cambio de contraseña a los 98 usuarios** que comparten la del piloto.
+- **Forzar cambio de contraseña a los usuarios** que comparten la del piloto.
+- Limpiar los 5 memos de prueba y validar `memos_caja_chica_tiene_caja`.
 - Error de lint preexistente en `components/ApiKeyConfig.tsx`.
 
 ---
@@ -462,3 +474,106 @@ Ordenados por lo que desbloquean, no por tamaño.
 | Entrevistas con Rosa, Carolina y David | El As Is |
 | Reunión con Franco | MemoTracker, InroPay y el resto de sus automatizaciones |
 | Sesión de pizarra con jefatura | Los cinco tipos y el circuito de aprobación |
+
+---
+
+## 14. La carga histórica, y lo que enseñó
+
+Ejecutada el 16/09/2026 sobre la base real, por el canal administrativo de
+Supabase —no por la aplicación—, porque es una carga de historia y no el
+camino normal de nadie. Salta RLS a propósito y queda anotado acá.
+
+| | Antes | Después |
+|---|---|---|
+| Usuarios | 99 | **157** (124 activos, 33 cesados, 58 sin login) |
+| Memos de viáticos | 0 | **199** · S/ 284,107.00 |
+| Filas de anexo | 5 (prueba) | **486** |
+
+Las fechas van del 02/06/2026 al 22/09/2026. Tres memos quedaron sin fechas
+porque el seguimiento no las trae.
+
+### La prueba que importaba
+
+El memo 594-2026 existe en Word, con su anexo de once personas. La base lo
+reconstruyó sola desde el seguimiento: 4 × 212 + 6 × 1,164 + 1 × 1,232 =
+**S/ 9,064**, el mismo número del papel, persona por persona. No es un total
+que cuadra por casualidad: es la misma gente con el mismo monto.
+
+### Por qué el anexo no era un lujo
+
+Con los datos cargados, el control de vencidos cambia de tamaño:
+
+| Persona | Le corresponde | Total de los memos |
+|---|---|---|
+| Jhonn Rivera Vallenas | S/ 2,978 | S/ 12,597 |
+| Jose Luis Idone | S/ 2,597 | S/ 6,129 |
+
+Sin el anexo, la aplicación le reclamaría a Jhonn cuatro veces lo que debe,
+porque el memo es compartido y el monto del memo no es el monto de nadie.
+
+### Lo que no cuadra, y está bien que no cuadre
+
+Cuatro de los 199 no cierran, y los cuatro por el origen:
+
+- **332-2026** (S/ 98) y **354-2026** (S/ 649) — su única fila de anexo
+  viene sin monto en la hoja.
+- **691-2026** (S/ 212) — dos personas, una sin monto.
+- **612-2026** (S/ 648) — dos filas de S/ 216. Falta un tercero: 3 × 216 = 648.
+
+`memo_cuadra()` los deja a la vista en vez de repartir el faltante o
+inventar una fila. Se completan desde la aplicación cuando alguien sepa el
+dato; adivinarlo sería peor que el hueco.
+
+### Anomalías del origen, cargadas tal cual
+
+- **591-2028** — error de tipeo en el año. Se carga como está escrito; lo
+  corrige quien lo emitió, no el cargador.
+- **667-2026-1** y **667-2026-2** — un memo partido en dos.
+- **546-2026** — la llegada antes de la salida, en el memo y en sus diez
+  filas de anexo. Las dos fechas quedan en null: violarían
+  `memo_asignados_tramo_coherente`, y una fecha imposible no es un dato.
+- **«LINK DE CARPETA»** no es una URL sino el *nombre* de la carpeta
+  (`PM - Memo 311-2026 - GASTOS VIATICOS BARRANCA - Talleres Especializados`).
+  Por eso no entró a `drive_folder_id` — pero es exactamente el nombre que
+  tendrá que generar el memo en Word (#15).
+
+### Las cuentas bancarias y los cargos (16/09/2026)
+
+Cargados desde la misma hoja «4. Estados Contrato Personal Pa», ahora que el
+generador del memo los necesita.
+
+| | Resultado |
+|---|---|
+| Cuentas en `datos_bancarios` | **69** de 85 intentadas · 60 con CCI |
+| Bancos | BCP, BBVA, Interbank, Scotiabank y Falabella |
+| Personas con cargo | **96** |
+
+Las 16 que no entraron son gente que figura en la hoja de contratos pero
+nunca apareció en un memo, así que no existe como usuario. No es un error:
+se crearán cuando tengan un memo.
+
+**Tres cosas que aparecieron al limpiar el origen, y que valen más que la
+carga misma:**
+
+1. **Un CCI está en dos personas.** El `01117400020131877401` figura tanto en
+   Benjamín Chavarría (BBVA) como en Luis Felipe Neciosup (Interbank). Los
+   tres primeros dígitos del CCI son el código del banco en el sistema de
+   pagos, y `011` es BBVA: el CCI es de Chavarría y Neciosup lo tiene por un
+   copiado mal. Se cargó el de Chavarría y el de Neciosup quedó en null.
+   **Una transferencia con ese CCI le habría llegado a otra persona**, y
+   Neciosup es beneficiario del 594-2026 por S/ 1,164.00.
+   → Confirmar su CCI real con Contabilidad.
+2. **Una cuenta sin banco**: el DNI 72747927 tiene número de cuenta y la
+   columna del banco vacía. No se adivinó; esa fila no entró.
+3. **Basura de Excel** en los números de cuenta: colas «.0» de celdas
+   numéricas y un apóstrofe pegado delante. Se limpian en la carga.
+
+### Lo que falta de esta misma carga
+
+- **Fase 2**: los 125 memos de hospedaje y caja chica de la hoja
+  «2. Seguimiento Memos Annie». Necesitan que existan las cajas primero.
+- Limpiar los **5 memos de prueba** (S/ 1,000,000 · S/ 1,412,424 · S/ 0.00,
+  con el correlativo viejo `INROPRIN-2026-CCH-*`) y recién entonces
+  `validate constraint memos_caja_chica_tiene_caja`.
+- Tres personas tienen memo pero no contrato en la hoja 4, así que su anexo
+  quedó incompleto: DNI 71255046, 73938247 y 72921464.

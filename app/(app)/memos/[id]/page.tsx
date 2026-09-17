@@ -18,20 +18,26 @@ export default async function DetalleMemo({ params }: { params: Promise<{ id: st
   const { data: memo } = await sb
     .from("memos")
     .select(`
-      id, correlativo, estado, destino, monto_autorizado,
+      id, correlativo, tipo, estado, destino, monto_autorizado,
       fecha_salida, fecha_retorno_prev, observacion_actual,
+      padre:memos!memos_memo_referido_id_fkey ( id, correlativo ),
       centros_costo ( codigo, nombre, drive_folder ),
       empresas ( ruc, razon_social, abreviatura ),
-      memo_asignados ( usuario_id )
+      memo_asignados ( usuario_id, monto, fecha_desde, fecha_hasta, usuarios ( nombre ) ),
+      pagos ( id, banco, planilla, fecha, pago_lineas ( usuario_id, monto, procesada ) )
     `)
     .eq("id", id)
     .single();
 
   if (!memo) notFound();
 
-  const [{ data: gastos }, { data: filasParam }] = await Promise.all([
+  const [{ data: gastos }, { data: filasParam }, { data: devoluciones }] = await Promise.all([
     sb.from("gastos").select("*").eq("memo_id", id).order("creado_en", { ascending: false }),
     sb.from("parametros").select("clave, valor"),
+    sb.from("devoluciones")
+      .select("id, monto, operacion, fecha, nota")
+      .eq("memo_id", id).eq("usuario_id", solicitante.usuarioId)
+      .order("fecha"),
   ]);
 
   const centro = memo.centros_costo as unknown as
@@ -39,8 +45,15 @@ export default async function DetalleMemo({ params }: { params: Promise<{ id: st
   const empresa = memo.empresas as unknown as
     { ruc: string; razon_social: string; abreviatura: string } | null;
 
-  const esAsignado = (memo.memo_asignados ?? [])
-    .some((a: { usuario_id: string }) => a.usuario_id === solicitante.usuarioId);
+  // La fila del anexo de quien está mirando. Un memo de cuadrilla autoriza
+  // S/ 9,064.00 entre once personas: mostrarle ese número a cada una, con su
+  // propia rendición debajo, le dice que le sobran ocho mil soles.
+  const miFila = ((memo.memo_asignados ?? []) as Array<{
+    usuario_id: string; monto: number | null;
+    fecha_desde: string | null; fecha_hasta: string | null;
+  }>).find(a => a.usuario_id === solicitante.usuarioId) ?? null;
+
+  const esAsignado = miFila !== null;
 
   const puedeCapturar = esAsignado
     && autoriza(solicitante, "capturar_gasto").ok;
@@ -50,14 +63,27 @@ export default async function DetalleMemo({ params }: { params: Promise<{ id: st
       memo={{
         id: memo.id,
         correlativo: memo.correlativo,
+        tipo: memo.tipo,
         estado: memo.estado,
+        padre: memo.padre as unknown as { id: string; correlativo: string } | null,
         destino: memo.destino,
         monto_autorizado: Number(memo.monto_autorizado),
         fecha_salida: memo.fecha_salida,
         fecha_retorno_prev: memo.fecha_retorno_prev,
         observacion_actual: memo.observacion_actual,
         centro: memo.centros_costo as unknown as { codigo: string; nombre: string } | null,
+        cuadrilla: (memo.memo_asignados ?? []).length,
       }}
+      usuarioId={solicitante.usuarioId}
+      asignado={miFila && miFila.monto != null ? {
+        monto: Number(miFila.monto),
+        fecha_desde: miFila.fecha_desde,
+        fecha_hasta: miFila.fecha_hasta,
+      } : null}
+      devoluciones={(devoluciones ?? []).map(d => ({
+        id: d.id, monto: Number(d.monto), operacion: d.operacion,
+        fecha: d.fecha, nota: d.nota,
+      }))}
       memoCaptura={{
         id: memo.id,
         correlativo: memo.correlativo,
@@ -77,6 +103,23 @@ export default async function DetalleMemo({ params }: { params: Promise<{ id: st
       gastos={(gastos ?? []) as unknown as Gasto[]}
       parametros={leerParametros(filasParam)}
       puedeCapturar={puedeCapturar}
+      puedeAdministrar={autoriza(solicitante, "crear_memo").ok}
+      beneficiarios={((memo.memo_asignados ?? []) as unknown as Array<{
+        usuario_id: string; monto: number | null; usuarios: { nombre: string } | null;
+      }>).map(a => ({
+        usuarioId: a.usuario_id,
+        nombre: a.usuarios?.nombre ?? "—",
+        asignado: a.monto == null ? null : Number(a.monto),
+      }))}
+      constancias={((memo.pagos ?? []) as unknown as Array<{
+        id: string; banco: string; planilla: string | null; fecha: string | null;
+        pago_lineas: Array<{ usuario_id: string; monto: number; procesada: boolean }>;
+      }>).map(p => ({
+        id: p.id, banco: p.banco, planilla: p.planilla, fecha: p.fecha,
+        lineas: (p.pago_lineas ?? []).map(l => ({
+          usuarioId: l.usuario_id, monto: Number(l.monto), procesada: l.procesada,
+        })),
+      }))}
     />
   );
 }

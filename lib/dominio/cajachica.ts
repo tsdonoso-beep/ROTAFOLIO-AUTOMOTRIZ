@@ -121,3 +121,95 @@ function tieneBloqueante(alertas: Alerta[] | null | undefined): boolean {
 function redondear(n: number): number {
   return Math.round(n * 100) / 100;
 }
+
+// ════════════════════════════════════════════════════════════════
+// El fondo y sus ciclos
+// ════════════════════════════════════════════════════════════════
+//
+// Lo de arriba es cómo se rinde una caja. Esto es la caja misma.
+//
+// Un memo de viáticos nace, se rinde y se cierra. Un fondo de caja chica no:
+// cuando se agota, se rinde lo gastado y se vuelve a depositar el mismo
+// fondo. En el seguimiento de Control de Gestión hay 175 de esos ciclos
+// entre 2025 y 2026, repartidos entre seis administradores de caja.
+//
+// Y no es mensual, como se dijo en la sesión de trabajo. Los seis ciclos de
+// Gestión de Proyectos se repusieron cada 8 a 12 días: el 11 y el 23 de
+// julio, el 4, el 13 y el 25 de agosto, y el 3 de setiembre.
+
+export interface CicloDeCaja {
+  id: string;
+  correlativo: string;
+  ciclo: string | null;
+  estado: string;
+  monto: number;
+  rendido: number;
+  fecha: string | null;
+}
+
+export interface EstadoDeLaCaja {
+  /** El ciclo vivo, si hay uno. Solo puede haber uno a la vez. */
+  abierto: CicloDeCaja | null;
+  cerrados: CicloDeCaja[];
+  /** Cuánto se ha repuesto en total a lo largo de la vida del fondo. */
+  repuestoTotal: number;
+  /** Lo que queda del ciclo abierto. Sin ciclo abierto, cero. */
+  saldo: number;
+  /**
+   * Cada cuántos días se repone, en promedio. Null con menos de dos ciclos:
+   * con uno solo no hay intervalo que medir.
+   */
+  cadenciaDias: number | null;
+}
+
+const redondear2 = (n: number) => Math.round(n * 100) / 100;
+
+const CICLO_VIVO = ["ABIERTO", "EN_RENDICION", "PRESENTADA", "OBSERVADA"];
+
+export function estadoDeLaCaja(ciclos: CicloDeCaja[]): EstadoDeLaCaja {
+  const abierto = ciclos.find(c => CICLO_VIVO.includes(c.estado)) ?? null;
+  const cerrados = ciclos.filter(c => c !== abierto);
+
+  const fechas = ciclos
+    .map(c => c.fecha)
+    .filter((f): f is string => !!f)
+    .sort();
+
+  let cadencia: number | null = null;
+  if (fechas.length >= 2) {
+    const dias = Date.parse(fechas[fechas.length - 1]) - Date.parse(fechas[0]);
+    cadencia = Math.round(dias / 86_400_000 / (fechas.length - 1));
+  }
+
+  return {
+    abierto,
+    cerrados,
+    repuestoTotal: redondear2(ciclos.reduce((s, c) => s + c.monto, 0)),
+    saldo: abierto ? redondear2(abierto.monto - abierto.rendido) : 0,
+    cadenciaDias: cadencia,
+  };
+}
+
+/**
+ * El número del ciclo que sigue.
+ *
+ * Hay dos numeraciones dando vueltas sin reconciliar: el memo 194-2026
+ * escribe «CAJA CHICA N° 36» y el seguimiento usa 001-2025, 002-2025… Acá se
+ * continúa la del último ciclo si se puede leer un número, y si no se empieza
+ * en 1. Es una etiqueta, no un orden: quien ordena de verdad es la cadena de
+ * memo_referido_id.
+ */
+export function siguienteCiclo(ultimo: string | null, anio: number): string {
+  if (!ultimo) return `001-${anio}`;
+
+  const m = ultimo.match(/(\d+)/);
+  if (!m) return `001-${anio}`;
+
+  const n = Number(m[1]) + 1;
+  // Se conserva la forma del anterior: si venía «036», sale «037»; si venía
+  // «001-2025», sale «002-2026» con el año que corre.
+  const conAnio = /\d+\s*-\s*\d{4}/.test(ultimo);
+  const ancho = m[1].length;
+  const num = String(n).padStart(ancho, "0");
+  return conAnio ? `${num}-${anio}` : num;
+}

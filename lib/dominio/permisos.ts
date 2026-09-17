@@ -10,6 +10,8 @@ export type Accion =
   | "ver_memos_propios"
   | "ver_memos_ajenos"
   | "crear_memo"
+  | "solicitar_memo"
+  | "responder_solicitud"
   | "asignar_persona"
   | "capturar_gasto"
   | "editar_gasto_no_presentado"
@@ -41,6 +43,18 @@ const MATRIZ: Record<Accion, Partial<Record<Rol, Alcance>>> = {
   },
   crear_memo: {
     ADMIN_MEMOS: "si", ADMIN_SISTEMA: "si",
+  },
+  // Pedir un memo lo puede hacer cualquiera: ese es justamente el punto.
+  // Hasta ahora el proceso empezaba en Administración, y el pedido vivía en
+  // una conversación que no dejaba rastro.
+  solicitar_memo: {
+    RENDIDOR: "si", ADMIN_MEMOS: "si", REVISOR_COSTOS: "si",
+    CONTABILIDAD: "si", JEFATURA: "si", ADMIN_SISTEMA: "si",
+  },
+  // Firmar el pedido. Quién exactamente lo decide `puedeResponder`: tener el
+  // rol no basta, hay que ser la jefatura a la que se le pidió.
+  responder_solicitud: {
+    JEFATURA: "area", ADMIN_SISTEMA: "si",
   },
   asignar_persona: {
     ADMIN_MEMOS: "si", ADMIN_SISTEMA: "si",

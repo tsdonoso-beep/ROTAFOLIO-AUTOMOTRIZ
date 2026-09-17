@@ -25,6 +25,13 @@ export const SECCIONES: Seccion[] = [
     resumen: "Tus rendiciones abiertas y los comprobantes que llevas cargados",
   },
   {
+    clave: "solicitudes",
+    etiqueta: "Pedidos",
+    ruta: "/solicitudes",
+    requiere: "solicitar_memo",
+    resumen: "Pedir un memo y seguir el visto bueno de la jefatura",
+  },
+  {
     clave: "administrar",
     etiqueta: "Administrar",
     ruta: "/administrar",
@@ -53,11 +60,27 @@ export const SECCIONES: Seccion[] = [
     resumen: "Saldos por persona a lo largo de todos sus memos, para pasar a pago",
   },
   {
+    clave: "caja",
+    etiqueta: "Caja chica",
+    ruta: "/caja",
+    requiere: "ver_memos_propios",
+    resumen: "Los fondos, su saldo y los ciclos con que se van reponiendo",
+  },
+  {
+    clave: "movilidad",
+    etiqueta: "Movilidad",
+    ruta: "/movilidad",
+    // La llena quien se desplaza, así que se rige por el mismo permiso que
+    // capturar un gasto: es un gasto, solo que con su propio formulario.
+    requiere: "capturar_gasto",
+    resumen: "Planillas del talonario, con una fila por desplazamiento y la firma de la jefatura",
+  },
+  {
     clave: "tablero",
-    etiqueta: "Tablero",
+    etiqueta: "Firmas",
     ruta: "/tablero",
     requiere: "autorizar_apertura_con_pendientes",
-    resumen: "Pendientes de tu área y autorizaciones de excepción",
+    resumen: "Lo que espera tu firma, y quién de tu equipo tiene memos sin cerrar",
   },
   {
     clave: "sistema",

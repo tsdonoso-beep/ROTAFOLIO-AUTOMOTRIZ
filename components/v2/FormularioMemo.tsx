@@ -3,39 +3,63 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Aviso, Tarjeta } from "./Encabezado";
-import { IconoAlerta, IconoAtras, IconoCheck } from "./Iconos";
+import { IconoAlerta, IconoAtras } from "./Iconos";
 import { crearMemo, revisarPendientes, type PendientesDeAsignado } from "@/app/acciones/memos";
+import { revisarAnexo, tramos } from "@/lib/dominio/anexo";
+import SelectorDePersonas from "./SelectorDePersonas";
+import type { Cuadrilla } from "@/lib/dominio/personas";
 
 interface Props {
   centros: Array<{ id: string; codigo: string; nombre: string }>;
-  personas: Array<{ id: string; nombre: string; dni: string; email: string | null }>;
+  personas: Array<{
+    id: string; nombre: string; dni: string; email: string | null;
+    cargo?: string | null; area?: string | null;
+  }>;
+  /** Las cuadrillas de memos recientes, para copiarlas en vez de teclearlas. */
+  cuadrillas?: Cuadrilla[];
+  /** Viáticos vivos a los que puede colgarse un memo de pasajes. */
+  padres?: Array<{ id: string; correlativo: string; destino: string | null }>;
   puedeAutorizarPendientes: boolean;
 }
 
+// Los cinco que existen, en el orden en que ocurren. Hospedaje va primero
+// porque es el más frecuente: 65 de los 125 memos del seguimiento.
 const TIPOS = [
-  { valor: "CAJA_CHICA", etiqueta: "Caja chica" },
+  { valor: "HOSPEDAJE", etiqueta: "Hospedaje" },
   { valor: "VIATICOS", etiqueta: "Viáticos" },
+  { valor: "CAJA_CHICA", etiqueta: "Caja chica" },
   { valor: "PASAJES", etiqueta: "Pasajes" },
+  { valor: "REEMBOLSO", etiqueta: "Reembolso" },
   { valor: "OTRO", etiqueta: "Otro" },
 ];
+
+const soles = (n: number) =>
+  n.toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+interface Fila { monto: string; desde: string; hasta: string }
 
 const hoy = () => new Date().toISOString().slice(0, 10);
 const enDias = (n: number) =>
   new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
 
-export default function FormularioMemo({ centros, personas, puedeAutorizarPendientes }: Props) {
+const porOmision = (): Fila => ({ monto: "", desde: hoy(), hasta: enDias(7) });
+
+export default function FormularioMemo({
+  centros, personas, padres = [], cuadrillas = [], puedeAutorizarPendientes,
+}: Props) {
   const router = useRouter();
   const [pendiente, iniciar] = useTransition();
   const [error, setError] = useState("");
 
-  const [tipo, setTipo] = useState("CAJA_CHICA");
+  const [tipo, setTipo] = useState("HOSPEDAJE");
   const [centro, setCentro] = useState(centros[0]?.id ?? "");
   const [asignados, setAsignados] = useState<string[]>([]);
   const [destino, setDestino] = useState("");
-  const [salida, setSalida] = useState(hoy());
-  const [retorno, setRetorno] = useState(enDias(7));
-  const [monto, setMonto] = useState("");
+  // Lo que le toca a cada quien. La clave es el id de la persona, así que
+  // deseleccionarla y volver a marcarla no le pierde lo ya escrito.
+  const [filas, setFilas] = useState<Record<string, Fila>>({});
   const [autorizar, setAutorizar] = useState(false);
+  const [padre, setPadre] = useState("");
   const [listoConAviso, setListoConAviso] = useState("");
 
   // La respuesta se guarda junto con la selección que la produjo. Así el
@@ -65,18 +89,47 @@ export default function FormularioMemo({ centros, personas, puedeAutorizarPendie
   // el botón no se traba —trabarlo dejaría a Administración sin salida—.
   const iraAJefatura = bloquean.length > 0 && !(puedeAutorizarPendientes && autorizar);
 
-  const listo = centro && asignados.length > 0 && Number(monto) > 0;
+  // El anexo se revisa con la misma función que usa el servidor, así que el
+  // formulario no puede permitir algo que la acción vaya a rechazar.
+  const deAnexo = asignados.map(id => {
+    const f = filas[id] ?? porOmision();
+    return {
+      usuarioId: id,
+      nombre: personas.find(p => p.id === id)?.nombre ?? "esa persona",
+      monto: f.monto === "" ? null : Number(f.monto),
+      fechaDesde: f.desde || null,
+      fechaHasta: f.hasta || null,
+    };
+  });
+  const anexo = revisarAnexo(deAnexo);
+  const grupos = tramos(deAnexo);
 
-  const alternar = (id: string) =>
-    setAsignados(a => a.includes(id) ? a.filter(x => x !== id) : [...a, id]);
+  const listo = Boolean(centro) && anexo.reparos.length === 0;
+
+  const editar = (id: string, campo: keyof Fila, valor: string) =>
+    setFilas(f => ({ ...f, [id]: { ...(f[id] ?? porOmision()), [campo]: valor } }));
+
+  // El 594-2026 tiene cuatro personas con el mismo monto y el mismo tramo.
+  // Copiar la primera fila al resto evita teclear once veces lo mismo.
+  const copiarATodos = () => {
+    const primera = filas[asignados[0]] ?? porOmision();
+    setFilas(f => {
+      const n = { ...f };
+      for (const id of asignados) n[id] = { ...primera };
+      return n;
+    });
+  };
 
   const enviar = (abrir: boolean) => {
     setError("");
     iniciar(async () => {
       const r = await crearMemo({
-        tipo, centro_costo_id: centro, asignados, destino,
-        fecha_salida: salida, fecha_retorno_prev: retorno,
-        monto_autorizado: Number(monto), abrir,
+        tipo, centro_costo_id: centro, destino, abrir,
+        memo_referido_id: tipo === "PASAJES" ? (padre || null) : null,
+        asignados: deAnexo.map(f => ({
+          usuario_id: f.usuarioId, nombre: f.nombre, monto: f.monto,
+          fecha_desde: f.fechaDesde, fecha_hasta: f.fechaHasta,
+        })),
         autorizar_pendientes: autorizar,
       });
       if (!r.ok) { setError(r.error); return; }
@@ -169,42 +222,40 @@ export default function FormularioMemo({ centros, personas, puedeAutorizarPendie
           <p style={{ marginTop: 6, fontSize: 11, color: "var(--text3)", lineHeight: 1.45 }}>
             Sale del catálogo. El rendidor ya no lo escribe a mano.
           </p>
+
+          {/* Un memo de pasajes es hijo de un viático: se emite con la fecha
+              de ida y se completa después con la de vuelta, porque al abrirlo
+              nadie sabe cuándo termina la obra. */}
+          {tipo === "PASAJES" && (
+            <div style={{ marginTop: 16 }}>
+              <label className="fg-label">Viático del que depende</label>
+              <select className="fg-input" value={padre}
+                onChange={e => setPadre(e.target.value)}>
+                <option value="">— sin memo padre —</option>
+                {padres.map(m => (
+                  <option key={m.id} value={m.id}>
+                    {m.correlativo}{m.destino ? ` — ${m.destino}` : ""}
+                  </option>
+                ))}
+              </select>
+              <p style={{ marginTop: 6, fontSize: 11, color: "var(--text3)", lineHeight: 1.45 }}>
+                Sin padre, el pasaje queda como un gasto suelto que nadie sabe
+                a qué viaje pertenece. La fecha de retorno se completa después,
+                cuando se sepa.
+              </p>
+            </div>
+          )}
         </Tarjeta>
 
         <Tarjeta>
-          <label className="fg-label">¿Quién rinde?</label>
-          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-            {personas.map(p => {
-              const activo = asignados.includes(p.id);
-              return (
-                <button key={p.id} onClick={() => alternar(p.id)} style={{
-                  display: "flex", alignItems: "center", gap: 11, padding: "10px 13px",
-                  borderRadius: 10, cursor: "pointer", textAlign: "left",
-                  border: `1px solid ${activo ? "var(--accent)" : "var(--border2)"}`,
-                  background: activo ? "rgba(0,162,152,0.05)" : "#FFFFFF",
-                }}>
-                  <span style={{
-                    width: 20, height: 20, borderRadius: 5, flexShrink: 0,
-                    border: `1px solid ${activo ? "var(--accent)" : "var(--border2)"}`,
-                    background: activo ? "var(--accent)" : "#FFFFFF",
-                    color: "#FFFFFF", fontSize: 12,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                  }}>
-                    {activo && <IconoCheck size={13} />}
-                  </span>
-                  <span style={{ flex: 1 }}>
-                    <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)", display: "block" }}>
-                      {p.nombre}
-                    </span>
-                    <span style={{ fontSize: 11, color: "var(--text3)" }}>
-                      <span className="mono">{p.dni}</span>
-                      {p.email && ` · ${p.email}`}
-                    </span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          <SelectorDePersonas
+            rotulo="¿Quién rinde?"
+            personas={personas}
+            elegidas={asignados}
+            onCambio={setAsignados}
+            cuadrillas={cuadrillas}
+            centroCostoId={centro}
+          />
         </Tarjeta>
 
         {pendientes.length > 0 && (
@@ -237,38 +288,124 @@ export default function FormularioMemo({ centros, personas, puedeAutorizarPendie
           </Aviso>
         )}
 
-        <Tarjeta>
-          <label className="fg-label">Monto autorizado (S/)</label>
-          <input
-            className="fg-input" type="number" inputMode="decimal" step="0.01" min="0"
-            value={monto} onChange={e => setMonto(e.target.value)} placeholder="2000.00"
-            style={{ fontSize: 17, fontWeight: 700, fontFamily: "var(--font-sora), sans-serif" }}
-          />
-          <p style={{ marginTop: 6, fontSize: 11, color: "var(--text3)", lineHeight: 1.45 }}>
-            Con esto la app calcula saldo, devolución y exceso, y avisa si la rendición
-            se pasa.
-          </p>
-
-          <div style={{ marginTop: 16 }}>
-            <label className="fg-label">Destino</label>
-            <input className="fg-input" value={destino} onChange={e => setDestino(e.target.value)}
-              placeholder="Ej: Colegio Billinghurst — Puno" />
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 11, marginTop: 16 }}>
-            <div>
-              <label className="fg-label">Salida</label>
-              <input className="fg-input" type="date" value={salida} onChange={e => setSalida(e.target.value)} />
+        {asignados.length > 0 && (
+          <Tarjeta>
+            <div style={{
+              display: "flex", alignItems: "baseline",
+              justifyContent: "space-between", marginBottom: 4,
+            }}>
+              <label className="fg-label" style={{ marginBottom: 0 }}>
+                Anexo — qué le toca a cada quien
+              </label>
+              {asignados.length > 1 && (
+                <button onClick={copiarATodos} style={{
+                  background: "none", border: "none", cursor: "pointer", padding: 0,
+                  fontSize: 11.5, color: "var(--accent)", fontWeight: 600,
+                  fontFamily: "var(--font-sora), sans-serif",
+                }}>
+                  Copiar la primera a todos
+                </button>
+              )}
             </div>
-            <div>
-              <label className="fg-label">Retorno previsto</label>
-              <input className="fg-input" type="date" value={retorno} onChange={e => setRetorno(e.target.value)} />
+            <p style={{ fontSize: 11, color: "var(--text3)", lineHeight: 1.45, marginBottom: 12 }}>
+              Un mismo memo puede darle S/ 212.00 y dos días a una persona y
+              S/ 1,164.00 y once a otra. El total del memo sale de sumar esto.
+            </p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+              {asignados.map(id => {
+                const p = personas.find(x => x.id === id);
+                const f = filas[id] ?? porOmision();
+                return (
+                  <div key={id} style={{
+                    border: "1px solid var(--border2)", borderRadius: 10, padding: "11px 12px",
+                  }}>
+                    <div style={{
+                      display: "flex", justifyContent: "space-between",
+                      alignItems: "baseline", marginBottom: 8,
+                    }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
+                        {p?.nombre}
+                      </span>
+                      <span className="mono" style={{ fontSize: 10.5, color: "var(--text3)" }}>
+                        {p?.dni}
+                      </span>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                      <div>
+                        <label className="fg-label" style={{ fontSize: 10.5 }}>Monto S/</label>
+                        <input className="fg-input" type="number" inputMode="decimal"
+                          step="0.01" min="0" placeholder="212.00" value={f.monto}
+                          onChange={e => editar(id, "monto", e.target.value)}
+                          style={{ fontWeight: 700 }} />
+                      </div>
+                      <div>
+                        <label className="fg-label" style={{ fontSize: 10.5 }}>Desde</label>
+                        <input className="fg-input" type="date" value={f.desde}
+                          onChange={e => editar(id, "desde", e.target.value)} />
+                      </div>
+                      <div>
+                        <label className="fg-label" style={{ fontSize: 10.5 }}>Hasta</label>
+                        <input className="fg-input" type="date" value={f.hasta}
+                          onChange={e => editar(id, "hasta", e.target.value)} />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          </div>
-          <p style={{ marginTop: 6, fontSize: 11, color: "var(--text3)", lineHeight: 1.45 }}>
-            Un comprobante fechado fuera de este rango genera una alerta.
-          </p>
-        </Tarjeta>
+
+            {/* El total no se teclea: se suma. Un total escrito a mano puede
+                contradecir a su propio anexo, y eso pasa en los memos reales. */}
+            <div style={{
+              display: "flex", justifyContent: "space-between", alignItems: "baseline",
+              marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--border2)",
+            }}>
+              <span style={{ fontSize: 12.5, color: "var(--text2)" }}>
+                Monto autorizado del memo
+              </span>
+              <span className="font-display" style={{
+                fontSize: 19, fontWeight: 800, color: "var(--text)",
+                letterSpacing: "-0.02em",
+              }}>
+                S/ {soles(anexo.total)}
+              </span>
+            </div>
+
+            {grupos.length > 1 && (
+              <p style={{ fontSize: 11, color: "var(--text3)", lineHeight: 1.5, marginTop: 8 }}>
+                {grupos.length} tramos distintos:{" "}
+                {grupos.map((g, i) => (
+                  <span key={i}>
+                    {i > 0 && " · "}
+                    {g.personas} {g.personas === 1 ? "persona" : "personas"}
+                    {g.montoCadaUno != null && ` a S/ ${soles(g.montoCadaUno)}`}
+                  </span>
+                ))}
+              </p>
+            )}
+
+            <div style={{ marginTop: 16 }}>
+              <label className="fg-label">Destino</label>
+              <input className="fg-input" value={destino} onChange={e => setDestino(e.target.value)}
+                placeholder="Ej: Colegio Billinghurst — Puno" />
+            </div>
+
+            {anexo.desde && (
+              <p style={{ fontSize: 11, color: "var(--text3)", lineHeight: 1.45, marginTop: 10 }}>
+                La cabecera del memo va del {anexo.desde} al {anexo.hasta}: abarca a
+                todos. Cada comprobante se valida contra el tramo de su dueño, no
+                contra este.
+              </p>
+            )}
+          </Tarjeta>
+        )}
+
+        {anexo.reparos.length > 0 && asignados.length > 0 && (
+          <Aviso tono="aviso" icono={<IconoAlerta size={17} />}>
+            {anexo.reparos.join(" ")}
+          </Aviso>
+        )}
 
         {error && (
           <div style={{

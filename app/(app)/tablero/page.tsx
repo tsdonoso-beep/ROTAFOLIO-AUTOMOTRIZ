@@ -5,6 +5,8 @@ import { Encabezado, Tarjeta, Vacio, Cifra, soles } from "@/components/v2/Encabe
 import { consolidarEquipo, resumirEquipo, type MemoDeEquipo } from "@/lib/dominio/equipo";
 import { IconoTablero } from "@/components/v2/Iconos";
 import PanelAutorizaciones, { type SolicitudPendiente } from "@/components/v2/PanelAutorizaciones";
+import PanelFirmas from "@/components/v2/PanelFirmas";
+import type { EstadoSolicitud } from "@/lib/dominio/solicitud";
 
 interface MemoCrudo {
   id: string;
@@ -52,6 +54,32 @@ export default async function Tablero() {
     creadoEn: a.creado_en.slice(0, 10),
   }));
 
+  // Lo demás que espera su firma y que hasta ahora vivía en otras pantallas
+  // —o en ninguna—. La jefatura firma tres cosas distintas y las tres le
+  // frenan el trabajo a alguien; tenerlas en tres sitios es tenerlas en
+  // ninguno.
+  const [{ data: pedidos }, { data: planillas }] = await Promise.all([
+    sb.from("solicitudes_memo")
+      .select(`
+        id, tipo, estado, motivo, destino, monto_estimado,
+        fecha_desde, fecha_hasta, respuesta, creado_en, memo_id,
+        solicitante:usuarios!solicitudes_memo_solicitante_id_fkey ( id, nombre ),
+        jefe:usuarios!solicitudes_memo_jefatura_id_fkey ( id, nombre ),
+        solicitud_personas ( usuario_id, monto, usuarios ( nombre ) )
+      `)
+      .eq("estado", "PENDIENTE")
+      .order("creado_en", { ascending: true }),
+
+    sb.from("planillas_movilidad")
+      .select(`
+        id, numero, periodo, fecha_emision,
+        usuarios!planillas_movilidad_usuario_id_fkey ( nombre ),
+        gastos ( total )
+      `)
+      .is("autorizado_en", null)
+      .order("fecha_emision", { ascending: true, nullsFirst: false }),
+  ]);
+
   const { data } = await sb
     .from("memos")
     .select(`
@@ -82,6 +110,38 @@ export default async function Tablero() {
 
   return (
     <>
+      <PanelFirmas
+        yo={solicitante.usuarioId}
+        puedeEmitir={autoriza(solicitante, "crear_memo").ok}
+        pedidos={((pedidos ?? []) as unknown as PedidoCrudo[]).map(s => {
+          const quien = s.solicitante;
+          const jefe = s.jefe;
+          return {
+            id: s.id, tipo: s.tipo, estado: s.estado as EstadoSolicitud,
+            motivo: s.motivo, destino: s.destino,
+            monto: s.monto_estimado == null ? null : Number(s.monto_estimado),
+            desde: s.fecha_desde, hasta: s.fecha_hasta,
+            respuesta: s.respuesta, memoId: s.memo_id,
+            solicitanteId: quien?.id ?? "", solicitanteNombre: quien?.nombre ?? "—",
+            jefeId: jefe?.id ?? null, jefeNombre: jefe?.nombre ?? null,
+            personas: (s.solicitud_personas ?? []).map(p => ({
+              id: p.usuario_id,
+              nombre: p.usuarios?.nombre ?? "—",
+              monto: p.monto == null ? null : Number(p.monto),
+            })),
+          };
+        })}
+        planillas={((planillas ?? []) as unknown as PlanillaCruda[]).map(p => ({
+          id: p.id,
+          numero: p.numero,
+          periodo: p.periodo,
+          dueno: p.usuarios?.nombre ?? "—",
+          desplazamientos: (p.gastos ?? []).length,
+          total: Math.round((p.gastos ?? [])
+            .reduce((a, g) => a + Number(g.total ?? 0), 0) * 100) / 100,
+        }))}
+      />
+
       <Encabezado
         titulo={global ? "Pendientes de rendición" : "Mi equipo"}
         bajada={global
@@ -199,3 +259,20 @@ export default async function Tablero() {
     </>
   );
 }
+
+type PedidoCrudo = {
+  id: string; tipo: string; estado: string; motivo: string; destino: string | null;
+  monto_estimado: number | null; fecha_desde: string | null; fecha_hasta: string | null;
+  respuesta: string | null; memo_id: string | null;
+  solicitante: { id: string; nombre: string } | null;
+  jefe: { id: string; nombre: string } | null;
+  solicitud_personas: Array<{
+    usuario_id: string; monto: number | null; usuarios: { nombre: string } | null;
+  }>;
+};
+
+type PlanillaCruda = {
+  id: string; numero: string; periodo: string | null; fecha_emision: string | null;
+  usuarios: { nombre: string } | null;
+  gastos: Array<{ total: number | null }>;
+};

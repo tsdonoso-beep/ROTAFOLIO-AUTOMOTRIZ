@@ -35,6 +35,22 @@ export interface ContextoValidacion {
     fecha_retorno_prev: string | null;
     /** Suma de los demás gastos del memo, sin contar el que se valida. */
     rendido_previo: number;
+    /**
+     * Lo que le tocó a ESTA persona: su monto y su tramo, de la fila del
+     * anexo. Cuando está, manda sobre la cabecera del memo.
+     *
+     * La cabecera del 594-2026 va del 09 al 19 de agosto porque abarca a
+     * once personas, pero el tramo de Wilmer era del 09 al 10 y sus
+     * comprobantes son del 10, 11, 14 y 27. Medirlo contra la cabecera le
+     * da por buenos tres gastos que están fuera de su viaje. Y medir su
+     * gasto contra los S/ 9,064 del memo, cuando él recibió S/ 212, es no
+     * avisar nunca.
+     */
+    asignado?: {
+      monto: number | null;
+      fecha_desde: string | null;
+      fecha_hasta: string | null;
+    } | null;
   };
   /** Suma de declaraciones juradas del mismo día, sin contar la actual. */
   dj_del_dia?: number;
@@ -235,8 +251,16 @@ export function validarGasto(g: GastoAValidar, ctx: ContextoValidacion): Alerta[
   // ── Fecha dentro del rango del memo ───────────────────────────
   const emision = aFecha(g.fecha_emision);
   if (emision && ctx.memo) {
-    const salida = aFecha(ctx.memo.fecha_salida);
-    const retorno = aFecha(ctx.memo.fecha_retorno_prev);
+    // El tramo de la persona manda; la cabecera del memo es el respaldo
+    // para los memos viejos que no tienen anexo con fechas.
+    const a = ctx.memo.asignado;
+    const propio = Boolean(a?.fecha_desde || a?.fecha_hasta);
+
+    const desdeTexto = propio ? a!.fecha_desde : ctx.memo.fecha_salida;
+    const hastaTexto = propio ? a!.fecha_hasta : ctx.memo.fecha_retorno_prev;
+
+    const salida = aFecha(desdeTexto);
+    const retorno = aFecha(hastaTexto);
 
     const antes = salida && diasEntre(emision, salida) > TOLERANCIA_DIAS_FECHA;
     const despues = retorno && diasEntre(retorno, emision) > TOLERANCIA_DIAS_FECHA;
@@ -246,21 +270,29 @@ export function validarGasto(g: GastoAValidar, ctx: ContextoValidacion): Alerta[
         codigo: "FECHA_FUERA_RANGO",
         severidad: "media",
         campo: "fecha_emision",
-        mensaje: `La fecha del comprobante (${g.fecha_emision}) queda fuera del rango del memo${
-          salida && retorno ? ` (${ctx.memo.fecha_salida} a ${ctx.memo.fecha_retorno_prev})` : ""
-        }.`,
+        mensaje: `La fecha del comprobante (${g.fecha_emision}) queda fuera `
+          + `${propio ? "del tramo asignado a esta persona" : "del rango del memo"}`
+          + `${salida && retorno ? ` (${desdeTexto} a ${hastaTexto})` : ""}.`,
       });
     }
   }
 
   // ── Excede el monto autorizado ────────────────────────────────
   if (ctx.memo && total != null) {
+    // Contra lo que recibió esta persona, no contra el memo entero. Wilmer
+    // recibió S/ 212.00 de un memo de S/ 9,064.00: medirlo contra el memo
+    // es no avisarle nunca.
+    const suyo = ctx.memo.asignado?.monto;
+    const tope = suyo != null && suyo > 0 ? suyo : ctx.memo.monto_autorizado;
     const acumulado = ctx.memo.rendido_previo + total;
-    if (acumulado > ctx.memo.monto_autorizado) {
+
+    if (acumulado > tope) {
       alertas.push({
         codigo: "EXCEDE_AUTORIZADO",
         severidad: "alta",
-        mensaje: `Con este gasto lo rendido llega a ${acumulado.toFixed(2)} y supera el autorizado de ${ctx.memo.monto_autorizado.toFixed(2)}.`,
+        mensaje: `Con este gasto lo rendido llega a ${acumulado.toFixed(2)} y supera `
+          + `${suyo != null && suyo > 0 ? "lo asignado a esta persona" : "el autorizado"} `
+          + `de ${tope.toFixed(2)}.`,
       });
     }
   }

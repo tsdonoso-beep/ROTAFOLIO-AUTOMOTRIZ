@@ -4,6 +4,10 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Captura, { type MemoDisponible } from "./Captura";
 import GastoFila from "./GastoFila";
+import PanelDevolucion from "./PanelDevolucion";
+import RetornoDePasajes from "./RetornoDePasajes";
+import PanelConstancias from "./PanelConstancias";
+import type { Beneficiario, Constancia } from "@/lib/dominio/pago";
 import { Aviso, Cifra, EstadoMemo, Medidor, Tarjeta, Vacio, soles } from "./Encabezado";
 import {
   IconoAlerta, IconoAtras, IconoComentario, IconoComprobante, IconoCheck,
@@ -17,23 +21,54 @@ import type { EstadoGasto, EstadoMemo as TEstadoMemo, Gasto, Parametros } from "
 interface Props {
   memo: {
     id: string; correlativo: string; estado: TEstadoMemo; destino: string | null;
+    tipo?: string;
+    /** El viático del que cuelga este memo, si es de pasajes. */
+    padre?: { id: string; correlativo: string } | null;
     monto_autorizado: number; fecha_salida: string | null; fecha_retorno_prev: string | null;
     observacion_actual: string | null;
     centro: { codigo: string; nombre: string } | null;
+    /** Cuánta gente cubre el memo. Si es más de una, el memo no es de nadie solo. */
+    cuadrilla?: number;
   };
   gastos: Gasto[];
   parametros: Parametros;
   puedeCapturar: boolean;
+  puedeAdministrar?: boolean;
+  usuarioId?: string;
+  /** A quién cubre el memo, para cruzarlo contra lo que pagó el banco. */
+  beneficiarios?: Beneficiario[];
+  constancias?: Constancia[];
+  /** Lo que le tocó a quien mira: su monto y su tramo. */
+  asignado?: { monto: number; fecha_desde: string | null; fecha_hasta: string | null } | null;
+  devoluciones?: Array<{
+    id: string; monto: number; operacion: string | null;
+    fecha: string; nota: string | null;
+  }>;
   /** Este memo, en la forma que la captura necesita para validar y archivar. */
   memoCaptura: MemoDisponible;
 }
 
-export default function VistaMemo({ memo, gastos, parametros, puedeCapturar, memoCaptura }: Props) {
+export default function VistaMemo({
+  memo, gastos, parametros, puedeCapturar, memoCaptura,
+  puedeAdministrar = false, usuarioId, asignado = null, devoluciones = [],
+  beneficiarios = [], constancias = [],
+}: Props) {
   const router = useRouter();
   const [pendiente, iniciar] = useTransition();
   const [aviso, setAviso] = useState<{ tipo: "error" | "ok"; texto: string } | null>(null);
 
-  const c = useMemo(() => consolidar(Number(memo.monto_autorizado), gastos), [memo, gastos]);
+  // Contra lo que le tocó a esta persona, no contra el memo entero. En el
+  // 594-2026 son S/ 212.00 de S/ 9,064.00: con el número del memo, la
+  // pantalla le diría que le sobran ocho mil ochocientos soles.
+  const autorizado = asignado ? asignado.monto : Number(memo.monto_autorizado);
+  const c = useMemo(() => consolidar(autorizado, gastos), [autorizado, gastos]);
+
+  const devuelto = useMemo(
+    () => Math.round(devoluciones.reduce((s, d) => s + d.monto, 0) * 100) / 100,
+    [devoluciones]
+  );
+  // Lo que todavía falta que vuelva a la empresa.
+  const porDevolver = Math.round((c.devolucion - devuelto) * 100) / 100;
   const editable = MEMO_EDITABLE.includes(memo.estado);
   const impedimentos = useMemo(() => impedimentosParaPresentar(gastos), [gastos]);
   const excedido = c.rendido > c.autorizado;
@@ -144,12 +179,27 @@ export default function VistaMemo({ memo, gastos, parametros, puedeCapturar, mem
               de un monto autorizado, y acá no hay ninguno. */}
           {!c.sinAdelanto && <Medidor rendido={c.rendido} autorizado={c.autorizado} />}
 
+          {/* Un memo de cuadrilla autoriza un total que no es de nadie: lo
+              que cada quien debe rendir es su fila del anexo. */}
+          {asignado && (memo.cuadrilla ?? 1) > 1 && (
+            <p style={{ fontSize: 11, color: "var(--text3)", lineHeight: 1.45, marginTop: 10 }}>
+              Este memo cubre a {memo.cuadrilla} personas por {soles(Number(memo.monto_autorizado))}.
+              Lo de arriba es lo tuyo: {soles(asignado.monto)}
+              {asignado.fecha_desde && ` · del ${asignado.fecha_desde} al ${asignado.fecha_hasta}`}.
+            </p>
+          )}
+
           {c.cantidad_gastos > 0 && (
             <div style={{
               display: "flex", gap: 14, marginTop: 12, flexWrap: "wrap",
               fontSize: 12, color: "var(--text2)",
             }}>
               <span>{c.cantidad_gastos} comprobante{c.cantidad_gastos === 1 ? "" : "s"}</span>
+              {/* El formato de rendición lo pide aparte: «monto rendido (solo
+                  FT)». Una boleta es gasto deducible, pero no descuenta IGV. */}
+              <span title="Solo los comprobantes con IGV discriminado">
+                Crédito fiscal <strong style={{ color: "var(--text)" }}>{soles(c.credito_fiscal)}</strong>
+              </span>
               {c.con_alertas > 0 && (
                 <span style={{ color: "var(--warn)", fontWeight: 600 }}>
                   {c.con_alertas} con alerta
@@ -164,6 +214,53 @@ export default function VistaMemo({ memo, gastos, parametros, puedeCapturar, mem
           )}
         </div>
       </Tarjeta>
+
+      {/* ══ El retorno de un memo de pasajes ══ */}
+      {memo.tipo === "PASAJES" && (
+        <RetornoDePasajes
+          memoId={memo.id}
+          estado={memo.estado}
+          fechaSalida={memo.fecha_salida}
+          fechaRetorno={memo.fecha_retorno_prev}
+          padre={memo.padre ?? null}
+          puedeEditar={puedeAdministrar}
+        />
+      )}
+
+      {/* ══ El memo en Word ══ */}
+      {puedeAdministrar && (
+        <div style={{ marginBottom: 16 }}>
+          <a href={`/api/memo-word/${memo.id}`} className="btn-ghost"
+            style={{ textDecoration: "none", fontSize: 12.5 }}>
+            Descargar el memo en Word
+          </a>
+          {/* El nombre del adjunto es lo que lee el MemoTracker: en 341 de
+              422 memos el asunto del correo ni trae el número. */}
+          <p style={{ fontSize: 11, color: "var(--text3)", marginTop: 7, lineHeight: 1.45 }}>
+            Se genera con el anexo y el total sumado. El nombre del archivo es
+            el que el MemoTracker lee para reconocerlo.
+          </p>
+        </div>
+      )}
+
+      {/* ══ Lo que de verdad cobró cada quien ══ */}
+      <PanelConstancias
+        memoId={memo.id}
+        autorizado={Number(memo.monto_autorizado)}
+        beneficiarios={beneficiarios}
+        constancias={constancias}
+        puedeRegistrar={puedeAdministrar}
+      />
+
+      {/* ══ La devolución del saldo ══ */}
+      {usuarioId && (
+        <PanelDevolucion
+          memoId={memo.id}
+          usuarioId={usuarioId}
+          porDevolver={porDevolver}
+          devoluciones={devoluciones}
+        />
+      )}
 
       {/* ══ Observación del revisor ══ */}
       {memo.estado === "OBSERVADA" && memo.observacion_actual && (

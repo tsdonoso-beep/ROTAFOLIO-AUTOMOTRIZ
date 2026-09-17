@@ -354,3 +354,69 @@ describe("Ticket", () => {
     assert.ok(!hayBloqueantes(alertas), "pero sin impedir el registro");
   });
 });
+
+// ════════════════════════════════════════════════════════════════
+// El tramo y el monto son de la persona, no del memo
+// ════════════════════════════════════════════════════════════════
+//
+// El 594-2026 cubre a once personas del 09 al 19 de agosto y autoriza
+// S/ 9,064.00. Wilmer Zamora recibió S/ 212.00 por el tramo del 09 al 10, y
+// sus comprobantes son del 10, 11, 14 y 27 de agosto. Los del 11 y el 14
+// caen dentro de la cabecera del memo y fuera de su viaje: medirlo contra el
+// memo se los da por buenos. Y no le avisa nunca de un exceso.
+
+describe("el tramo y el monto son de la persona", () => {
+  const memo594 = {
+    monto_autorizado: 9064,
+    fecha_salida: "2026-08-09",
+    fecha_retorno_prev: "2026-08-19",
+    rendido_previo: 0,
+  };
+
+  const wilmer = { monto: 212, fecha_desde: "2026-08-09", fecha_hasta: "2026-08-10" };
+
+  const conMemo = (asignado?: unknown): ContextoValidacion => ({
+    parametros: params(),
+    memo: { ...memo594, ...(asignado !== undefined ? { asignado } : {}) } as ContextoValidacion["memo"],
+  });
+
+  const gasto = (fecha: string, total: number): GastoAValidar => ({
+    clase: "COMPROBANTE", fecha_emision: fecha, total,
+  });
+
+  it("el comprobante del 14 cae dentro del memo pero fuera del tramo de la persona", () => {
+    assert.ok(!codigos(gasto("2026-08-14", 50), conMemo()).includes("FECHA_FUERA_RANGO"));
+
+    const alertas = validarGasto(gasto("2026-08-14", 50), conMemo(wilmer));
+    const a = alertas.find(x => x.codigo === "FECHA_FUERA_RANGO");
+    assert.ok(a, "el 14 no está en el tramo del 09 al 10");
+    assert.ok(a!.mensaje.includes("tramo asignado a esta persona"));
+  });
+
+  it("dentro de su propio tramo no hay alerta", () => {
+    assert.ok(!codigos(gasto("2026-08-10", 50), conMemo(wilmer)).includes("FECHA_FUERA_RANGO"));
+  });
+
+  it("el exceso se mide contra lo que recibió esta persona", () => {
+    // Contra el memo entero, S/ 300 de S/ 9,064 no es exceso: nadie se entera.
+    assert.ok(!codigos(gasto("2026-08-10", 300), conMemo()).includes("EXCEDE_AUTORIZADO"));
+
+    const a = validarGasto(gasto("2026-08-10", 300), conMemo(wilmer))
+      .find(x => x.codigo === "EXCEDE_AUTORIZADO");
+    assert.ok(a, "contra sus S/ 212 sí lo es");
+    assert.ok(a!.mensaje.includes("lo asignado a esta persona"));
+    assert.ok(a!.mensaje.includes("212.00"));
+  });
+
+  it("sin anexo se sigue midiendo contra el memo: los memos viejos no lo tienen", () => {
+    const a = validarGasto(gasto("2026-08-10", 9999), conMemo(null))
+      .find(x => x.codigo === "EXCEDE_AUTORIZADO");
+    assert.ok(a);
+    assert.ok(a!.mensaje.includes("el autorizado"));
+  });
+
+  it("una fila de anexo sin monto no anula el control: cae al del memo", () => {
+    const vacia = { monto: null, fecha_desde: null, fecha_hasta: null };
+    assert.ok(codigos(gasto("2026-08-10", 9999), conMemo(vacia)).includes("EXCEDE_AUTORIZADO"));
+  });
+});

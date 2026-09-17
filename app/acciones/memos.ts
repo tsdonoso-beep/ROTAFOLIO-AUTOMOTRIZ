@@ -2,11 +2,12 @@
 import { revalidatePath } from "next/cache";
 import { clienteServidor, solicitanteActual } from "@/lib/supabase/servidor";
 import { autoriza } from "@/lib/dominio/permisos";
-import { GASTO_CUENTA_EN_TOTAL, MEMO_PENDIENTE, impedimentosParaPresentar, puedeEditarGasto, transicionMemoValida } from "@/lib/dominio/estados";
+import { GASTO_CUENTA_EN_TOTAL, MEMO_PENDIENTE, impedimentosParaPresentar, puedeEditarGasto, puedeFijarRetorno, transicionMemoValida } from "@/lib/dominio/estados";
 import { elegibleParaCaja, impedimentosParaRendirCaja, periodoDeCaja, resumirCaja } from "@/lib/dominio/cajachica";
 import { actualizarLegajo } from "./legajo";
 import { aQuienPreguntar } from "@/lib/dominio/autorizacion";
 import { evaluarBloqueoPorPendientes, explicarPendientes } from "@/lib/dominio/memo";
+import { revisarAnexo } from "@/lib/dominio/anexo";
 import { leerParametros } from "@/lib/dominio/parametros";
 import { validarGasto } from "@/lib/dominio/validaciones";
 import type { AccionEvento, EstadoGasto, EstadoMemo, Parametros } from "@/lib/dominio/tipos";
@@ -140,12 +141,25 @@ async function evaluarPendientes(
 export async function crearMemo(datos: {
   tipo: string;
   centro_costo_id: string;
-  asignados: string[];
+  /**
+   * El anexo. Cada fila trae lo suyo: un mismo memo le da S/ 212.00 y dos
+   * días a una persona y S/ 1,164.00 y once a otra.
+   */
+  asignados: Array<{
+    usuario_id: string;
+    nombre?: string;
+    monto: number | null;
+    fecha_desde: string | null;
+    fecha_hasta: string | null;
+  }>;
   destino: string;
-  fecha_salida: string;
-  fecha_retorno_prev: string;
-  monto_autorizado: number;
   abrir: boolean;
+  /**
+   * El memo del que este depende. Un memo de pasajes cuelga de su viático
+   * padre: los seis del MemoTracker lo hacen, y sin el enlace el pasaje es
+   * un gasto suelto que nadie sabe a qué viaje pertenece.
+   */
+  memo_referido_id?: string | null;
   /** Visto bueno de quien puede pasar por encima del bloqueo de §7.3. */
   autorizar_pendientes?: boolean;
 }): Promise<Resultado> {
@@ -155,11 +169,19 @@ export async function crearMemo(datos: {
   const permiso = autoriza(solicitante, "crear_memo");
   if (!permiso.ok) return { ok: false, error: permiso.motivo };
 
-  if (!datos.asignados.length) {
-    return { ok: false, error: "Asigna al menos una persona al memo." };
-  }
-  if (!(datos.monto_autorizado > 0)) {
-    return { ok: false, error: "El monto autorizado debe ser mayor que cero." };
+  // El anexo manda: el monto del memo es la suma de lo asignado, y las
+  // fechas de la cabecera abarcan a todos. Nada de esto se teclea aparte,
+  // porque un total escrito a mano puede contradecir a su propio anexo.
+  const anexo = revisarAnexo(datos.asignados.map(a => ({
+    usuarioId: a.usuario_id,
+    nombre: a.nombre ?? "esa persona",
+    monto: a.monto,
+    fechaDesde: a.fecha_desde,
+    fechaHasta: a.fecha_hasta,
+  })));
+
+  if (anexo.reparos.length) {
+    return { ok: false, error: anexo.reparos.join(" ") };
   }
 
   const sb = await clienteServidor();
@@ -170,7 +192,8 @@ export async function crearMemo(datos: {
   // solo advierte; en el piloto arranca apagado. La comprobación se hace
   // igual en el servidor: la advertencia que ve el formulario es una
   // cortesía, no el control.
-  const pendientes = await evaluarPendientes(sb, datos.asignados);
+  const idsAsignados = datos.asignados.map(a => a.usuario_id);
+  const pendientes = await evaluarPendientes(sb, idsAsignados);
   const bloqueantes = pendientes.filter(p => p.bloquea);
 
   // Quien puede autorizar, firma en el acto. Quien no, le pide el visto
@@ -222,7 +245,8 @@ export async function crearMemo(datos: {
   if (errSec) return { ok: false, error: `No se pudo generar el correlativo: ${errSec.message}` };
 
   const abreviaturaTipo: Record<string, string> = {
-    VIATICOS: "VIA", PASAJES: "PAS", CAJA_CHICA: "CCH", OTRO: "OTR",
+    VIATICOS: "VIA", PASAJES: "PAS", CAJA_CHICA: "CCH",
+    HOSPEDAJE: "HOS", REEMBOLSO: "REE", OTRO: "OTR",
   };
   const correlativo = `${abrev}-${anio}-${abreviaturaTipo[datos.tipo] ?? "OTR"}-${String(sec).padStart(5, "0")}`;
 
@@ -234,9 +258,10 @@ export async function crearMemo(datos: {
       empresa_id: cc.empresa_id,
       centro_costo_id: datos.centro_costo_id,
       destino: datos.destino || null,
-      fecha_salida: datos.fecha_salida || null,
-      fecha_retorno_prev: datos.fecha_retorno_prev || null,
-      monto_autorizado: datos.monto_autorizado,
+      fecha_salida: anexo.desde,
+      fecha_retorno_prev: anexo.hasta,
+      monto_autorizado: anexo.total,
+      memo_referido_id: datos.memo_referido_id || null,
       // Un memo a la espera del visto bueno nace en borrador aunque se
       // haya pedido abrirlo: todavía no es un compromiso de nadie.
       estado: datos.abrir && !esperaVistoBueno ? "ABIERTO" : "BORRADOR",
@@ -248,12 +273,18 @@ export async function crearMemo(datos: {
   if (error) return { ok: false, error: error.message };
 
   const { error: errAsig } = await sb.from("memo_asignados").insert(
-    datos.asignados.map(u => ({ memo_id: memo.id, usuario_id: u }))
+    datos.asignados.map(a => ({
+      memo_id: memo.id,
+      usuario_id: a.usuario_id,
+      monto: a.monto,
+      fecha_desde: a.fecha_desde,
+      fecha_hasta: a.fecha_hasta,
+    }))
   );
   if (errAsig) return { ok: false, error: errAsig.message };
 
   await registrarEvento(sb, "MEMO", memo.id, "CREAR", solicitante.usuarioId, null, {
-    correlativo, monto_autorizado: datos.monto_autorizado, asignados: datos.asignados,
+    correlativo, monto_autorizado: anexo.total, asignados: idsAsignados,
     // Si se abrió pese a rendiciones vencidas, queda escrito qué se pasó por
     // alto y quién lo autorizó. Es el rastro que va a pedir Auditoría.
     ...(pendientes.length ? { pendientes: pendientes.map(p => p.motivo) } : {}),
@@ -697,14 +728,42 @@ export async function editarGasto(gastoId: string, datos: DatosGasto): Promise<R
   const { data: filasParam } = await sb.from("parametros").select("clave, valor");
   const parametros: Parametros = leerParametros(filasParam);
 
+  // La fila del anexo de ESTA persona: su monto y su tramo. Es contra eso
+  // que se mide su rendición, no contra la cabecera del memo, que en el
+  // 594-2026 abarca a once personas y S/ 9,064.00.
+  let asignado: { monto: number | null; fecha_desde: string | null; fecha_hasta: string | null } | null = null;
+  if (memo && gasto.memo_id) {
+    const { data: fila } = await sb
+      .from("memo_asignados")
+      .select("monto, fecha_desde, fecha_hasta")
+      .eq("memo_id", gasto.memo_id)
+      .eq("usuario_id", gasto.usuario_id)
+      .maybeSingle();
+    if (fila) {
+      asignado = {
+        monto: fila.monto == null ? null : Number(fila.monto),
+        fecha_desde: fila.fecha_desde,
+        fecha_hasta: fila.fecha_hasta,
+      };
+    }
+  }
+
   // "Lo ya rendido sin contar este gasto": si este gasto todavía sumaba
   // al total (VALIDADO o CON_ALERTA), se descuenta para no contarlo dos
   // veces contra el monto autorizado.
+  //
+  // Cuando la persona tiene su propia asignación, se suman solo SUS gastos:
+  // compararlos con los de toda la cuadrilla contra su monto personal daría
+  // por excedida a la primera persona que rinda.
   let rendidoPrevio = 0;
   if (memo) {
-    const { data: otros } = await sb
+    let q = sb
       .from("gastos").select("estado, total")
       .eq("memo_id", gasto.memo_id).neq("id", gastoId);
+    if (asignado?.monto != null && asignado.monto > 0) {
+      q = q.eq("usuario_id", gasto.usuario_id);
+    }
+    const { data: otros } = await q;
     rendidoPrevio = (otros ?? [])
       .filter(g => GASTO_CUENTA_EN_TOTAL.includes(g.estado as EstadoGasto))
       .reduce((s, g) => s + Number(g.total ?? 0), 0);
@@ -732,6 +791,7 @@ export async function editarGasto(gastoId: string, datos: DatosGasto): Promise<R
         fecha_salida: memo.fecha_salida,
         fecha_retorno_prev: memo.fecha_retorno_prev,
         rendido_previo: rendidoPrevio,
+        asignado,
       } : undefined,
       duplicadoComprobante,
       duplicadoImagen: false,
@@ -883,4 +943,196 @@ export async function rendirCajaChica(datos: {
   revalidatePath("/memos/sin-asignar");
   revalidatePath("/revisar");
   return { ok: true, id: memoId as string };
+}
+
+// ════════════════════════════════════════════════════════════════
+// La devolución del saldo
+// ════════════════════════════════════════════════════════════════
+//
+// Cuando la rendición no llega al monto entregado, la diferencia vuelve a la
+// empresa: la persona transfiere desde su cuenta y manda la captura. Wilmer
+// Zamora devolvió S/ 10.20 con la operación 10394730. Hasta ahora eso vivía
+// en un WhatsApp, y el memo quedaba con un saldo pendiente ya pagado.
+
+export async function registrarDevolucion(datos: {
+  memoId: string;
+  usuarioId: string;
+  monto: number;
+  operacion: string;
+  fecha: string;
+  imagenUrl?: string | null;
+  nota?: string | null;
+}): Promise<Resultado> {
+  const solicitante = await solicitanteActual();
+  if (!solicitante) return { ok: false, error: "Sesión no válida." };
+
+  // Cada quien registra la suya; Administración puede hacerlo por otro
+  // porque muchas veces la captura le llega a ella.
+  const propia = datos.usuarioId === solicitante.usuarioId;
+  const administra =
+    autoriza(solicitante, "crear_memo").ok || autoriza(solicitante, "editar_catalogos").ok;
+  if (!propia && !administra) {
+    return { ok: false, error: "Solo puedes registrar tu propia devolución." };
+  }
+
+  if (!(datos.monto > 0)) {
+    return { ok: false, error: "El monto devuelto debe ser mayor que cero." };
+  }
+  if (!datos.fecha) {
+    return { ok: false, error: "Falta la fecha de la operación." };
+  }
+
+  const sb = await clienteServidor();
+
+  const { error } = await sb.from("devoluciones").insert({
+    memo_id: datos.memoId,
+    usuario_id: datos.usuarioId,
+    monto: datos.monto,
+    operacion: datos.operacion.trim() || null,
+    fecha: datos.fecha,
+    imagen_url: datos.imagenUrl || null,
+    nota: datos.nota?.trim() || null,
+    registrado_por: solicitante.usuarioId,
+  });
+
+  // El índice único sobre el número de operación es lo que impide sumar dos
+  // veces la misma transferencia. Se traduce, porque el mensaje de Postgres
+  // no le dice nada a quien está subiendo una captura.
+  if (error) {
+    if (error.code === "23505") {
+      return {
+        ok: false,
+        error: `La operación ${datos.operacion} ya está registrada. `
+          + "Si son dos transferencias distintas, revisa el número.",
+      };
+    }
+    return { ok: false, error: error.message };
+  }
+
+  await registrarEvento(sb, "MEMO", datos.memoId, "DEVOLVER", solicitante.usuarioId, null, {
+    usuario_id: datos.usuarioId,
+    monto: datos.monto,
+    operacion: datos.operacion,
+    fecha: datos.fecha,
+  });
+
+  revalidatePath(`/memos/${datos.memoId}`);
+  revalidatePath("/memos");
+  return { ok: true };
+}
+
+// ════════════════════════════════════════════════════════════════
+// La fecha de retorno de un memo de pasajes
+// ════════════════════════════════════════════════════════════════
+//
+// «Se emite con la fecha de ida y se actualiza después con la de retorno,
+// porque al abrirlo no se sabe cuándo vuelve la persona.» Es el único campo
+// del sistema que se edita después de aprobado, y queda en la bitácora
+// precisamente por eso.
+
+export async function fijarFechaRetorno(
+  memoId: string, fecha: string
+): Promise<Resultado> {
+  const solicitante = await solicitanteActual();
+  if (!solicitante) return { ok: false, error: "Sesión no válida." };
+
+  const permiso = autoriza(solicitante, "crear_memo");
+  if (!permiso.ok) return { ok: false, error: permiso.motivo };
+
+  if (!fecha) return { ok: false, error: "Falta la fecha de retorno." };
+
+  const sb = await clienteServidor();
+
+  const { data: memo } = await sb
+    .from("memos")
+    .select("id, tipo, estado, fecha_salida, fecha_retorno_prev")
+    .eq("id", memoId)
+    .single();
+  if (!memo) return { ok: false, error: "El memo no existe o no tienes acceso." };
+
+  const puede = puedeFijarRetorno(memo.tipo, memo.estado as EstadoMemo);
+  if (!puede.ok) return { ok: false, error: puede.motivo };
+
+  // Volver antes de salir no es una fecha: es un error de tipeo, y la base
+  // lo rechazaría igual más adelante.
+  if (memo.fecha_salida && fecha < memo.fecha_salida) {
+    return {
+      ok: false,
+      error: `El retorno (${fecha}) no puede ser anterior a la salida `
+        + `(${memo.fecha_salida}).`,
+    };
+  }
+
+  const { error } = await sb
+    .from("memos").update({ fecha_retorno_prev: fecha }).eq("id", memoId);
+  if (error) return { ok: false, error: error.message };
+
+  await registrarEvento(sb, "MEMO", memoId, "EDITAR", solicitante.usuarioId,
+    { fecha_retorno_prev: memo.fecha_retorno_prev },
+    { fecha_retorno_prev: fecha, motivo: "retorno de pasajes confirmado" });
+
+  revalidatePath(`/administrar/${memoId}`);
+  revalidatePath(`/memos/${memoId}`);
+  return { ok: true };
+}
+
+// ════════════════════════════════════════════════════════════════
+// Acciones en lote
+// ════════════════════════════════════════════════════════════════
+//
+// Abrir diez memos de uno en uno es exactamente lo que vuelve infinita la
+// bandeja. Pero un lote que mueve plata no puede fallar en silencio: con
+// Promise.all, si tres de diez fallan se pierde cuáles, y quedan siete
+// aplicados sin que nadie sepa cuáles fueron.
+//
+// Por eso va con allSettled y devuelve el detalle por memo. La pantalla deja
+// marcados los que fallaron, para volver a intentar sólo esos.
+
+export interface ResultadoDeLote {
+  ok: boolean;
+  hechos: number;
+  fallos: Array<{ id: string; error: string }>;
+}
+
+export async function abrirMemosEnLote(ids: string[]): Promise<ResultadoDeLote> {
+  const solicitante = await solicitanteActual();
+  if (!solicitante) {
+    return { ok: false, hechos: 0, fallos: ids.map(id => ({ id, error: "Sesión no válida." })) };
+  }
+
+  const permiso = autoriza(solicitante, "crear_memo");
+  if (!permiso.ok) {
+    return { ok: false, hechos: 0, fallos: ids.map(id => ({ id, error: permiso.motivo })) };
+  }
+
+  const sb = await clienteServidor();
+
+  const resultados = await Promise.allSettled(ids.map(async id => {
+    const { data: memo } = await sb
+      .from("memos").select("id, estado, memo_asignados ( usuario_id )")
+      .eq("id", id).single();
+    if (!memo) throw new Error("no existe o no tienes acceso");
+
+    const t = transicionMemoValida(memo.estado as EstadoMemo, "ABIERTO", solicitante.roles);
+    if (!t.ok) throw new Error(t.motivo);
+    // Abrir un memo sin nadie asignado lo hace visible para nadie.
+    if (((memo.memo_asignados ?? []) as unknown[]).length === 0) {
+      throw new Error("no tiene a nadie asignado");
+    }
+
+    const { error } = await sb.from("memos").update({ estado: "ABIERTO" }).eq("id", id);
+    if (error) throw new Error(error.message);
+
+    await registrarEvento(sb, "MEMO", id, "ABRIR", solicitante.usuarioId, null, { enLote: true });
+    return id;
+  }));
+
+  const fallos = resultados.flatMap((r, i) =>
+    r.status === "rejected"
+      ? [{ id: ids[i], error: r.reason instanceof Error ? r.reason.message : String(r.reason) }]
+      : []
+  );
+
+  revalidatePath("/administrar");
+  return { ok: fallos.length === 0, hechos: ids.length - fallos.length, fallos };
 }
