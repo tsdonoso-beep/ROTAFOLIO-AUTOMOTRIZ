@@ -250,10 +250,16 @@ async function consultarYBajar(page: Page): Promise<Array<{ nombre: string; dato
   });
   await evidencia(page, "consulta-lista");
 
-  // Aceptar: puede ser un input, un botón o una imagen con ese texto.
-  const aceptar = marco.locator('input[value="Aceptar"], button:has-text("Aceptar"), a:has-text("Aceptar"), [title="Aceptar"]').first();
-  await aceptar.click();
-  await marco.locator('a:has-text("Descargar")').first().waitFor({ timeout: 60000 }).catch(() => {});
+  // Aceptar: en SUNAT no es un <button> estándar sino un elemento legacy con
+  // onclick. Se busca por el texto —que es lo que se ve— y, si no, por los
+  // tipos de botón e imagen habituales.
+  const porTexto = marco.locator('text="Aceptar"').first();
+  if (await porTexto.count()) {
+    await porTexto.click({ timeout: 15000 }).catch(() => {});
+  } else {
+    await marco.locator('input[type="submit"], input[type="button"], input[value*="Aceptar" i], img[alt*="Aceptar" i], [onclick*="ceptar"]').first().click({ timeout: 15000 }).catch(() => {});
+  }
+  await marco.locator('text=Descargar').first().waitFor({ timeout: 60000 }).catch(() => {});
   await evidencia(page, "resultados");
 
   if (DEBUG) {
