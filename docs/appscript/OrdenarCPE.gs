@@ -1,0 +1,376 @@
+// Ordenar, una vez, lo que el scraper subió antes de tener carpetas
+//
+// El scraper (`scripts/descargar-cpe.mts`) ya archiva cada XML/PDF nuevo
+// directo en Emitidas|Recibidas|Otros / AAAA-MM. Esto es para lo que quedó
+// suelto de las corridas de antes de ese cambio: lee cada XML, decide de qué
+// carpeta es (comparando el RUC de la empresa, igual que hace el scraper) y
+// lo mueve. De paso, llama a `guardar_cpe` con el enlace de Drive de cada uno,
+// para que la hoja de detalle también los muestre con su «Enlace».
+//
+// Es un script SUELTO, no atado a ninguna hoja: se crea uno nuevo en
+// script.google.com y se corre a mano, una vez. No necesita quedarse
+// instalado después.
+//
+// ── Antes de correrlo ──
+// Extensiones → Configuración del proyecto → Propiedades del script. Poner:
+//   CARPETA_RAIZ        el ID de la carpeta de Drive (SUNAT_DRIVE_FOLDER)
+//   RUC_EMPRESA         20512201611
+//   SUPABASE_URL        el mismo de los secretos de GitHub
+//   SUPABASE_ANON_KEY   el mismo de los secretos de GitHub
+//   ROBOT_CORREO        el correo de la cuenta ROBOT
+//   ROBOT_CLAVE         su clave
+// La cuenta de Google con la que se corre el script necesita poder editar esa
+// carpeta de Drive —si ya la usas para revisar los comprobantes, ya puede—.
+//
+// ── Cómo usarlo ──
+// 1. revisarOrdenSunat()      — no mueve ni guarda nada, solo dice qué
+//    encontró y a qué carpeta iría cada cosa. Ver el resultado en
+//    Ejecuciones (el reloj de la izquierda) → abrir la corrida → Registros.
+// 2. Si se ve bien, ordenarComprobantesSunat() — ahí sí mueve los archivos y
+//    guarda el enlace de cada uno en la base.
+//
+// Se puede correr más de una vez sin duplicar nada: un archivo ya movido no
+// vuelve a aparecer en la carpeta raíz, y `guardar_cpe` actualiza el
+// comprobante que ya existía en vez de repetirlo.
+
+function revisarOrdenSunat() { procesar(true); }
+function ordenarComprobantesSunat() { procesar(false); }
+
+function procesar(soloRevisar) {
+  var cfg = configuracion();
+  if (!cfg.carpetaRaiz) throw new Error("Falta CARPETA_RAIZ en las Propiedades del script.");
+
+  var raiz = DriveApp.getFolderById(cfg.carpetaRaiz);
+  var archivos = listarArchivosSueltos(raiz);
+
+  var doclotes = [];
+  var porCarpeta = {};
+  var sinXml = 0, errores = 0;
+
+  for (var base in archivos) {
+    var par = archivos[base];
+    try {
+      var xmlTexto = par.xml ? leerXmlDeArchivo(par.xml) : null;
+      if (!xmlTexto) { sinXml++; continue; }
+
+      var c = leerComprobante(xmlTexto, cfg.rucEmpresa);
+      if (!c.serie || !c.numero) { sinXml++; continue; }
+
+      var origen = c.origen;
+      var periodo = periodoDe(c.fechaEmision);
+      var ruta = rutaDe(origen, periodo);
+      var clave = ruta.join("/");
+      porCarpeta[clave] = (porCarpeta[clave] || 0) + 1;
+
+      if (!soloRevisar) {
+        var destino = carpetaAnidada(raiz, ruta);
+        mover(par.xml, destino, raiz);
+        if (par.pdf) mover(par.pdf, destino, raiz);
+        doclotes.push(aDocLote(c, par.xml.getUrl()));
+      }
+    } catch (e) {
+      errores++;
+      Logger.log("✗ " + base + ": " + e);
+    }
+  }
+
+  Logger.log("— Resumen —");
+  for (var k in porCarpeta) Logger.log(k + ": " + porCarpeta[k]);
+  Logger.log("Sin XML legible: " + sinXml + ". Errores: " + errores + ".");
+
+  if (soloRevisar) {
+    Logger.log("Solo revisión: no se movió ni se guardó nada. Corre ordenarComprobantesSunat() para aplicarlo.");
+  } else if (doclotes.length > 0) {
+    guardarEnBase(doclotes, cfg);
+  } else {
+    Logger.log("No había nada que mover.");
+  }
+}
+
+// ── Configuración ──────────────────────────────────────────────────
+
+function configuracion() {
+  var p = PropertiesService.getScriptProperties();
+  return {
+    carpetaRaiz: p.getProperty("CARPETA_RAIZ"),
+    rucEmpresa: p.getProperty("RUC_EMPRESA") || "20512201611",
+    supabaseUrl: p.getProperty("SUPABASE_URL"),
+    anonKey: p.getProperty("SUPABASE_ANON_KEY"),
+    robotCorreo: p.getProperty("ROBOT_CORREO"),
+    robotClave: p.getProperty("ROBOT_CLAVE"),
+  };
+}
+
+// ── Qué hay suelto en la carpeta raíz ─────────────────────────────
+//
+// `getFiles()` solo trae los archivos QUE ESTÁN DIRECTO en la carpeta, no los
+// de Emitidas/Recibidas/Otros: por eso no hace falta excluirlos a mano, ni
+// hay riesgo de tocar dos veces lo que ya se ordenó.
+
+function listarArchivosSueltos(raiz) {
+  var porBase = {};
+  var it = raiz.getFiles();
+  while (it.hasNext()) {
+    var f = it.next();
+    var m = /^(.*)\.(xml|pdf|zip)$/i.exec(f.getName());
+    if (!m) continue;
+    var base = m[1], ext = m[2].toLowerCase();
+    if (!porBase[base]) porBase[base] = { xml: null, pdf: null };
+    if (ext === "pdf") porBase[base].pdf = f;
+    else porBase[base].xml = f; // .xml o .zip: los dos traen el XML adentro
+  }
+  return porBase;
+}
+
+/** El texto del XML de un archivo, sacándolo del ZIP si hace falta. */
+function leerXmlDeArchivo(archivo) {
+  var nombre = archivo.getName();
+  if (/\.zip$/i.test(nombre)) {
+    var partes = Utilities.unzip(archivo.getBlob());
+    for (var i = 0; i < partes.length; i++) {
+      if (/\.xml$/i.test(partes[i].getName())) return decodificarBlob(partes[i]);
+    }
+    return null;
+  }
+  if (/\.xml$/i.test(nombre)) return decodificarBlob(archivo.getBlob());
+  return null;
+}
+
+/** SUNAT declara sus XML en ISO-8859-1, no en UTF-8: sin esto se comen las tildes. */
+function decodificarBlob(blob) {
+  var cabeza = blob.getDataAsString("ISO-8859-1").substring(0, 200).toLowerCase();
+  var m = /encoding=["']([^"']+)["']/.exec(cabeza);
+  var enc = m ? m[1] : "utf-8";
+  var esLatin = /8859-1|latin1|windows-1252/.test(enc);
+  return blob.getDataAsString(esLatin ? "ISO-8859-1" : "UTF-8");
+}
+
+// ── Mover ──────────────────────────────────────────────────────────
+
+function rutaDe(origen, periodo) {
+  var sub = origen === "RECIBIDO" ? "Recibidas" : origen === "EMITIDO" ? "Emitidas" : "Otros";
+  var mes = (periodo && /^\d{6}$/.test(periodo)) ? (periodo.substring(0, 4) + "-" + periodo.substring(4, 6)) : "Sin fecha";
+  return [sub, mes];
+}
+
+function carpetaAnidada(raiz, segmentos) {
+  var actual = raiz;
+  for (var i = 0; i < segmentos.length; i++) actual = subcarpeta(actual, segmentos[i]);
+  return actual;
+}
+
+function subcarpeta(padre, nombre) {
+  var it = padre.getFoldersByName(nombre);
+  return it.hasNext() ? it.next() : padre.createFolder(nombre);
+}
+
+function mover(archivo, destino, origen) {
+  if (destino.getId() === origen.getId()) return;
+  destino.addFile(archivo);
+  origen.removeFile(archivo);
+}
+
+// ── Leer el XML (UBL 2.1), con XmlService en vez de a mano ─────────
+//
+// `getName()` de un elemento devuelve el nombre SIN el prefijo del espacio de
+// nombres: `<cbc:ID>` se ve como "ID" igual que `<n1:ID>`. Es lo mismo que el
+// parser de Node (`lib/sunat/cpe-xml.ts`) hace con una expresión regular que
+// ignora el prefijo; acá sale gratis con la API del propio Apps Script.
+
+function leerComprobante(xmlTexto, rucEmpresa) {
+  var raizXml = XmlService.parse(xmlTexto).getRootElement();
+  var tipoInfo = tipoDe(raizXml);
+
+  // El ID del documento es el primer «ID» con forma serie-número: no la del
+  // RUC de una parte (esos son solo dígitos) ni la de la firma.
+  var ids = buscarTodos(raizXml, "ID");
+  var idDoc = null;
+  for (var i = 0; i < ids.length; i++) {
+    var t = textoDe(ids[i]);
+    if (t && /^[A-Za-z0-9]{1,4}-\d+$/.test(t)) { idDoc = t; break; }
+  }
+  var partes = partirSerieNumero(idDoc);
+
+  var proveedor = parteDe(buscarUno(raizXml, "AccountingSupplierParty"));
+  var adquiriente = parteDe(buscarUno(raizXml, "AccountingCustomerParty"));
+  var totales = buscarUno(raizXml, "LegalMonetaryTotal");
+  var taxTotal = buscarUno(raizXml, "TaxTotal"); // el primero es el del documento
+
+  var lineas = buscarTodos(raizXml, tipoInfo.lineaTag);
+  var items = [];
+  for (var j = 0; j < lineas.length; j++) items.push(itemDe(lineas[j], tipoInfo.cantidadTag));
+  items.sort(function (a, b) { return (a.linea || 0) - (b.linea || 0); });
+
+  var ruc = (rucEmpresa || "").trim();
+  var origen = adquiriente.ruc === ruc ? "RECIBIDO" : proveedor.ruc === ruc ? "EMITIDO" : "OTRO";
+
+  return {
+    origen: origen,
+    tipoComprobante: tipoInfo.tipo,
+    serie: partes.serie, numero: partes.numero,
+    fechaEmision: aFecha(valorDe(raizXml, "IssueDate")),
+    moneda: valorDe(raizXml, "DocumentCurrencyCode"),
+    proveedorRuc: proveedor.ruc, proveedorNombre: proveedor.nombre,
+    adquirienteRuc: adquiriente.ruc, adquirienteNombre: adquiriente.nombre,
+    subtotal: aMonto(valorDe(totales, "LineExtensionAmount")),
+    igv: aMonto(valorDe(taxTotal, "TaxAmount")),
+    total: aMonto(valorDe(totales, "PayableAmount")),
+    items: items,
+  };
+}
+
+function tipoDe(raizXml) {
+  var nombre = raizXml.getName();
+  if (nombre === "CreditNote") return { tipo: "07", lineaTag: "CreditNoteLine", cantidadTag: "CreditedQuantity" };
+  if (nombre === "DebitNote") return { tipo: "08", lineaTag: "DebitNoteLine", cantidadTag: "DebitedQuantity" };
+  return { tipo: valorDe(raizXml, "InvoiceTypeCode"), lineaTag: "InvoiceLine", cantidadTag: "InvoicedQuantity" };
+}
+
+function parteDe(bloqueParte) {
+  if (!bloqueParte) return { ruc: null, nombre: null };
+  var ruc = valorDe(buscarUno(bloqueParte, "PartyIdentification"), "ID");
+  var nombre = valorDe(buscarUno(bloqueParte, "PartyLegalEntity"), "RegistrationName")
+    || valorDe(buscarUno(bloqueParte, "PartyName"), "Name");
+  return { ruc: ruc, nombre: nombre };
+}
+
+function itemDe(bloqueLinea, cantidadTag) {
+  var linea = valorDe(bloqueLinea, "ID");
+  return {
+    linea: linea ? (Number(linea) || null) : null,
+    descripcion: valorDe(buscarUno(bloqueLinea, "Item"), "Description"),
+    cantidad: aMonto(valorDe(bloqueLinea, cantidadTag)),
+    unidad: atributoDe(bloqueLinea, cantidadTag, "unitCode"),
+    precioUnitario: aMonto(valorDe(buscarUno(bloqueLinea, "Price"), "PriceAmount")),
+    importe: aMonto(valorDe(bloqueLinea, "LineExtensionAmount")),
+  };
+}
+
+/** Todos los descendientes con ese nombre local, en el orden del documento. */
+function buscarTodos(elemento, nombre) {
+  var out = [];
+  var hijos = elemento.getChildren();
+  for (var i = 0; i < hijos.length; i++) {
+    var h = hijos[i];
+    if (h.getName() === nombre) out.push(h);
+    out = out.concat(buscarTodos(h, nombre));
+  }
+  return out;
+}
+
+function buscarUno(elemento, nombre) {
+  if (!elemento) return null;
+  var t = buscarTodos(elemento, nombre);
+  return t.length ? t[0] : null;
+}
+
+function textoDe(elemento) {
+  var t = elemento.getText();
+  return t ? t.trim() : null;
+}
+
+function valorDe(contenedor, nombre) {
+  var e = buscarUno(contenedor, nombre);
+  return e ? textoDe(e) : null;
+}
+
+function atributoDe(contenedor, nombre, attr) {
+  var e = buscarUno(contenedor, nombre);
+  if (!e) return null;
+  var a = e.getAttribute(attr);
+  return a ? a.getValue() : null;
+}
+
+function partirSerieNumero(id) {
+  if (!id) return { serie: null, numero: null };
+  var m = /^([A-Za-z0-9]{1,4})-(\d+)$/.exec(id.trim());
+  if (!m) return { serie: null, numero: null };
+  return { serie: m[1].toUpperCase(), numero: m[2].replace(/^0+/, "") || "0" };
+}
+
+function aMonto(v) {
+  if (v == null) return null;
+  var s = v.replace(/\s/g, "");
+  if (!s) return null;
+  var limpio = (s.indexOf(",") >= 0 && s.indexOf(".") >= 0) ? s.replace(/,/g, "")
+    : s.indexOf(",") >= 0 ? s.replace(",", ".") : s;
+  var n = Number(limpio);
+  return isFinite(n) ? n : null;
+}
+
+function aFecha(v) {
+  if (!v) return null;
+  var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v.trim());
+  return m ? (m[1] + "-" + m[2] + "-" + m[3]) : null;
+}
+
+function periodoDe(fechaEmision) {
+  if (!fechaEmision) return null;
+  var m = /^(\d{4})-(\d{2})/.exec(fechaEmision);
+  return m ? (m[1] + m[2]) : null;
+}
+
+// ── Guardar en la base, con el enlace de Drive ─────────────────────
+//
+// Se llama a `guardar_cpe`, la misma función RPC que usa el scraper: como el
+// comprobante ya existe (se importó cuando se bajó), esto lo actualiza y de
+// paso le pone el `xml_drive_url` que antes no tenía. No hace falta una
+// función nueva en la base para esto.
+
+function aDocLote(c, xmlUrl) {
+  return {
+    origen: c.origen,
+    proveedorRuc: c.proveedorRuc, proveedorNombre: c.proveedorNombre,
+    adquirienteRuc: c.adquirienteRuc, adquirienteNombre: c.adquirienteNombre,
+    tipoComprobante: c.tipoComprobante, serie: c.serie, numero: c.numero,
+    fechaEmision: c.fechaEmision, moneda: c.moneda,
+    subtotal: c.subtotal, igv: c.igv, total: c.total,
+    periodo: periodoDe(c.fechaEmision),
+    xmlDriveUrl: xmlUrl,
+    items: c.items,
+  };
+}
+
+function iniciarSesionRobot(cfg) {
+  var resp = UrlFetchApp.fetch(cfg.supabaseUrl + "/auth/v1/token?grant_type=password", {
+    method: "post",
+    contentType: "application/json",
+    headers: { apikey: cfg.anonKey },
+    payload: JSON.stringify({ email: cfg.robotCorreo, password: cfg.robotClave }),
+    muteHttpExceptions: true,
+  });
+  if (resp.getResponseCode() >= 300) {
+    throw new Error("No se pudo iniciar sesión con la cuenta ROBOT: " + resp.getContentText());
+  }
+  return JSON.parse(resp.getContentText()).access_token;
+}
+
+function guardarEnBase(doclotes, cfg) {
+  if (!cfg.supabaseUrl || !cfg.anonKey || !cfg.robotCorreo || !cfg.robotClave) {
+    Logger.log("Faltan credenciales de la base en las Propiedades del script: no se guardó nada, pero los archivos ya se movieron.");
+    return;
+  }
+
+  var token = iniciarSesionRobot(cfg);
+  var LOTE = 25;
+  var nuevos = 0, actualizados = 0, items = 0;
+
+  for (var i = 0; i < doclotes.length; i += LOTE) {
+    var trozo = doclotes.slice(i, i + LOTE);
+    var resp = UrlFetchApp.fetch(cfg.supabaseUrl + "/rest/v1/rpc/guardar_cpe", {
+      method: "post",
+      contentType: "application/json",
+      headers: { apikey: cfg.anonKey, Authorization: "Bearer " + token },
+      payload: JSON.stringify({ p_empresa_ruc: cfg.rucEmpresa, p_docs: trozo }),
+      muteHttpExceptions: true,
+    });
+    if (resp.getResponseCode() >= 300) {
+      Logger.log("✗ guardar_cpe falló en el lote " + i + ": " + resp.getContentText());
+      continue;
+    }
+    var r = JSON.parse(resp.getContentText())[0];
+    nuevos += r.nuevos; actualizados += r.actualizados; items += r.items;
+  }
+
+  Logger.log("Base: " + nuevos + " nuevos, " + actualizados + " actualizados, " + items + " ítems.");
+}
