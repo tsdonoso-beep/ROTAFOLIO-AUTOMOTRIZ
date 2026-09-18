@@ -10,7 +10,8 @@ function comp(over: Partial<ComprobanteCpe> = {}): ComprobanteCpe {
     tipoComprobante: "01", serie: "F001", numero: "1", fechaEmision: "2026-08-15",
     moneda: "PEN", proveedorRuc: "20111111111", proveedorNombre: "PROVEEDOR SAC",
     adquirienteRuc: EMPRESA, adquirienteNombre: "INROPRIN", subtotal: 100, igv: 18,
-    total: 118, items: [], ...over,
+    total: 118, formaPago: null, cuotas: [], detraccion: null,
+    guiaRemision: null, ordenCompra: null, items: [], ...over,
   };
 }
 
@@ -57,6 +58,29 @@ describe("prepararLote", () => {
     ], EMPRESA);
     assert.equal(lote.length, 1);
     assert.equal(lote[0].total, 200);
+  });
+
+  test("lleva la forma de pago, cuotas, detracción, guía y OC al lote", () => {
+    const [d] = prepararLote([comp({
+      formaPago: "Credito",
+      cuotas: [{ numero: 1, monto: 59, fechaVencimiento: "2026-09-15" }],
+      detraccion: { cuentaBanco: "003", porcentaje: 0.12, monto: 14.16 },
+      guiaRemision: "T001-1", ordenCompra: "OC-9",
+    })], EMPRESA);
+    assert.equal(d.formaPago, "Credito");
+    assert.deepEqual(d.cuotas, [{ numero: 1, monto: 59, fechaVencimiento: "2026-09-15" }]);
+    assert.equal(d.detraccionCuentaBanco, "003");
+    assert.equal(d.detraccionPorcentaje, 0.12);
+    assert.equal(d.detraccionMonto, 14.16);
+    assert.equal(d.guiaRemision, "T001-1");
+    assert.equal(d.ordenCompra, "OC-9");
+  });
+
+  test("sin detracción, los tres campos quedan null", () => {
+    const [d] = prepararLote([comp()], EMPRESA);
+    assert.equal(d.detraccionCuentaBanco, null);
+    assert.equal(d.detraccionPorcentaje, null);
+    assert.equal(d.detraccionMonto, null);
   });
 
   test("dos comprobantes con distinto proveedor no se pisan", () => {

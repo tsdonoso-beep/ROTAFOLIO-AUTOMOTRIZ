@@ -32,6 +32,14 @@ export interface FilaDetalleCpe {
   enlacePdf: string | null;
   /** El XML, de donde sale el detalle de ítems. */
   enlaceXml: string | null;
+  /** "Contado" o "Credito", tal como lo declara el emisor. */
+  formaPago: string | null;
+  guiaRemision: string | null;
+  ordenCompra: string | null;
+  /** null si el comprobante no está sujeto a detracción. */
+  detraccionPorcentaje: number | null;
+  detraccionMonto: number | null;
+  detraccionCuentaBanco: string | null;
 }
 
 // El orden importa: lo que se busca primero —de qué comprobante es, qué se
@@ -40,6 +48,8 @@ export interface FilaDetalleCpe {
 export const CABECERAS_ITEMS = [
   "Período", "Origen", "RUC proveedor", "Proveedor",
   "Tipo", "Serie", "Número", "Fecha de emisión", "Moneda",
+  "Forma de pago", "Guía de remisión", "Orden de compra",
+  "% Detracción", "Detracción", "Cuenta detracción",
   "Línea", "Descripción", "Cantidad", "Unidad", "Precio unitario", "Importe",
   "Total del comprobante", "PDF", "XML",
 ];
@@ -54,6 +64,12 @@ export const TIPOS_ITEMS: TipoColumna[] = [
   "texto",  // Número
   "fecha",  // Fecha de emisión
   "texto",  // Moneda
+  "texto",  // Forma de pago
+  "texto",  // Guía de remisión
+  "texto",  // Orden de compra
+  "numero", // % Detracción
+  "numero", // Detracción
+  "texto",  // Cuenta detracción
   "numero", // Línea
   "texto",  // Descripción
   "numero", // Cantidad
@@ -94,6 +110,12 @@ export function filaDetalleDesdeRpc(d: Record<string, unknown>): FilaDetalleCpe 
     totalComprobante: aNum(d.total_comprobante),
     enlacePdf: (d.enlace_pdf as string) ?? null,
     enlaceXml: (d.enlace_xml as string) ?? null,
+    formaPago: (d.forma_pago as string) ?? null,
+    guiaRemision: (d.guia_remision as string) ?? null,
+    ordenCompra: (d.orden_compra as string) ?? null,
+    detraccionPorcentaje: aNum(d.detraccion_porcentaje),
+    detraccionMonto: aNum(d.detraccion_monto),
+    detraccionCuentaBanco: (d.detraccion_cuenta_banco as string) ?? null,
   };
 }
 
@@ -118,6 +140,12 @@ export function filasItemsSunat(filas: FilaDetalleCpe[]): string[][] {
       f.numero ?? "",
       fechaCorta(f.fechaEmision),
       f.moneda ?? "",
+      f.formaPago ?? "",
+      f.guiaRemision ?? "",
+      f.ordenCompra ?? "",
+      num(f.detraccionPorcentaje, 2),
+      num(f.detraccionMonto, 2),
+      f.detraccionCuentaBanco ?? "",
       f.linea == null ? "" : String(f.linea),
       f.descripcion ?? "",
       num(f.cantidad, 2),

@@ -173,6 +173,95 @@ describe("leerComprobanteXml — factura", () => {
   });
 });
 
+const FACTURA_DETRACCION_CREDITO = `<?xml version="1.0" encoding="UTF-8"?>
+<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
+  xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+  xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+  <cbc:ID>F001-456</cbc:ID>
+  <cbc:IssueDate>2026-08-10</cbc:IssueDate>
+  <cbc:InvoiceTypeCode>01</cbc:InvoiceTypeCode>
+  <cbc:DocumentCurrencyCode>PEN</cbc:DocumentCurrencyCode>
+  <cac:AccountingSupplierParty><cac:Party>
+    <cac:PartyIdentification><cbc:ID>20111111111</cbc:ID></cac:PartyIdentification>
+    <cac:PartyLegalEntity><cbc:RegistrationName>CONSTRUCTORA SAC</cbc:RegistrationName></cac:PartyLegalEntity>
+  </cac:Party></cac:AccountingSupplierParty>
+  <cac:AccountingCustomerParty><cac:Party>
+    <cac:PartyIdentification><cbc:ID>20512201611</cbc:ID></cac:PartyIdentification>
+  </cac:Party></cac:AccountingCustomerParty>
+  <cac:OrderReference><cbc:ID>OC-2026-77</cbc:ID></cac:OrderReference>
+  <cac:DespatchDocumentReference><cbc:ID>T001-999</cbc:ID></cac:DespatchDocumentReference>
+  <cac:PaymentTerms>
+    <cbc:ID>FormaPago</cbc:ID>
+    <cbc:PaymentMeansID>Credito</cbc:PaymentMeansID>
+    <cbc:Amount currencyID="PEN">1000.00</cbc:Amount>
+  </cac:PaymentTerms>
+  <cac:PaymentTerms>
+    <cbc:ID>FormaPago002</cbc:ID>
+    <cbc:PaymentMeansID>Cuota002</cbc:PaymentMeansID>
+    <cbc:Amount currencyID="PEN">500.00</cbc:Amount>
+    <cbc:PaymentDueDate>2026-10-10</cbc:PaymentDueDate>
+  </cac:PaymentTerms>
+  <cac:PaymentTerms>
+    <cbc:ID>FormaPago001</cbc:ID>
+    <cbc:PaymentMeansID>Cuota001</cbc:PaymentMeansID>
+    <cbc:Amount currencyID="PEN">500.00</cbc:Amount>
+    <cbc:PaymentDueDate>2026-09-10</cbc:PaymentDueDate>
+  </cac:PaymentTerms>
+  <cac:PaymentTerms>
+    <cbc:ID>Detraccion</cbc:ID>
+    <cbc:PaymentMeansID>Deposito en cuenta - Banco de la Nacion</cbc:PaymentMeansID>
+    <cbc:PaymentPercent>12.00</cbc:PaymentPercent>
+    <cbc:Amount currencyID="PEN">120.00</cbc:Amount>
+  </cac:PaymentTerms>
+  <cac:TaxTotal><cbc:TaxAmount currencyID="PEN">180.00</cbc:TaxAmount></cac:TaxTotal>
+  <cac:LegalMonetaryTotal>
+    <cbc:LineExtensionAmount currencyID="PEN">1000.00</cbc:LineExtensionAmount>
+    <cbc:PayableAmount currencyID="PEN">1180.00</cbc:PayableAmount>
+  </cac:LegalMonetaryTotal>
+  <cac:InvoiceLine>
+    <cbc:ID>1</cbc:ID>
+    <cbc:InvoicedQuantity unitCode="ZZ">1</cbc:InvoicedQuantity>
+    <cbc:LineExtensionAmount currencyID="PEN">1000.00</cbc:LineExtensionAmount>
+    <cac:Item><cbc:Description>SERVICIO DE CONSTRUCCION</cbc:Description></cac:Item>
+    <cac:Price><cbc:PriceAmount currencyID="PEN">1000.00</cbc:PriceAmount></cac:Price>
+  </cac:InvoiceLine>
+</Invoice>`;
+
+describe("leerComprobanteXml — detracción, crédito, guía y OC", () => {
+  const c = leerComprobanteXml(FACTURA_DETRACCION_CREDITO);
+
+  test("forma de pago y guía/orden de compra relacionadas", () => {
+    assert.equal(c.formaPago, "Credito");
+    assert.equal(c.guiaRemision, "T001-999");
+    assert.equal(c.ordenCompra, "OC-2026-77");
+  });
+
+  test("las cuotas salen en orden aunque el XML las traiga al revés", () => {
+    assert.equal(c.cuotas.length, 2);
+    assert.deepEqual(c.cuotas[0], { numero: 1, monto: 500, fechaVencimiento: "2026-09-10" });
+    assert.deepEqual(c.cuotas[1], { numero: 2, monto: 500, fechaVencimiento: "2026-10-10" });
+  });
+
+  test("la detracción, con cuenta, porcentaje y monto", () => {
+    assert.deepEqual(c.detraccion, {
+      cuentaBanco: "Deposito en cuenta - Banco de la Nacion",
+      porcentaje: 12,
+      monto: 120,
+    });
+  });
+});
+
+describe("leerComprobanteXml — sin ninguno de estos datos", () => {
+  test("factura simple: forma de pago y detracción quedan null, cuotas vacío", () => {
+    const c = leerComprobanteXml(FACTURA);
+    assert.equal(c.formaPago, null);
+    assert.equal(c.detraccion, null);
+    assert.deepEqual(c.cuotas, []);
+    assert.equal(c.guiaRemision, null);
+    assert.equal(c.ordenCompra, null);
+  });
+});
+
 describe("leerComprobanteXml — nota de crédito", () => {
   const c = leerComprobanteXml(NOTA_CREDITO);
 

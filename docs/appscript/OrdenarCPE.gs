@@ -358,6 +358,7 @@ function leerComprobante(xmlTexto, rucEmpresa) {
 
   var ruc = (rucEmpresa || "").trim();
   var origen = adquiriente.ruc === ruc ? "RECIBIDO" : proveedor.ruc === ruc ? "EMITIDO" : "OTRO";
+  var pago = pagoDe(raizXml);
 
   return {
     origen: origen,
@@ -370,8 +371,54 @@ function leerComprobante(xmlTexto, rucEmpresa) {
     subtotal: aMonto(valorDe(totales, "LineExtensionAmount")),
     igv: aMonto(valorDe(taxTotal, "TaxAmount")),
     total: aMonto(valorDe(totales, "PayableAmount")),
+    formaPago: pago.formaPago,
+    cuotas: pago.cuotas,
+    detraccion: pago.detraccion,
+    guiaRemision: valorDe(buscarUno(raizXml, "DespatchDocumentReference"), "ID"),
+    ordenCompra: valorDe(buscarUno(raizXml, "OrderReference"), "ID"),
     items: items,
   };
+}
+
+/**
+ * La forma de pago, sus cuotas si es al crédito, y la detracción.
+ *
+ * Los tres viven en bloques `cac:PaymentTerms` —uno por cada cosa—, que se
+ * distinguen por su `cbc:ID` (o, para las cuotas, por que su
+ * `PaymentMeansID` empieza con «Cuota»): así lo describe la guía de SUNAT
+ * para UBL 2.1. Mismo criterio que `lib/sunat/cpe-xml.ts`.
+ */
+function pagoDe(raizXml) {
+  var formaPago = null;
+  var detraccion = null;
+  var cuotas = [];
+
+  var bloquesPago = buscarTodos(raizXml, "PaymentTerms");
+  for (var i = 0; i < bloquesPago.length; i++) {
+    var b = bloquesPago[i];
+    var id = valorDe(b, "ID");
+    var medio = valorDe(b, "PaymentMeansID");
+
+    if (id === "Detraccion") {
+      detraccion = {
+        cuentaBanco: medio,
+        porcentaje: aMonto(valorDe(b, "PaymentPercent")),
+        monto: aMonto(valorDe(b, "Amount")),
+      };
+    } else if (id === "FormaPago") {
+      formaPago = medio;
+    } else if (medio && /^cuota/i.test(medio)) {
+      var m = /\d+/.exec(medio);
+      cuotas.push({
+        numero: m ? Number(m[0]) : null,
+        monto: aMonto(valorDe(b, "Amount")),
+        fechaVencimiento: aFecha(valorDe(b, "PaymentDueDate")),
+      });
+    }
+  }
+
+  cuotas.sort(function (a, b2) { return (a.numero || 0) - (b2.numero || 0); });
+  return { formaPago: formaPago, cuotas: cuotas, detraccion: detraccion };
 }
 
 function tipoDe(raizXml) {
@@ -483,6 +530,13 @@ function aDocLote(c, xmlUrl, pdfUrl) {
     periodo: periodoDe(c.fechaEmision),
     xmlDriveUrl: xmlUrl,
     pdfDriveUrl: pdfUrl || null,
+    formaPago: c.formaPago,
+    cuotas: c.cuotas,
+    detraccionCuentaBanco: c.detraccion ? c.detraccion.cuentaBanco : null,
+    detraccionPorcentaje: c.detraccion ? c.detraccion.porcentaje : null,
+    detraccionMonto: c.detraccion ? c.detraccion.monto : null,
+    guiaRemision: c.guiaRemision,
+    ordenCompra: c.ordenCompra,
     items: c.items,
   };
 }

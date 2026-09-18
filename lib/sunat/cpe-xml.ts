@@ -29,6 +29,21 @@ export interface ItemCpe {
   importe: number | null;
 }
 
+/** La detracción (SPOT): a qué cuenta, qué porcentaje y cuánto se detrae. */
+export interface DetraccionCpe {
+  cuentaBanco: string | null;
+  porcentaje: number | null;
+  monto: number | null;
+}
+
+/** Una cuota de un comprobante al crédito. */
+export interface CuotaCpe {
+  numero: number | null;
+  monto: number | null;
+  /** yyyy-mm-dd */
+  fechaVencimiento: string | null;
+}
+
 export interface ComprobanteCpe {
   /** Código SUNAT: 01 factura, 03 boleta, 07 nota de crédito, 08 nota de débito. */
   tipoComprobante: string | null;
@@ -47,6 +62,16 @@ export interface ComprobanteCpe {
   subtotal: number | null;
   igv: number | null;
   total: number | null;
+  /** "Contado" o "Credito", tal como lo declara el emisor. */
+  formaPago: string | null;
+  /** Solo si formaPago es "Credito": una por cada PaymentTerms "CuotaNNN". */
+  cuotas: CuotaCpe[];
+  /** null si el comprobante no está sujeto a detracción. */
+  detraccion: DetraccionCpe | null;
+  /** El número de la guía de remisión relacionada, si la trae. */
+  guiaRemision: string | null;
+  /** El número de la orden de compra relacionada, si la trae. */
+  ordenCompra: string | null;
   items: ItemCpe[];
 }
 
@@ -242,6 +267,44 @@ function itemDe(bloqueLinea: string, cantidadTag: string): ItemCpe {
 }
 
 /**
+ * La forma de pago, sus cuotas si es al crédito, y la detracción.
+ *
+ * Los tres viven en bloques `cac:PaymentTerms` —uno por cada cosa—, que se
+ * distinguen por su `cbc:ID` (o, para las cuotas, por que su
+ * `PaymentMeansID` empieza con «Cuota»): así lo describe la guía de SUNAT
+ * para UBL 2.1, y así lo trae el XML real.
+ */
+function pagoDe(xml: string): { formaPago: string | null; cuotas: CuotaCpe[]; detraccion: DetraccionCpe | null } {
+  let formaPago: string | null = null;
+  let detraccion: DetraccionCpe | null = null;
+  const cuotas: CuotaCpe[] = [];
+
+  for (const b of bloques(xml, "PaymentTerms")) {
+    const id = valor(b, "ID");
+    const medio = valor(b, "PaymentMeansID");
+
+    if (id === "Detraccion") {
+      detraccion = {
+        cuentaBanco: medio,
+        porcentaje: aMonto(valor(b, "PaymentPercent")),
+        monto: aMonto(valor(b, "Amount")),
+      };
+    } else if (id === "FormaPago") {
+      formaPago = medio;
+    } else if (medio && /^cuota/i.test(medio)) {
+      cuotas.push({
+        numero: Number(/\d+/.exec(medio)?.[0] ?? "") || null,
+        monto: aMonto(valor(b, "Amount")),
+        fechaVencimiento: aFechaXml(valor(b, "PaymentDueDate")),
+      });
+    }
+  }
+
+  cuotas.sort((a, b) => (a.numero ?? 0) - (b.numero ?? 0));
+  return { formaPago, cuotas, detraccion };
+}
+
+/**
  * Lee un XML de comprobante y devuelve su cabecera y sus ítems.
  *
  * No valida ni cruza: solo lee. Quién es el proveedor de verdad y si el
@@ -269,6 +332,8 @@ export function leerComprobanteXml(xml: string): ComprobanteCpe {
     .map(b => itemDe(b, cantidadTag))
     .sort((a, b) => (a.linea ?? 0) - (b.linea ?? 0));
 
+  const { formaPago, cuotas, detraccion } = pagoDe(xml);
+
   return {
     tipoComprobante: tipo,
     serie,
@@ -282,6 +347,11 @@ export function leerComprobanteXml(xml: string): ComprobanteCpe {
     subtotal: aMonto(valor(totales, "LineExtensionAmount")),
     igv,
     total: aMonto(valor(totales, "PayableAmount")),
+    formaPago,
+    cuotas,
+    detraccion,
+    guiaRemision: valor(bloque(xml, "DespatchDocumentReference"), "ID"),
+    ordenCompra: valor(bloque(xml, "OrderReference"), "ID"),
     items,
   };
 }

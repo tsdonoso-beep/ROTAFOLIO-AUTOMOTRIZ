@@ -18,6 +18,13 @@ export interface ItemLote {
   importe: number | null;
 }
 
+/** Una cuota, lista para el jsonb que espera `guardar_cpe`. */
+export interface CuotaLote {
+  numero: number | null;
+  monto: number | null;
+  fechaVencimiento: string | null;
+}
+
 /** Un comprobante, listo para el jsonb que espera `guardar_cpe`. */
 export interface DocLote {
   origen: "RECIBIDO" | "EMITIDO" | "OTRO";
@@ -37,6 +44,14 @@ export interface DocLote {
   /** Dónde quedaron archivados el XML y el PDF en Drive, si el scraper los subió. */
   xmlDriveUrl: string | null;
   pdfDriveUrl: string | null;
+  /** "Contado" o "Credito". */
+  formaPago: string | null;
+  cuotas: CuotaLote[];
+  detraccionCuentaBanco: string | null;
+  detraccionPorcentaje: number | null;
+  detraccionMonto: number | null;
+  guiaRemision: string | null;
+  ordenCompra: string | null;
   items: ItemLote[];
 }
 
@@ -105,6 +120,15 @@ export function prepararLote(
       periodo: periodoDe(c.fechaEmision),
       xmlDriveUrl: null,
       pdfDriveUrl: null,
+      formaPago: c.formaPago,
+      cuotas: c.cuotas.map(q => ({
+        numero: q.numero, monto: q.monto, fechaVencimiento: q.fechaVencimiento,
+      })),
+      detraccionCuentaBanco: c.detraccion?.cuentaBanco ?? null,
+      detraccionPorcentaje: c.detraccion?.porcentaje ?? null,
+      detraccionMonto: c.detraccion?.monto ?? null,
+      guiaRemision: c.guiaRemision,
+      ordenCompra: c.ordenCompra,
       items: c.items.map(i => ({
         linea: i.linea,
         descripcion: i.descripcion,
