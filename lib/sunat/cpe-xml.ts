@@ -110,9 +110,35 @@ function conPrefijo(nombre: string): string {
  */
 const CONTENIDO = `((?:<!\\[CDATA\\[[\\s\\S]*?\\]\\]>|[^<])*)`;
 
+/**
+ * Deshace una doble codificación UTF-8, si el texto la trae.
+ *
+ * Un caso real: un emisor guardó "DONACIÓN" mal en su propio sistema —tomó
+ * los bytes UTF-8 de la Ó (C3 93), los leyó como si fueran dos caracteres
+ * Latin-1 sueltos, y volvió a guardar ESO como UTF-8—. El resultado,
+ * "DONACIÃ" + un carácter de control invisible + "N", queda así en el XML
+ * sin importar cómo se decodifiquen sus bytes: el archivo entero es UTF-8
+ * válido, el error ya estaba en el texto antes de escribirlo.
+ *
+ * La señal es un carácter de control C1 (U+0080–U+009F): no aparece nunca en
+ * texto en español de verdad, y sale exactamente cuando alguien releyó UTF-8
+ * como Latin-1. Reinterpretar cada carácter como un byte y decodificar eso
+ * como UTF-8 deshace el error. Sin esa señal no se toca nada —aplicarlo a
+ * ciegas rompería un nombre que sí tiene tildes normales—.
+ */
+function deshacerDobleCodificacion(s: string): string {
+  if (!/[-]/.test(s)) return s;
+  try {
+    const bytes = Uint8Array.from(s, ch => ch.charCodeAt(0) & 0xff);
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return s;
+  }
+}
+
 /** Quita los marcadores de CDATA y los espacios de alrededor. */
 function limpiar(s: string): string | null {
-  const t = s.replace(/<!\[CDATA\[/g, "").replace(/\]\]>/g, "").trim();
+  const t = deshacerDobleCodificacion(s.replace(/<!\[CDATA\[/g, "").replace(/\]\]>/g, "").trim());
   return t || null;
 }
 

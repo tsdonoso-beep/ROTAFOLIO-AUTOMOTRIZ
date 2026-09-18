@@ -522,7 +522,40 @@ function buscarUno(elemento, nombre) {
 
 function textoDe(elemento) {
   var t = elemento.getText();
-  return t ? t.trim() : null;
+  if (!t) return null;
+  t = t.trim();
+  return t ? deshacerDobleCodificacion(t) : null;
+}
+
+/**
+ * Deshace una doble codificación UTF-8, si el texto la trae.
+ *
+ * Caso real: un XML de INROPRIN traía «DONACIÓN» guardado como Ã + un
+ * carácter de control invisible + N —los bytes UTF-8 de la Ó, releídos como
+ * Latin-1 y vueltos a codificar como UTF-8, por el propio emisor, antes de
+ * escribir el XML—. Ningún ajuste a cómo se LEE el archivo puede arreglar
+ * esto: el archivo entero es UTF-8 válido, el error ya estaba en el texto.
+ *
+ * La señal es un carácter de control C1 (U+0080–U+009F): no aparece nunca en
+ * texto en español de verdad. Reinterpretar cada carácter como un byte y
+ * decodificar eso como UTF-8 deshace el error —y solo se intenta si esos
+ * bytes reinterpretados SON UTF-8 válido, para no tocar un texto que
+ * casualmente tenga ese carácter por otra razón—. Mismo criterio que
+ * `lib/sunat/cpe-xml.ts`.
+ */
+function deshacerDobleCodificacion(s) {
+  if (!/[-]/.test(s)) return s;
+  var bytes = [];
+  for (var i = 0; i < s.length; i++) {
+    var b = s.charCodeAt(i) & 0xff;
+    bytes.push(b > 127 ? b - 256 : b);
+  }
+  if (!esUtf8Valido(bytes)) return s;
+  try {
+    return Utilities.newBlob(bytes).getDataAsString("UTF-8");
+  } catch (e) {
+    return s;
+  }
 }
 
 function valorDe(contenedor, nombre) {

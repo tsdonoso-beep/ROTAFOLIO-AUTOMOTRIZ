@@ -98,6 +98,24 @@ describe("primitivas de lectura", () => {
       "RESINA ABS <AG12A0> & CIA");
   });
 
+  test("deshace la doble codificación cuando el propio emisor la trajo mal", () => {
+    // Caso real: un XML de INROPRIN traía "DONACIÓN" guardado como
+    // U+00C3 U+0093 "N" —los bytes UTF-8 de la Ó, releídos como Latin-1 y
+    // vueltos a codificar como UTF-8—. El XML entero es UTF-8 válido; el
+    // error ya estaba en el texto antes de escribirlo.
+    const malCodificado = Buffer.from("444f4e414349c383c2934e", "hex").toString("utf8");
+    assert.equal(malCodificado, "DONACIÃ\x93N"); // así vive el bug en la base: Ã + un control invisible
+    assert.equal(
+      valor(`<cbc:Description><![CDATA[${malCodificado}]]></cbc:Description>`, "Description"),
+      "DONACIÓN",
+    );
+  });
+
+  test("un nombre con tildes normales, sin la señal de doble codificación, no se toca", () => {
+    assert.equal(valor("<cbc:RegistrationName><![CDATA[JOSÉ ANTONIO ÑUÑEZ]]></cbc:RegistrationName>", "RegistrationName"),
+      "JOSÉ ANTONIO ÑUÑEZ");
+  });
+
   test("una etiqueta vacía no arrastra hasta un cierre lejano", () => {
     // <cbc:ID/> no debe capturar el ID real que viene después.
     assert.deepEqual(valores("<cbc:ID/><cac:X><cbc:ID>E001-9</cbc:ID></cac:X>", "ID"), ["E001-9"]);
