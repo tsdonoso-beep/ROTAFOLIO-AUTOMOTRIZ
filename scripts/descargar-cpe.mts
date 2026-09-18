@@ -557,10 +557,23 @@ async function publicarLaHojaDetalle(sb: SupabaseClient): Promise<void> {
   console.log(`Hoja de detalle al día: ${filas.length} ítems · ${r.url}`);
 }
 
+/**
+ * Decodifica el XML por lo que los bytes SON, no por lo que el propio XML
+ * dice que son.
+ *
+ * Algunos emisores (se vio con facturas propias, de donaciones) declaran
+ * `encoding="ISO-8859-1"` en el prólogo mintiendo: el contenido real es
+ * UTF-8, y confiar en la etiqueta da textos como «DONACIÃN» en vez de
+ * «DONACIÓN». UTF-8 es autoverificable —una secuencia de bytes o es UTF-8
+ * válido o no lo es—, así que se prueba estricto primero y solo se cae a
+ * Latin-1 cuando de verdad no lo es.
+ */
 function decodificar(buf: Buffer): string {
-  const cabeza = buf.subarray(0, 120).toString("latin1").toLowerCase();
-  const enc = /encoding=["']([^"']+)["']/.exec(cabeza)?.[1] ?? "utf-8";
-  return buf.toString(/8859-1|latin1|windows-1252/.test(enc) ? "latin1" : "utf8");
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(buf);
+  } catch {
+    return buf.toString("latin1");
+  }
 }
 
 // ── Principal ─────────────────────────────────────────────────────

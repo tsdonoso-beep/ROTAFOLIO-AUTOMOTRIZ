@@ -279,13 +279,21 @@ function leerXmlDeArchivo(archivo) {
   return null;
 }
 
-/** SUNAT declara sus XML en ISO-8859-1, no en UTF-8: sin esto se comen las tildes. */
+/**
+ * Decodifica el XML por lo que los bytes SON, no por lo que el propio XML
+ * dice que son.
+ *
+ * Algunos emisores declaran `encoding="ISO-8859-1"` en el prólogo mintiendo:
+ * el contenido real es UTF-8, y confiar en la etiqueta da textos como
+ * «DONACIÃN» en vez de «DONACIÓN». UTF-8 es autoverificable, así que se
+ * prueba estricto primero y solo se cae a Latin-1 cuando de verdad no lo es.
+ */
 function decodificarBlob(blob) {
-  var cabeza = blob.getDataAsString("ISO-8859-1").substring(0, 200).toLowerCase();
-  var m = /encoding=["']([^"']+)["']/.exec(cabeza);
-  var enc = m ? m[1] : "utf-8";
-  var esLatin = /8859-1|latin1|windows-1252/.test(enc);
-  return blob.getDataAsString(esLatin ? "ISO-8859-1" : "UTF-8");
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array(blob.getBytes()));
+  } catch (e) {
+    return blob.getDataAsString("ISO-8859-1");
+  }
 }
 
 // ── Mover ──────────────────────────────────────────────────────────

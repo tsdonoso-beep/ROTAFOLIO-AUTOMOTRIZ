@@ -45,19 +45,21 @@ async function rucDeEmpresa(abreviatura: string): Promise<string | null> {
 }
 
 /**
- * Convierte los bytes de un XML a texto respetando su codificación.
+ * Decodifica el XML por lo que los bytes SON, no por lo que el propio XML
+ * dice que son.
  *
- * SUNAT declara sus comprobantes en ISO-8859-1, no en UTF-8; leerlos como
- * UTF-8 parte las tildes y las eñes. Se mira el prólogo del propio archivo y
- * se decodifica como diga, con UTF-8 de reserva, que es lo que asume XML sin
- * declaración.
+ * Algunos emisores declaran `encoding="ISO-8859-1"` en el prólogo mintiendo:
+ * el contenido real es UTF-8, y confiar en la etiqueta da textos como
+ * «DONACIÃN» en vez de «DONACIÓN». UTF-8 es autoverificable —una secuencia de
+ * bytes o es UTF-8 válido o no lo es—, así que se prueba estricto primero y
+ * solo se cae a Latin-1 cuando de verdad no lo es.
  */
 function decodificarXml(buf: Buffer): string {
-  const cabeza = buf.subarray(0, 120).toString("latin1").toLowerCase();
-  const m = /encoding=["']([^"']+)["']/.exec(cabeza);
-  const enc = (m?.[1] ?? "utf-8").trim();
-  const latin = /8859-1|latin1|iso-8859-1|windows-1252/.test(enc);
-  return buf.toString(latin ? "latin1" : "utf8");
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(buf);
+  } catch {
+    return buf.toString("latin1");
+  }
 }
 
 /**
