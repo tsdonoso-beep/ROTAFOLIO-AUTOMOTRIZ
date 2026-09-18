@@ -99,20 +99,36 @@ function procesar(soloRevisar) {
   }
 }
 
-/** El PDF que corresponde a un XML: por nombre igual, o si no, por serie-número. */
+/**
+ * El PDF que corresponde a un XML.
+ *
+ * SUNAT nombra el PDF `PDF-DOC-<serie><número><RUC del proveedor>.pdf`, todo
+ * pegado y sin guiones —el XML, en cambio, trae su propio nombre suelto—. La
+ * serie son los primeros 4 caracteres, el RUC los últimos 11 dígitos (un RUC
+ * peruano siempre tiene 11), y lo que queda en medio es el número, sin ceros
+ * de relleno. Con eso se arma la clave exacta en vez de adivinar por
+ * substring, que con números cortos (2-3 dígitos) daría falsos positivos.
+ */
 function emparejarPdf(archivoXml, c, pdfsLibres) {
-  var baseXml = archivoXml.getName().replace(/\.(xml|zip)$/i, "").toUpperCase();
-  var conGuion = ((c.serie || "") + "-" + (c.numero || "")).toUpperCase();
-  var sinGuion = ((c.serie || "") + (c.numero || "")).toUpperCase();
-
   for (var i = 0; i < pdfsLibres.length; i++) {
-    if (pdfsLibres[i].getName().replace(/\.pdf$/i, "").toUpperCase() === baseXml) return pdfsLibres[i];
-  }
-  for (var j = 0; j < pdfsLibres.length; j++) {
-    var nombre = pdfsLibres[j].getName().toUpperCase();
-    if ((c.serie && c.numero) && (nombre.indexOf(conGuion) >= 0 || nombre.indexOf(sinGuion) >= 0)) return pdfsLibres[j];
+    var partes = partirNombrePdf(pdfsLibres[i].getName());
+    if (partes && partes.serie === c.serie && partes.numero === c.numero && partes.ruc === c.proveedorRuc) {
+      return pdfsLibres[i];
+    }
   }
   return null;
+}
+
+function partirNombrePdf(nombre) {
+  var m = /^PDF-DOC-(.+)\.pdf$/i.exec(nombre);
+  if (!m) return null;
+  var cuerpo = m[1];
+  if (cuerpo.length < 16) return null; // 4 de serie + al menos 1 de número + 11 de RUC
+  return {
+    serie: cuerpo.substring(0, 4).toUpperCase(),
+    numero: cuerpo.substring(4, cuerpo.length - 11).replace(/^0+/, "") || "0",
+    ruc: cuerpo.substring(cuerpo.length - 11),
+  };
 }
 
 function quitarDeLista(lista, item) {
