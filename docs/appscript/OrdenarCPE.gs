@@ -164,10 +164,14 @@ function subcarpeta(padre, nombre) {
   return it.hasNext() ? it.next() : padre.createFolder(nombre);
 }
 
+/**
+ * `addFile`/`removeFile` —la API vieja de `DriveApp`— no funciona con ítems
+ * de una unidad compartida: tira «Cannot use this operation on a shared
+ * drive item». `moveTo` sí, y sirve igual para Mi unidad.
+ */
 function mover(archivo, destino, origen) {
   if (destino.getId() === origen.getId()) return;
-  destino.addFile(archivo);
-  origen.removeFile(archivo);
+  archivo.moveTo(destino);
 }
 
 // ── Leer el XML (UBL 2.1), con XmlService en vez de a mano ─────────
