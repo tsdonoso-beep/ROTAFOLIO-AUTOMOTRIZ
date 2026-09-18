@@ -289,11 +289,39 @@ function leerXmlDeArchivo(archivo) {
  * prueba estricto primero y solo se cae a Latin-1 cuando de verdad no lo es.
  */
 function decodificarBlob(blob) {
-  try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array(blob.getBytes()));
-  } catch (e) {
-    return blob.getDataAsString("ISO-8859-1");
+  return esUtf8Valido(blob.getBytes())
+    ? blob.getDataAsString("UTF-8")
+    : blob.getDataAsString("ISO-8859-1");
+}
+
+/**
+ * Si una secuencia de bytes es UTF-8 válido, byte a byte.
+ *
+ * `TextDecoder(..., { fatal: true })` —que es como se resuelve esto mismo en
+ * Node (`lib/sunat/cpe-xml.ts`)— no lanza como se espera en el runtime de
+ * Apps Script: siempre caía al `catch` y el resultado no cambiaba nunca,
+ * aunque el archivo sí fuera UTF-8 real. Esto valida a mano, byte por byte,
+ * sin depender de esa API.
+ */
+function esUtf8Valido(bytes) {
+  var i = 0, n = bytes.length;
+  while (i < n) {
+    var b = bytes[i] & 0xff; // Apps Script los da con signo (-128..127)
+    if (b <= 0x7f) { i++; continue; }
+
+    var extra;
+    if ((b & 0xe0) === 0xc0) extra = 1;       // 110xxxxx
+    else if ((b & 0xf0) === 0xe0) extra = 2;  // 1110xxxx
+    else if ((b & 0xf8) === 0xf0) extra = 3;  // 11110xxx
+    else return false;                        // no es un byte de inicio válido
+
+    if (i + extra >= n) return false;
+    for (var j = 1; j <= extra; j++) {
+      if (((bytes[i + j] & 0xff) & 0xc0) !== 0x80) return false; // 10xxxxxx
+    }
+    i += extra + 1;
   }
+  return true;
 }
 
 // ── Mover ──────────────────────────────────────────────────────────
