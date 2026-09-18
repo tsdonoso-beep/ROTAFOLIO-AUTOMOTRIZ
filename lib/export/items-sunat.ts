@@ -28,6 +28,8 @@ export interface FilaDetalleCpe {
   precioUnitario: number | null;
   importe: number | null;
   totalComprobante: number | null;
+  /** El XML archivado en Drive, si el scraper lo subió. */
+  enlace: string | null;
 }
 
 // El orden importa: lo que se busca primero —de qué comprobante es, qué se
@@ -37,7 +39,7 @@ export const CABECERAS_ITEMS = [
   "Período", "Origen", "RUC proveedor", "Proveedor",
   "Tipo", "Serie", "Número", "Fecha de emisión", "Moneda",
   "Línea", "Descripción", "Cantidad", "Unidad", "Precio unitario", "Importe",
-  "Total del comprobante",
+  "Total del comprobante", "Enlace",
 ];
 
 export const TIPOS_ITEMS: TipoColumna[] = [
@@ -57,6 +59,7 @@ export const TIPOS_ITEMS: TipoColumna[] = [
   "numero", // Precio unitario
   "numero", // Importe
   "numero", // Total del comprobante
+  "texto",  // Enlace
 ];
 
 // Vacío cuando no hay dato, no un cero: distinguir un importe ausente de uno
@@ -87,6 +90,7 @@ export function filasItemsSunat(filas: FilaDetalleCpe[]): string[][] {
       num(f.precioUnitario, 4),
       num(f.importe, 2),
       num(f.totalComprobante, 2),
+      f.enlace ?? "",
     ]),
   ];
 }

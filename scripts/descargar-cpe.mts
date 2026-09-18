@@ -26,10 +26,10 @@ import { join } from "node:path";
 import { Readable } from "node:stream";
 import { google } from "googleapis";
 import { createClient } from "@supabase/supabase-js";
-import { normalizarClavePrivada, correoDeServicio } from "../lib/drive/servidor.ts";
+import { normalizarClavePrivada, correoDeServicio, carpeta } from "../lib/drive/servidor.ts";
 import { leerZip } from "../lib/sunat/zip.ts";
-import { leerComprobanteXml } from "../lib/sunat/cpe-xml.ts";
-import { prepararLote } from "../lib/sunat/cpe-importacion.ts";
+import { leerComprobanteXml, type ComprobanteCpe } from "../lib/sunat/cpe-xml.ts";
+import { prepararLote, origenDe, periodoDe, identidad, type DocLote } from "../lib/sunat/cpe-importacion.ts";
 
 // ── Configuración desde el entorno ────────────────────────────────
 
@@ -270,7 +270,10 @@ async function clicAceptar(marco: Frame) {
  * con el calendario emergente. Aceptar trae la tabla, y de cada fila cuelgan
  * los enlaces «Descargar Factura (XML)» y «Descargar PDF».
  */
-async function consultarYBajar(page: Page): Promise<Array<{ nombre: string; datos: Buffer; tipo: string }>> {
+interface ArchivoBajado { nombre: string; datos: Buffer; tipo: string }
+interface FilaBajada { xml: ArchivoBajado | null; pdf: ArchivoBajado | null }
+
+async function consultarYBajar(page: Page): Promise<FilaBajada[]> {
   console.log("Menú → Empresas → Consulta de Facturas y Notas Electrónicas…");
   await evidencia(page, "menu-inicio");
   console.log(`  · frames: ${page.frames().map(f => f.url() || "(vacío)").join(" | ")}`);
@@ -342,15 +345,18 @@ async function consultarYBajar(page: Page): Promise<Array<{ nombre: string; dato
     return [];
   }
 
-  const salida: Array<{ nombre: string; datos: Buffer; tipo: string }> = [];
+  const salida: FilaBajada[] = [];
   const xml = res.locator('a:has-text("Descargar Factura")');
   const pdf = res.locator('a:has-text("Descargar PDF")');
   const n = await xml.count();
   console.log(`Bajando ${n} comprobantes (XML + PDF)…`);
 
   for (let i = 0; i < n; i++) {
-    try { salida.push(await bajar(page, () => xml.nth(i).click())); } catch (e) { console.log(`  · XML fila ${i + 1}: ${e instanceof Error ? e.message : e}`); }
-    try { salida.push(await bajar(page, () => pdf.nth(i).click())); } catch (e) { console.log(`  · PDF fila ${i + 1}: ${e instanceof Error ? e.message : e}`); }
+    let xmlArchivo: ArchivoBajado | null = null;
+    let pdfArchivo: ArchivoBajado | null = null;
+    try { xmlArchivo = await bajar(page, () => xml.nth(i).click()); } catch (e) { console.log(`  · XML fila ${i + 1}: ${e instanceof Error ? e.message : e}`); }
+    try { pdfArchivo = await bajar(page, () => pdf.nth(i).click()); } catch (e) { console.log(`  · PDF fila ${i + 1}: ${e instanceof Error ? e.message : e}`); }
+    salida.push({ xml: xmlArchivo, pdf: pdfArchivo });
   }
   return salida;
 }
@@ -428,33 +434,69 @@ function clienteDrive() {
 }
 
 /**
- * Sube un archivo a la carpeta, sin repetir el que ya está.
+ * Sube un archivo a una carpeta, sin repetir el que ya está, y devuelve su
+ * enlace de Drive —el mismo tanto si ya estaba como si se acaba de crear—.
  *
  * `supportsAllDrives` porque la carpeta puede vivir en una unidad compartida,
  * que la API ignora sin ese parámetro. La carpeta tiene que estar compartida
  * con el correo de la cuenta de servicio como Editor.
  */
-async function subirADrive(drive: ReturnType<typeof clienteDrive>, f: { nombre: string; datos: Buffer; tipo: string }): Promise<"nuevo" | "existe"> {
-  const q = `name = '${f.nombre.replace(/'/g, "\\'")}' and '${CARPETA_DRIVE}' in parents and trashed = false`;
-  const ya = await drive.files.list({ q, fields: "files(id)", supportsAllDrives: true, includeItemsFromAllDrives: true });
-  if (ya.data.files && ya.data.files.length > 0) return "existe";
+async function subirADrive(
+  drive: ReturnType<typeof clienteDrive>, carpetaId: string, f: ArchivoBajado
+): Promise<{ estado: "nuevo" | "existe"; url: string | null }> {
+  const q = `name = '${f.nombre.replace(/'/g, "\\'")}' and '${carpetaId}' in parents and trashed = false`;
+  const ya = await drive.files.list({
+    q, fields: "files(id,webViewLink)", supportsAllDrives: true, includeItemsFromAllDrives: true,
+  });
+  if (ya.data.files && ya.data.files.length > 0) {
+    return { estado: "existe", url: ya.data.files[0].webViewLink ?? null };
+  }
 
-  await drive.files.create({
-    requestBody: { name: f.nombre, parents: [CARPETA_DRIVE] },
+  const creado = await drive.files.create({
+    requestBody: { name: f.nombre, parents: [carpetaId] },
     media: { mimeType: f.tipo, body: Readable.from(f.datos) },
-    fields: "id",
+    fields: "id,webViewLink",
     supportsAllDrives: true,
   });
-  return "nuevo";
+  return { estado: "nuevo", url: creado.data.webViewLink ?? null };
+}
+
+/**
+ * La carpeta —creándola si hace falta— para un origen y un período, cacheada
+ * por ruta: con cientos de comprobantes por corrida, sin caché se repetiría
+ * la misma búsqueda de "Recibidas/2026-08" cientos de veces.
+ */
+const carpetasPorRuta = new Map<string, Promise<string>>();
+async function carpetaDelLote(
+  drive: ReturnType<typeof clienteDrive>, origen: DocLote["origen"], periodo: string | null
+): Promise<string> {
+  const sub = origen === "RECIBIDO" ? "Recibidas" : origen === "EMITIDO" ? "Emitidas" : "Otros";
+  const mes = periodo && /^\d{6}$/.test(periodo) ? `${periodo.slice(0, 4)}-${periodo.slice(4, 6)}` : "Sin fecha";
+  const clave = `${sub}/${mes}`;
+  let promesa = carpetasPorRuta.get(clave);
+  if (!promesa) {
+    promesa = (async () => {
+      const idSub = await carpeta(drive, sub, CARPETA_DRIVE);
+      return carpeta(drive, mes, idSub);
+    })();
+    carpetasPorRuta.set(clave, promesa);
+  }
+  return promesa;
 }
 
 // ── Guardar el detalle (opcional, si hay base) ────────────────────
 
-async function guardarDetalle(xmls: string[]) {
+async function guardarDetalle(comprobantes: Array<{ c: ComprobanteCpe; xmlUrl: string | null }>) {
   const url = process.env.SUPABASE_URL || process.env.PROJECT_URL;
-  if (!url || xmls.length === 0) return;
-  const lote = prepararLote(xmls.map(leerComprobanteXml), RUC);
+  if (!url || comprobantes.length === 0) return;
+  const lote = prepararLote(comprobantes.map(x => x.c), RUC);
   if (lote.length === 0) return;
+
+  // El lote dedup por identidad puede haberse quedado con un comprobante que
+  // no es el mismo objeto que trajo el enlace; se reengancha por esa misma
+  // identidad, no por posición.
+  const urlPorIdentidad = new Map(comprobantes.map(x => [identidad(x.c), x.xmlUrl]));
+  for (const d of lote) d.xmlDriveUrl = urlPorIdentidad.get(identidad(d)) ?? null;
 
   const sb = createClient(url, pedir("SUPABASE_ANON_KEY", "ANON_KEY"),
     { auth: { autoRefreshToken: false, persistSession: false } });
@@ -489,35 +531,54 @@ const contexto = await navegador.newContext({
 });
 const page = await contexto.newPage();
 
+/** El o los XML que trae una descarga: sueltos o dentro de un ZIP con css/xsl. */
+function xmlsDe(f: ArchivoBajado): string[] {
+  if (/\.zip$/i.test(f.nombre)) {
+    return leerZip(f.datos).filter(a => /\.xml$/i.test(a.nombre)).map(a => decodificar(a.contenido));
+  }
+  if (/\.xml$/i.test(f.nombre)) return [decodificar(f.datos)];
+  return [];
+}
+
 try {
   await entrar(page);
-  const archivos = await consultarYBajar(page);
+  const filas = await consultarYBajar(page);
 
   if (DEBUG) {
     console.log("\nModo depuración: no se bajó nada. Revisa el artefacto 'capturas/'.");
-  } else if (archivos.length === 0) {
+  } else if (filas.length === 0) {
     console.log("No se bajó ningún archivo en el rango.");
   } else {
     const drive = clienteDrive();
     let nuevos = 0, existentes = 0;
-    for (const f of archivos) {
-      if ((await subirADrive(drive, f)) === "nuevo") nuevos++; else existentes++;
+    const comprobantes: Array<{ c: ComprobanteCpe; xmlUrl: string | null }> = [];
+
+    // Se lee el XML antes de subir para saber, por comprobante, si es
+    // Emitida o Recibida y de qué mes es —así cada archivo va directo a su
+    // carpeta ordenada, en vez de a una carpeta plana que hay que reordenar
+    // después—.
+    for (const fila of filas) {
+      const xmls = fila.xml ? xmlsDe(fila.xml) : [];
+      const c = xmls[0] ? leerComprobanteXml(xmls[0]) : null;
+      const origen = c ? origenDe(c, RUC) : "OTRO";
+      const periodo = c ? periodoDe(c.fechaEmision) : null;
+      const carpetaId = await carpetaDelLote(drive, origen, periodo);
+
+      let xmlUrl: string | null = null;
+      if (fila.xml) {
+        const r = await subirADrive(drive, carpetaId, fila.xml);
+        if (r.estado === "nuevo") nuevos++; else existentes++;
+        xmlUrl = r.url;
+      }
+      if (fila.pdf) {
+        const r = await subirADrive(drive, carpetaId, fila.pdf);
+        if (r.estado === "nuevo") nuevos++; else existentes++;
+      }
+      if (c) comprobantes.push({ c, xmlUrl });
     }
     console.log(`Archivados en Drive: ${nuevos} nuevos, ${existentes} ya estaban.`);
 
-    // El enlace «Descargar Factura (XML)» puede dar el XML suelto o un ZIP que
-    // lo contiene (junto al css/xsl de presentación). Se cubren los dos.
-    const xmls: string[] = [];
-    for (const f of archivos) {
-      if (/\.zip$/i.test(f.nombre)) {
-        for (const a of leerZip(f.datos)) {
-          if (/\.xml$/i.test(a.nombre)) xmls.push(decodificar(a.contenido));
-        }
-      } else if (/\.xml$/i.test(f.nombre)) {
-        xmls.push(decodificar(f.datos));
-      }
-    }
-    await guardarDetalle(xmls);
+    await guardarDetalle(comprobantes);
   }
 } catch (e) {
   await evidencia(page, "error");

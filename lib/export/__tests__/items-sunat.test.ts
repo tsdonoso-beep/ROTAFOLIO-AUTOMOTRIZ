@@ -10,7 +10,8 @@ function fila(over: Partial<FilaDetalleCpe> = {}): FilaDetalleCpe {
     proveedorNombre: "PROVEEDOR SAC", tipoComprobante: "01", serie: "F001",
     numero: "123", fechaEmision: "2026-08-27", moneda: "PEN", linea: 1,
     descripcion: "RESINA ABS", cantidad: 250, unidad: "NIU",
-    precioUnitario: 2.85, importe: 712.5, totalComprobante: 840.75, ...over,
+    precioUnitario: 2.85, importe: 712.5, totalComprobante: 840.75,
+    enlace: "https://drive.google.com/file/d/abc/view", ...over,
   };
 }
 
@@ -43,6 +44,16 @@ describe("filasItemsSunat", () => {
   test("un importe ausente queda vacío, no en cero", () => {
     const r = filasItemsSunat([fila({ importe: null })])[1];
     assert.equal(r[14], "");
+  });
+
+  test("el enlace al XML archivado en Drive va de última columna", () => {
+    const r = filas[1];
+    assert.equal(r[16], "https://drive.google.com/file/d/abc/view");
+  });
+
+  test("sin enlace archivado queda vacío, no como texto 'null'", () => {
+    const r = filasItemsSunat([fila({ enlace: null })])[1];
+    assert.equal(r[16], "");
   });
 });
 

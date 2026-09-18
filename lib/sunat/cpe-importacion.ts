@@ -34,6 +34,8 @@ export interface DocLote {
   igv: number | null;
   total: number | null;
   periodo: string | null;
+  /** Dónde quedó archivado el XML en Drive, si el scraper lo subió. */
+  xmlDriveUrl: string | null;
   items: ItemLote[];
 }
 
@@ -59,8 +61,15 @@ export function periodoDe(fechaEmision: string | null): string | null {
   return m ? `${m[1]}${m[2]}` : null;
 }
 
-/** La identidad de un comprobante, para descartar repetidos dentro del lote. */
-function identidad(c: ComprobanteCpe): string {
+/**
+ * La identidad de un comprobante: para descartar repetidos dentro del lote y
+ * para que el scraper le enganche su enlace de Drive después, sin tener que
+ * repetir esta misma clave en dos sitios.
+ */
+export function identidad(c: {
+  tipoComprobante: string | null; serie: string | null;
+  numero: string | null; proveedorRuc: string | null;
+}): string {
   return [c.tipoComprobante ?? "", c.serie ?? "", c.numero ?? "", c.proveedorRuc ?? ""].join("|");
 }
 
@@ -93,6 +102,7 @@ export function prepararLote(
       igv: c.igv,
       total: c.total,
       periodo: periodoDe(c.fechaEmision),
+      xmlDriveUrl: null,
       items: c.items.map(i => ({
         linea: i.linea,
         descripcion: i.descripcion,
