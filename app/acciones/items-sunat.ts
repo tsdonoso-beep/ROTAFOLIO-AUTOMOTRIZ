@@ -14,7 +14,7 @@ import { leerZip } from "@/lib/sunat/zip";
 import { leerComprobanteXml } from "@/lib/sunat/cpe-xml";
 import { prepararLote } from "@/lib/sunat/cpe-importacion";
 import {
-  filasItemsSunat, nombreArchivoItems, TIPOS_ITEMS, type FilaDetalleCpe,
+  filasItemsSunat, filaDetalleDesdeRpc, nombreArchivoItems, TIPOS_ITEMS, type FilaDetalleCpe,
 } from "@/lib/export/items-sunat";
 import { publicarHoja, explicarFallo } from "@/lib/drive/servidor";
 
@@ -144,27 +144,7 @@ async function filasDetalle(periodo?: string): Promise<FilaDetalleCpe[] | null> 
   const { data, error } = await sb.rpc("detalle_cpe", { p_periodo: periodo ?? null });
   if (error || !Array.isArray(data)) return null;
 
-  const aNum = (v: unknown) => (v == null || v === "" ? null : Number(v));
-  return (data as Record<string, unknown>[]).map(d => ({
-    periodo: (d.periodo as string) ?? null,
-    origen: (d.origen as string) ?? null,
-    proveedorRuc: (d.proveedor_ruc as string) ?? null,
-    proveedorNombre: (d.proveedor_nombre as string) ?? null,
-    tipoComprobante: (d.tipo_comprobante as string) ?? null,
-    serie: (d.serie as string) ?? null,
-    numero: (d.numero as string) ?? null,
-    fechaEmision: (d.fecha_emision as string) ?? null,
-    moneda: (d.moneda as string) ?? null,
-    linea: aNum(d.linea),
-    descripcion: (d.descripcion as string) ?? null,
-    cantidad: aNum(d.cantidad),
-    unidad: (d.unidad as string) ?? null,
-    precioUnitario: aNum(d.precio_unitario),
-    importe: aNum(d.importe),
-    totalComprobante: aNum(d.total_comprobante),
-    enlacePdf: (d.enlace_pdf as string) ?? null,
-    enlaceXml: (d.enlace_xml as string) ?? null,
-  }));
+  return (data as Record<string, unknown>[]).map(filaDetalleDesdeRpc);
 }
 
 /** Cuántos comprobantes importados hay y de qué períodos. */

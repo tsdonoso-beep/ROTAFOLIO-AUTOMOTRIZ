@@ -26,10 +26,12 @@ import { join } from "node:path";
 import { Readable } from "node:stream";
 import { google } from "googleapis";
 import { createClient } from "@supabase/supabase-js";
-import { normalizarClavePrivada, correoDeServicio, carpeta } from "../lib/drive/servidor.ts";
+import { normalizarClavePrivada, correoDeServicio, carpeta, publicarHoja } from "../lib/drive/servidor.ts";
 import { leerZip } from "../lib/sunat/zip.ts";
 import { leerComprobanteXml, type ComprobanteCpe } from "../lib/sunat/cpe-xml.ts";
 import { prepararLote, origenDe, periodoDe, identidad, type DocLote } from "../lib/sunat/cpe-importacion.ts";
+import { filasItemsSunat, filaDetalleDesdeRpc, TIPOS_ITEMS } from "../lib/export/items-sunat.ts";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 // ── Configuración desde el entorno ────────────────────────────────
 
@@ -486,11 +488,18 @@ async function carpetaDelLote(
 
 // ── Guardar el detalle (opcional, si hay base) ────────────────────
 
-async function guardarDetalle(comprobantes: Array<{ c: ComprobanteCpe; xmlUrl: string | null; pdfUrl: string | null }>) {
+/**
+ * Guarda el detalle y devuelve el cliente ya logueado como el robot, para
+ * que el llamador pueda reusarlo y dejar la hoja publicada sin loguearse de
+ * nuevo. `null` si no había credenciales de la base o nada que guardar.
+ */
+async function guardarDetalle(
+  comprobantes: Array<{ c: ComprobanteCpe; xmlUrl: string | null; pdfUrl: string | null }>
+): Promise<SupabaseClient | null> {
   const url = process.env.SUPABASE_URL || process.env.PROJECT_URL;
-  if (!url || comprobantes.length === 0) return;
+  if (!url || comprobantes.length === 0) return null;
   const lote = prepararLote(comprobantes.map(x => x.c), RUC);
-  if (lote.length === 0) return;
+  if (lote.length === 0) return null;
 
   // El lote dedup por identidad puede haberse quedado con un comprobante que
   // no es el mismo objeto que trajo el enlace; se reengancha por esa misma
@@ -507,11 +516,45 @@ async function guardarDetalle(comprobantes: Array<{ c: ComprobanteCpe; xmlUrl: s
   const { error: eLogin } = await sb.auth.signInWithPassword({
     email: pedir("ROBOT_CORREO"), password: pedir("ROBOT_CLAVE"),
   });
-  if (eLogin) { console.error("⚠ No se guardó el detalle (login):", eLogin.message); return; }
+  if (eLogin) { console.error("⚠ No se guardó el detalle (login):", eLogin.message); return null; }
   const { data, error } = await sb.rpc("guardar_cpe", { p_empresa_ruc: RUC, p_docs: lote });
-  if (error) { console.error("⚠ No se guardó el detalle:", error.message); return; }
+  if (error) { console.error("⚠ No se guardó el detalle:", error.message); return null; }
   const r = (Array.isArray(data) ? data[0] : data) as { nuevos: number; actualizados: number; items: number };
   console.log(`Detalle guardado: ${r?.nuevos} nuevos, ${r?.actualizados} actualizados, ${r?.items} ítems.`);
+  return sb;
+}
+
+/**
+ * Deja la hoja de Contabilidad al día, igual que hace `sunat-diario.mts` con
+ * la de cabeceras.
+ *
+ * Sin esto, la hoja se queda como quedó la última vez que alguien entró a la
+ * app y le dio al botón — justo lo que se quería evitar al automatizar la
+ * descarga: verla "al día" sin ninguna señal de que no lo está.
+ *
+ * Es opcional: si faltan las credenciales de Drive, el detalle igual quedó
+ * guardado en la base y solo se salta la publicación.
+ */
+async function publicarLaHojaDetalle(sb: SupabaseClient): Promise<void> {
+  if (!process.env.GOOGLE_SA_EMAIL || !process.env.GOOGLE_DRIVE_FOLDER_ID) {
+    console.log("Sin credenciales de Drive: no se actualiza la hoja de detalle.");
+    return;
+  }
+
+  const { data, error } = await sb.rpc("detalle_cpe", { p_periodo: null });
+  if (error || !Array.isArray(data)) {
+    console.error("⚠ No se pudo leer el detalle para la hoja:", error?.message);
+    return;
+  }
+
+  const filas = (data as Record<string, unknown>[]).map(filaDetalleDesdeRpc);
+  const r = await publicarHoja({
+    filas: filasItemsSunat(filas),
+    nombre: "COMPROBANTES SUNAT - DETALLE",
+    carpetas: ["SUNAT"],
+    tipos: TIPOS_ITEMS,
+  });
+  console.log(`Hoja de detalle al día: ${filas.length} ítems · ${r.url}`);
 }
 
 function decodificar(buf: Buffer): string {
@@ -584,7 +627,8 @@ try {
     }
     console.log(`Archivados en Drive: ${nuevos} nuevos, ${existentes} ya estaban.`);
 
-    await guardarDetalle(comprobantes);
+    const sb = await guardarDetalle(comprobantes);
+    if (sb) await publicarLaHojaDetalle(sb);
   }
 } catch (e) {
   await evidencia(page, "error");

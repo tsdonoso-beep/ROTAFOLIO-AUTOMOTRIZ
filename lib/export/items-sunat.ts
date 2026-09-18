@@ -65,6 +65,38 @@ export const TIPOS_ITEMS: TipoColumna[] = [
   "texto",  // XML
 ];
 
+/**
+ * Convierte una fila cruda de `detalle_cpe` —tal como la manda PostgREST, en
+ * snake_case y con los números como texto— a `FilaDetalleCpe`.
+ *
+ * Aparte para que la use tanto la acción de servidor (cuando alguien pide la
+ * hoja desde la app) como el scraper (que la deja publicada solo, sin que
+ * nadie tenga que entrar a pedirla): la misma conversión, escrita una vez.
+ */
+export function filaDetalleDesdeRpc(d: Record<string, unknown>): FilaDetalleCpe {
+  const aNum = (v: unknown) => (v == null || v === "" ? null : Number(v));
+  return {
+    periodo: (d.periodo as string) ?? null,
+    origen: (d.origen as string) ?? null,
+    proveedorRuc: (d.proveedor_ruc as string) ?? null,
+    proveedorNombre: (d.proveedor_nombre as string) ?? null,
+    tipoComprobante: (d.tipo_comprobante as string) ?? null,
+    serie: (d.serie as string) ?? null,
+    numero: (d.numero as string) ?? null,
+    fechaEmision: (d.fecha_emision as string) ?? null,
+    moneda: (d.moneda as string) ?? null,
+    linea: aNum(d.linea),
+    descripcion: (d.descripcion as string) ?? null,
+    cantidad: aNum(d.cantidad),
+    unidad: (d.unidad as string) ?? null,
+    precioUnitario: aNum(d.precio_unitario),
+    importe: aNum(d.importe),
+    totalComprobante: aNum(d.total_comprobante),
+    enlacePdf: (d.enlace_pdf as string) ?? null,
+    enlaceXml: (d.enlace_xml as string) ?? null,
+  };
+}
+
 // Vacío cuando no hay dato, no un cero: distinguir un importe ausente de uno
 // que es cero de verdad.
 const num = (v: number | null, dec = 2) => (v == null ? "" : Number(v).toFixed(dec));
