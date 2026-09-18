@@ -41,16 +41,17 @@ function procesar(soloRevisar) {
   if (!cfg.carpetaRaiz) throw new Error("Falta CARPETA_RAIZ en las Propiedades del script.");
 
   var raiz = DriveApp.getFolderById(cfg.carpetaRaiz);
-  var archivos = listarArchivosSueltos(raiz);
+  var listado = listarArchivos(raiz);
+  var pdfsLibres = listado.pdfs.slice();
 
   var doclotes = [];
   var porCarpeta = {};
   var sinXml = 0, errores = 0;
 
-  for (var base in archivos) {
-    var par = archivos[base];
+  for (var i = 0; i < listado.xmls.length; i++) {
+    var archivoXml = listado.xmls[i];
     try {
-      var xmlTexto = par.xml ? leerXmlDeArchivo(par.xml) : null;
+      var xmlTexto = leerXmlDeArchivo(archivoXml);
       if (!xmlTexto) { sinXml++; continue; }
 
       var c = leerComprobante(xmlTexto, cfg.rucEmpresa);
@@ -62,21 +63,32 @@ function procesar(soloRevisar) {
       var clave = ruta.join("/");
       porCarpeta[clave] = (porCarpeta[clave] || 0) + 1;
 
+      // El PDF de SUNAT no siempre lleva el mismo nombre que el XML: se
+      // busca por el mismo nombre primero y, si no, por si el nombre del PDF
+      // contiene la serie-número del comprobante (con o sin el guion).
+      var pdfPar = emparejarPdf(archivoXml, c, pdfsLibres);
+      if (pdfPar) quitarDeLista(pdfsLibres, pdfPar);
+
       if (!soloRevisar) {
         var destino = carpetaAnidada(raiz, ruta);
-        mover(par.xml, destino, raiz);
-        if (par.pdf) mover(par.pdf, destino, raiz);
-        doclotes.push(aDocLote(c, par.xml.getUrl()));
+        mover(archivoXml, destino, raiz);
+        if (pdfPar) mover(pdfPar, destino, raiz);
+        doclotes.push(aDocLote(c, archivoXml.getUrl()));
       }
     } catch (e) {
       errores++;
-      Logger.log("✗ " + base + ": " + e);
+      Logger.log("✗ " + archivoXml.getName() + ": " + e);
     }
   }
 
   Logger.log("— Resumen —");
   for (var k in porCarpeta) Logger.log(k + ": " + porCarpeta[k]);
   Logger.log("Sin XML legible: " + sinXml + ". Errores: " + errores + ".");
+
+  if (pdfsLibres.length > 0) {
+    Logger.log("PDF sin pareja encontrada (se quedaron donde estaban): " + pdfsLibres.length);
+    for (var p = 0; p < pdfsLibres.length; p++) Logger.log("  · " + pdfsLibres[p].getName());
+  }
 
   if (soloRevisar) {
     Logger.log("Solo revisión: no se movió ni se guardó nada. Corre ordenarComprobantesSunat() para aplicarlo.");
@@ -85,6 +97,27 @@ function procesar(soloRevisar) {
   } else {
     Logger.log("No había nada que mover.");
   }
+}
+
+/** El PDF que corresponde a un XML: por nombre igual, o si no, por serie-número. */
+function emparejarPdf(archivoXml, c, pdfsLibres) {
+  var baseXml = archivoXml.getName().replace(/\.(xml|zip)$/i, "").toUpperCase();
+  var conGuion = ((c.serie || "") + "-" + (c.numero || "")).toUpperCase();
+  var sinGuion = ((c.serie || "") + (c.numero || "")).toUpperCase();
+
+  for (var i = 0; i < pdfsLibres.length; i++) {
+    if (pdfsLibres[i].getName().replace(/\.pdf$/i, "").toUpperCase() === baseXml) return pdfsLibres[i];
+  }
+  for (var j = 0; j < pdfsLibres.length; j++) {
+    var nombre = pdfsLibres[j].getName().toUpperCase();
+    if ((c.serie && c.numero) && (nombre.indexOf(conGuion) >= 0 || nombre.indexOf(sinGuion) >= 0)) return pdfsLibres[j];
+  }
+  return null;
+}
+
+function quitarDeLista(lista, item) {
+  var idx = lista.indexOf(item);
+  if (idx >= 0) lista.splice(idx, 1);
 }
 
 // ── Configuración ──────────────────────────────────────────────────
@@ -106,20 +139,21 @@ function configuracion() {
 // `getFiles()` solo trae los archivos QUE ESTÁN DIRECTO en la carpeta, no los
 // de Emitidas/Recibidas/Otros: por eso no hace falta excluirlos a mano, ni
 // hay riesgo de tocar dos veces lo que ya se ordenó.
+//
+// Los XML y los PDF se listan aparte —no por un nombre en común, que SUNAT no
+// siempre respeta entre los dos enlaces de descarga— y se emparejan más
+// adelante por serie-número, leyendo el XML.
 
-function listarArchivosSueltos(raiz) {
-  var porBase = {};
+function listarArchivos(raiz) {
+  var xmls = [], pdfs = [];
   var it = raiz.getFiles();
   while (it.hasNext()) {
     var f = it.next();
-    var m = /^(.*)\.(xml|pdf|zip)$/i.exec(f.getName());
-    if (!m) continue;
-    var base = m[1], ext = m[2].toLowerCase();
-    if (!porBase[base]) porBase[base] = { xml: null, pdf: null };
-    if (ext === "pdf") porBase[base].pdf = f;
-    else porBase[base].xml = f; // .xml o .zip: los dos traen el XML adentro
+    var nombre = f.getName();
+    if (/\.pdf$/i.test(nombre)) pdfs.push(f);
+    else if (/\.(xml|zip)$/i.test(nombre)) xmls.push(f);
   }
-  return porBase;
+  return { xmls: xmls, pdfs: pdfs };
 }
 
 /** El texto del XML de un archivo, sacándolo del ZIP si hace falta. */
