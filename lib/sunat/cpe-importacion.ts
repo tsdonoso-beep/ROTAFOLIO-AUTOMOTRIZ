@@ -34,8 +34,9 @@ export interface DocLote {
   igv: number | null;
   total: number | null;
   periodo: string | null;
-  /** Dónde quedó archivado el XML en Drive, si el scraper lo subió. */
+  /** Dónde quedaron archivados el XML y el PDF en Drive, si el scraper los subió. */
   xmlDriveUrl: string | null;
+  pdfDriveUrl: string | null;
   items: ItemLote[];
 }
 
@@ -103,6 +104,7 @@ export function prepararLote(
       total: c.total,
       periodo: periodoDe(c.fechaEmision),
       xmlDriveUrl: null,
+      pdfDriveUrl: null,
       items: c.items.map(i => ({
         linea: i.linea,
         descripcion: i.descripcion,

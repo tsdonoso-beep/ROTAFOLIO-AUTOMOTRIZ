@@ -166,7 +166,7 @@ function procesar(soloRevisar) {
         var destino = carpetaAnidada(raiz, ruta);
         mover(archivoXml, destino, raiz);
         if (pdfPar) mover(pdfPar, destino, raiz);
-        doclotes.push(aDocLote(c, archivoXml.getUrl()));
+        doclotes.push(aDocLote(c, archivoXml.getUrl(), pdfPar ? pdfPar.getUrl() : null));
       }
     } catch (e) {
       errores++;
@@ -464,7 +464,7 @@ function periodoDe(fechaEmision) {
 // paso le pone el `xml_drive_url` que antes no tenía. No hace falta una
 // función nueva en la base para esto.
 
-function aDocLote(c, xmlUrl) {
+function aDocLote(c, xmlUrl, pdfUrl) {
   return {
     origen: c.origen,
     proveedorRuc: c.proveedorRuc, proveedorNombre: c.proveedorNombre,
@@ -474,8 +474,50 @@ function aDocLote(c, xmlUrl) {
     subtotal: c.subtotal, igv: c.igv, total: c.total,
     periodo: periodoDe(c.fechaEmision),
     xmlDriveUrl: xmlUrl,
+    pdfDriveUrl: pdfUrl || null,
     items: c.items,
   };
+}
+
+function actualizarEnlacesPdf() {
+  var cfg = configuracion();
+  var raiz = DriveApp.getFolderById(cfg.carpetaRaiz);
+  var doclotes = [];
+
+  var subcarpetas = raiz.getFolders();
+  while (subcarpetas.hasNext()) {
+    var sub = subcarpetas.next(); // Emitidas / Recibidas / Otros
+    var meses = sub.getFolders();
+    while (meses.hasNext()) {
+      var mes = meses.next(); // AAAA-MM / Sin fecha
+      var todos = [];
+      var it = mes.getFiles();
+      while (it.hasNext()) todos.push(it.next());
+
+      var pdfsPorClave = {};
+      for (var i = 0; i < todos.length; i++) {
+        if (!/\.pdf$/i.test(todos[i].getName())) continue;
+        var partes = partirNombrePdf(todos[i].getName());
+        if (partes) pdfsPorClave[partes.serie + "|" + partes.numero + "|" + partes.ruc] = todos[i];
+      }
+
+      for (var j = 0; j < todos.length; j++) {
+        var f = todos[j];
+        if (!/\.(xml|zip)$/i.test(f.getName())) continue;
+        try {
+          var texto = leerXmlDeArchivo(f);
+          if (!texto) continue;
+          var c = leerComprobante(texto, cfg.rucEmpresa);
+          if (!c.serie || !c.numero) continue;
+          var pdf = pdfsPorClave[c.serie + "|" + c.numero + "|" + c.proveedorRuc];
+          doclotes.push(aDocLote(c, f.getUrl(), pdf ? pdf.getUrl() : null));
+        } catch (e) { /* un XML raro no debe tumbar el resto */ }
+      }
+    }
+  }
+
+  Logger.log("Comprobantes a re-guardar con su enlace de PDF: " + doclotes.length);
+  if (doclotes.length > 0) guardarEnBase(doclotes, cfg);
 }
 
 function iniciarSesionRobot(cfg) {

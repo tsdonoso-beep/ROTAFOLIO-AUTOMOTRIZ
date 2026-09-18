@@ -162,7 +162,8 @@ async function filasDetalle(periodo?: string): Promise<FilaDetalleCpe[] | null> 
     precioUnitario: aNum(d.precio_unitario),
     importe: aNum(d.importe),
     totalComprobante: aNum(d.total_comprobante),
-    enlace: (d.enlace as string) ?? null,
+    enlacePdf: (d.enlace_pdf as string) ?? null,
+    enlaceXml: (d.enlace_xml as string) ?? null,
   }));
 }
 

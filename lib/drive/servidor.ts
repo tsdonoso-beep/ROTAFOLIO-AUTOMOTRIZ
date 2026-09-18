@@ -333,13 +333,32 @@ export async function escribirPestana(
   });
 
   // Las columnas de fecha llevan números de día, que sin formato se ven como
-  // 45987. El formato va antes de escribir para que nadie alcance a ver eso.
+  // 45987. Va junto con la cabecera fija y en negrita, todo antes de
+  // escribir: son formatos, no dependen de los datos que vienen.
   const fechas = columnasDeFecha(tipos);
-  if (fechas.length > 0) {
-    await hojas.spreadsheets.batchUpdate({
-      spreadsheetId: hojaId,
-      requestBody: {
-        requests: fechas.map(c => ({
+  await hojas.spreadsheets.batchUpdate({
+    spreadsheetId: hojaId,
+    requestBody: {
+      requests: [
+        {
+          updateSheetProperties: {
+            properties: { sheetId: pestana.id, gridProperties: { frozenRowCount: 1 } },
+            fields: "gridProperties.frozenRowCount",
+          },
+        },
+        {
+          repeatCell: {
+            range: { sheetId: pestana.id, startRowIndex: 0, endRowIndex: 1 },
+            cell: {
+              userEnteredFormat: {
+                textFormat: { bold: true },
+                backgroundColor: { red: 0.92, green: 0.94, blue: 0.96 },
+              },
+            },
+            fields: "userEnteredFormat(textFormat,backgroundColor)",
+          },
+        },
+        ...fechas.map(c => ({
           repeatCell: {
             range: {
               sheetId: pestana.id,
@@ -350,9 +369,9 @@ export async function escribirPestana(
             fields: "userEnteredFormat.numberFormat",
           },
         })),
-      },
-    });
-  }
+      ],
+    },
+  });
 
   const tabla = aTabla(filas, tipos);
   for (const bloque of enBloques(tabla, FILAS_POR_ENVIO)) {
@@ -365,6 +384,19 @@ export async function escribirPestana(
       requestBody: { values: bloque.filas },
     });
   }
+
+  // El ancho de columna se ajusta DESPUÉS de escribir: se basa en el
+  // contenido real, y antes de escribir todavía no lo hay.
+  await hojas.spreadsheets.batchUpdate({
+    spreadsheetId: hojaId,
+    requestBody: {
+      requests: [{
+        autoResizeDimensions: {
+          dimensions: { sheetId: pestana.id, dimension: "COLUMNS", startIndex: 0, endIndex: anchoNecesario },
+        },
+      }],
+    },
+  });
 }
 
 /**

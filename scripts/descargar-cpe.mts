@@ -486,7 +486,7 @@ async function carpetaDelLote(
 
 // ── Guardar el detalle (opcional, si hay base) ────────────────────
 
-async function guardarDetalle(comprobantes: Array<{ c: ComprobanteCpe; xmlUrl: string | null }>) {
+async function guardarDetalle(comprobantes: Array<{ c: ComprobanteCpe; xmlUrl: string | null; pdfUrl: string | null }>) {
   const url = process.env.SUPABASE_URL || process.env.PROJECT_URL;
   if (!url || comprobantes.length === 0) return;
   const lote = prepararLote(comprobantes.map(x => x.c), RUC);
@@ -495,8 +495,12 @@ async function guardarDetalle(comprobantes: Array<{ c: ComprobanteCpe; xmlUrl: s
   // El lote dedup por identidad puede haberse quedado con un comprobante que
   // no es el mismo objeto que trajo el enlace; se reengancha por esa misma
   // identidad, no por posición.
-  const urlPorIdentidad = new Map(comprobantes.map(x => [identidad(x.c), x.xmlUrl]));
-  for (const d of lote) d.xmlDriveUrl = urlPorIdentidad.get(identidad(d)) ?? null;
+  const urlsPorIdentidad = new Map(comprobantes.map(x => [identidad(x.c), x]));
+  for (const d of lote) {
+    const par = urlsPorIdentidad.get(identidad(d));
+    d.xmlDriveUrl = par?.xmlUrl ?? null;
+    d.pdfDriveUrl = par?.pdfUrl ?? null;
+  }
 
   const sb = createClient(url, pedir("SUPABASE_ANON_KEY", "ANON_KEY"),
     { auth: { autoRefreshToken: false, persistSession: false } });
@@ -551,7 +555,7 @@ try {
   } else {
     const drive = clienteDrive();
     let nuevos = 0, existentes = 0;
-    const comprobantes: Array<{ c: ComprobanteCpe; xmlUrl: string | null }> = [];
+    const comprobantes: Array<{ c: ComprobanteCpe; xmlUrl: string | null; pdfUrl: string | null }> = [];
 
     // Se lee el XML antes de subir para saber, por comprobante, si es
     // Emitida o Recibida y de qué mes es —así cada archivo va directo a su
@@ -565,6 +569,7 @@ try {
       const carpetaId = await carpetaDelLote(drive, origen, periodo);
 
       let xmlUrl: string | null = null;
+      let pdfUrl: string | null = null;
       if (fila.xml) {
         const r = await subirADrive(drive, carpetaId, fila.xml);
         if (r.estado === "nuevo") nuevos++; else existentes++;
@@ -573,8 +578,9 @@ try {
       if (fila.pdf) {
         const r = await subirADrive(drive, carpetaId, fila.pdf);
         if (r.estado === "nuevo") nuevos++; else existentes++;
+        pdfUrl = r.url;
       }
-      if (c) comprobantes.push({ c, xmlUrl });
+      if (c) comprobantes.push({ c, xmlUrl, pdfUrl });
     }
     console.log(`Archivados en Drive: ${nuevos} nuevos, ${existentes} ya estaban.`);
 
