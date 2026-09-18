@@ -36,6 +36,33 @@
 function revisarOrdenSunat() { procesar(true); }
 function ordenarComprobantesSunat() { procesar(false); }
 
+/**
+ * Diagnóstico puntual: imprime, para los primeros XML y PDF, los valores
+ * exactos entre corchetes —para pescar un espacio o una diferencia de un
+ * dígito que a simple vista no se ve— sin mover ni guardar nada.
+ */
+function diagnosticoEmparejado() {
+  var cfg = configuracion();
+  var raiz = DriveApp.getFolderById(cfg.carpetaRaiz);
+  var listado = listarArchivos(raiz);
+  Logger.log("XML/ZIP: " + listado.xmls.length + ". PDF: " + listado.pdfs.length);
+
+  for (var i = 0; i < Math.min(5, listado.xmls.length); i++) {
+    var xmlTexto = leerXmlDeArchivo(listado.xmls[i]);
+    var c = leerComprobante(xmlTexto, cfg.rucEmpresa);
+    Logger.log("XML " + listado.xmls[i].getName()
+      + " -> serie=[" + c.serie + "] numero=[" + c.numero + "] proveedorRuc=[" + c.proveedorRuc + "]");
+  }
+
+  for (var j = 0; j < Math.min(5, listado.pdfs.length); j++) {
+    var nombre = listado.pdfs[j].getName();
+    var partes = partirNombrePdf(nombre);
+    Logger.log("PDF " + nombre + " -> " + (partes
+      ? ("serie=[" + partes.serie + "] numero=[" + partes.numero + "] ruc=[" + partes.ruc + "]")
+      : "no calzó el patrón PDF-DOC-...pdf"));
+  }
+}
+
 function procesar(soloRevisar) {
   var cfg = configuracion();
   if (!cfg.carpetaRaiz) throw new Error("Falta CARPETA_RAIZ en las Propiedades del script.");
