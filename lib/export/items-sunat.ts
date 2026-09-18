@@ -36,10 +36,17 @@ export interface FilaDetalleCpe {
   formaPago: string | null;
   guiaRemision: string | null;
   ordenCompra: string | null;
+  /** El comprobante que este referencia, típico en anticipos y valorizaciones. */
+  documentoRelacionado: string | null;
+  tipoDocumentoRelacionado: string | null;
+  anticipoAplicado: number | null;
   /** null si el comprobante no está sujeto a detracción. */
   detraccionPorcentaje: number | null;
   detraccionMonto: number | null;
+  /** La cuenta del Banco de la Nación. */
   detraccionCuentaBanco: string | null;
+  /** El código del bien/servicio detraído, catálogo 54 de SUNAT. */
+  detraccionCodigoBienServicio: string | null;
 }
 
 // El orden importa: lo que se busca primero —de qué comprobante es, qué se
@@ -49,7 +56,8 @@ export const CABECERAS_ITEMS = [
   "Período", "Origen", "RUC proveedor", "Proveedor",
   "Tipo", "Serie", "Número", "Fecha de emisión", "Moneda",
   "Forma de pago", "Guía de remisión", "Orden de compra",
-  "% Detracción", "Detracción", "Cuenta detracción",
+  "Documento relacionado", "Tipo doc. relacionado", "Anticipo aplicado",
+  "% Detracción", "Detracción", "Cuenta detracción", "Código bien/servicio detracción",
   "Línea", "Descripción", "Cantidad", "Unidad", "Precio unitario", "Importe",
   "Total del comprobante", "PDF", "XML",
 ];
@@ -67,9 +75,13 @@ export const TIPOS_ITEMS: TipoColumna[] = [
   "texto",  // Forma de pago
   "texto",  // Guía de remisión
   "texto",  // Orden de compra
+  "texto",  // Documento relacionado
+  "texto",  // Tipo doc. relacionado
+  "numero", // Anticipo aplicado
   "numero", // % Detracción
   "numero", // Detracción
   "texto",  // Cuenta detracción
+  "texto",  // Código bien/servicio detracción
   "numero", // Línea
   "texto",  // Descripción
   "numero", // Cantidad
@@ -113,9 +125,13 @@ export function filaDetalleDesdeRpc(d: Record<string, unknown>): FilaDetalleCpe 
     formaPago: (d.forma_pago as string) ?? null,
     guiaRemision: (d.guia_remision as string) ?? null,
     ordenCompra: (d.orden_compra as string) ?? null,
+    documentoRelacionado: (d.documento_relacionado as string) ?? null,
+    tipoDocumentoRelacionado: (d.tipo_documento_relacionado as string) ?? null,
+    anticipoAplicado: aNum(d.anticipo_aplicado),
     detraccionPorcentaje: aNum(d.detraccion_porcentaje),
     detraccionMonto: aNum(d.detraccion_monto),
     detraccionCuentaBanco: (d.detraccion_cuenta_banco as string) ?? null,
+    detraccionCodigoBienServicio: (d.detraccion_codigo_bien_servicio as string) ?? null,
   };
 }
 
@@ -143,9 +159,13 @@ export function filasItemsSunat(filas: FilaDetalleCpe[]): string[][] {
       f.formaPago ?? "",
       f.guiaRemision ?? "",
       f.ordenCompra ?? "",
+      f.documentoRelacionado ?? "",
+      f.tipoDocumentoRelacionado ?? "",
+      num(f.anticipoAplicado, 2),
       num(f.detraccionPorcentaje, 2),
       num(f.detraccionMonto, 2),
       f.detraccionCuentaBanco ?? "",
+      f.detraccionCodigoBienServicio ?? "",
       f.linea == null ? "" : String(f.linea),
       f.descripcion ?? "",
       num(f.cantidad, 2),

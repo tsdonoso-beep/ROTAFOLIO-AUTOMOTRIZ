@@ -387,6 +387,7 @@ function leerComprobante(xmlTexto, rucEmpresa) {
   var ruc = (rucEmpresa || "").trim();
   var origen = adquiriente.ruc === ruc ? "RECIBIDO" : proveedor.ruc === ruc ? "EMITIDO" : "OTRO";
   var pago = pagoDe(raizXml);
+  var relacionado = buscarUno(raizXml, "AdditionalDocumentReference");
 
   return {
     origen: origen,
@@ -404,6 +405,9 @@ function leerComprobante(xmlTexto, rucEmpresa) {
     detraccion: pago.detraccion,
     guiaRemision: valorDe(buscarUno(raizXml, "DespatchDocumentReference"), "ID"),
     ordenCompra: valorDe(buscarUno(raizXml, "OrderReference"), "ID"),
+    anticipoAplicado: aMonto(valorDe(totales, "PrepaidAmount")),
+    documentoRelacionado: valorDe(relacionado, "ID"),
+    tipoDocumentoRelacionado: valorDe(relacionado, "DocumentType"),
     items: items,
   };
 }
@@ -411,10 +415,17 @@ function leerComprobante(xmlTexto, rucEmpresa) {
 /**
  * La forma de pago, sus cuotas si es al crédito, y la detracción.
  *
- * Los tres viven en bloques `cac:PaymentTerms` —uno por cada cosa—, que se
- * distinguen por su `cbc:ID` (o, para las cuotas, por que su
- * `PaymentMeansID` empieza con «Cuota»): así lo describe la guía de SUNAT
- * para UBL 2.1. Mismo criterio que `lib/sunat/cpe-xml.ts`.
+ * Los tres viven en bloques `cac:PaymentTerms` —uno por cada cosa—. La
+ * cabecera de forma de pago y CADA UNA DE SUS CUOTAS comparten el MISMO
+ * `cbc:ID` «FormaPago» —un XML real lo confirmó—, así que una cuota se
+ * reconoce PRIMERO por que su `PaymentMeansID` empieza con «Cuota»:
+ * revisarlo después de "¿es FormaPago?" hace que la última cuota le pise el
+ * valor a la forma de pago, y las cuotas nunca se guarden. Mismo criterio
+ * que `lib/sunat/cpe-xml.ts`.
+ *
+ * La cuenta de la detracción NO vive acá: `PaymentTerms[Detraccion]/PaymentMeansID`
+ * es el código del bien/servicio detraído (catálogo 54), no una cuenta. La
+ * cuenta real está en `cac:PaymentMeans`, un bloque aparte.
  */
 function pagoDe(raizXml) {
   var formaPago = null;
@@ -429,12 +440,11 @@ function pagoDe(raizXml) {
 
     if (id === "Detraccion") {
       detraccion = {
-        cuentaBanco: medio,
+        cuentaBanco: cuentaDetraccionDe(raizXml),
+        codigoBienServicio: medio,
         porcentaje: aMonto(valorDe(b, "PaymentPercent")),
         monto: aMonto(valorDe(b, "Amount")),
       };
-    } else if (id === "FormaPago") {
-      formaPago = medio;
     } else if (medio && /^cuota/i.test(medio)) {
       var m = /\d+/.exec(medio);
       cuotas.push({
@@ -442,11 +452,27 @@ function pagoDe(raizXml) {
         monto: aMonto(valorDe(b, "Amount")),
         fechaVencimiento: aFecha(valorDe(b, "PaymentDueDate")),
       });
+    } else if (id === "FormaPago") {
+      formaPago = medio;
     }
   }
 
   cuotas.sort(function (a, b2) { return (a.numero || 0) - (b2.numero || 0); });
   return { formaPago: formaPago, cuotas: cuotas, detraccion: detraccion };
+}
+
+/**
+ * La cuenta del Banco de la Nación de la detracción, de `cac:PaymentMeans`
+ * —no de `PaymentTerms`, que solo trae el código del bien/servicio—.
+ */
+function cuentaDetraccionDe(raizXml) {
+  var bloquesMedio = buscarTodos(raizXml, "PaymentMeans");
+  for (var i = 0; i < bloquesMedio.length; i++) {
+    if (valorDe(bloquesMedio[i], "ID") === "Detraccion") {
+      return valorDe(buscarUno(bloquesMedio[i], "PayeeFinancialAccount"), "ID");
+    }
+  }
+  return null;
 }
 
 function tipoDe(raizXml) {
@@ -561,10 +587,14 @@ function aDocLote(c, xmlUrl, pdfUrl) {
     formaPago: c.formaPago,
     cuotas: c.cuotas,
     detraccionCuentaBanco: c.detraccion ? c.detraccion.cuentaBanco : null,
+    detraccionCodigoBienServicio: c.detraccion ? c.detraccion.codigoBienServicio : null,
     detraccionPorcentaje: c.detraccion ? c.detraccion.porcentaje : null,
     detraccionMonto: c.detraccion ? c.detraccion.monto : null,
     guiaRemision: c.guiaRemision,
     ordenCompra: c.ordenCompra,
+    anticipoAplicado: c.anticipoAplicado,
+    documentoRelacionado: c.documentoRelacionado,
+    tipoDocumentoRelacionado: c.tipoDocumentoRelacionado,
     items: c.items,
   };
 }

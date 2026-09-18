@@ -31,7 +31,10 @@ export interface ItemCpe {
 
 /** La detracción (SPOT): a qué cuenta, qué porcentaje y cuánto se detrae. */
 export interface DetraccionCpe {
+  /** La cuenta del Banco de la Nación, de `cac:PaymentMeans`, no de `PaymentTerms`. */
   cuentaBanco: string | null;
+  /** El código del bien/servicio detraído, catálogo 54 de SUNAT (ej. "037"). */
+  codigoBienServicio: string | null;
   porcentaje: number | null;
   monto: number | null;
 }
@@ -72,6 +75,12 @@ export interface ComprobanteCpe {
   guiaRemision: string | null;
   /** El número de la orden de compra relacionada, si la trae. */
   ordenCompra: string | null;
+  /** Cuánto se descontó del total por un anticipo ya facturado antes. */
+  anticipoAplicado: number | null;
+  /** El comprobante que referencia —típico en anticipos y valorizaciones de obra—. */
+  documentoRelacionado: string | null;
+  /** Qué es el documento relacionado, ej. "ANTICIPO". */
+  tipoDocumentoRelacionado: string | null;
   items: ItemCpe[];
 }
 
@@ -270,9 +279,15 @@ function itemDe(bloqueLinea: string, cantidadTag: string): ItemCpe {
  * La forma de pago, sus cuotas si es al crédito, y la detracción.
  *
  * Los tres viven en bloques `cac:PaymentTerms` —uno por cada cosa—, que se
- * distinguen por su `cbc:ID` (o, para las cuotas, por que su
- * `PaymentMeansID` empieza con «Cuota»): así lo describe la guía de SUNAT
- * para UBL 2.1, y así lo trae el XML real.
+ * distinguen por su `cbc:ID`. La cabecera de forma de pago y cada una de sus
+ * cuotas comparten el MISMO `cbc:ID` («FormaPago»): un XML real lo confirmó.
+ * Por eso una cuota se reconoce PRIMERO por que su `PaymentMeansID` empieza
+ * con «Cuota» —revisarlo después de "¿es FormaPago?" hace que la última
+ * cuota le pise el valor a la forma de pago, y las cuotas nunca se guarden—.
+ *
+ * La cuenta de la detracción NO vive acá: `PaymentTerms[Detraccion]/PaymentMeansID`
+ * es el código del bien/servicio detraído (catálogo 54), no una cuenta. La
+ * cuenta real está en `cac:PaymentMeans`, un bloque aparte (`cuentaDetraccionDe`).
  */
 function pagoDe(xml: string): { formaPago: string | null; cuotas: CuotaCpe[]; detraccion: DetraccionCpe | null } {
   let formaPago: string | null = null;
@@ -285,23 +300,35 @@ function pagoDe(xml: string): { formaPago: string | null; cuotas: CuotaCpe[]; de
 
     if (id === "Detraccion") {
       detraccion = {
-        cuentaBanco: medio,
+        cuentaBanco: cuentaDetraccionDe(xml),
+        codigoBienServicio: medio,
         porcentaje: aMonto(valor(b, "PaymentPercent")),
         monto: aMonto(valor(b, "Amount")),
       };
-    } else if (id === "FormaPago") {
-      formaPago = medio;
     } else if (medio && /^cuota/i.test(medio)) {
       cuotas.push({
         numero: Number(/\d+/.exec(medio)?.[0] ?? "") || null,
         monto: aMonto(valor(b, "Amount")),
         fechaVencimiento: aFechaXml(valor(b, "PaymentDueDate")),
       });
+    } else if (id === "FormaPago") {
+      formaPago = medio;
     }
   }
 
   cuotas.sort((a, b) => (a.numero ?? 0) - (b.numero ?? 0));
   return { formaPago, cuotas, detraccion };
+}
+
+/**
+ * La cuenta del Banco de la Nación de la detracción, de `cac:PaymentMeans`
+ * —no de `PaymentTerms`, que solo trae el código del bien/servicio—.
+ */
+function cuentaDetraccionDe(xml: string): string | null {
+  for (const b of bloques(xml, "PaymentMeans")) {
+    if (valor(b, "ID") === "Detraccion") return valor(bloque(b, "PayeeFinancialAccount"), "ID");
+  }
+  return null;
 }
 
 /**
@@ -333,6 +360,7 @@ export function leerComprobanteXml(xml: string): ComprobanteCpe {
     .sort((a, b) => (a.linea ?? 0) - (b.linea ?? 0));
 
   const { formaPago, cuotas, detraccion } = pagoDe(xml);
+  const relacionado = bloque(xml, "AdditionalDocumentReference");
 
   return {
     tipoComprobante: tipo,
@@ -352,6 +380,9 @@ export function leerComprobanteXml(xml: string): ComprobanteCpe {
     detraccion,
     guiaRemision: valor(bloque(xml, "DespatchDocumentReference"), "ID"),
     ordenCompra: valor(bloque(xml, "OrderReference"), "ID"),
+    anticipoAplicado: aMonto(valor(totales, "PrepaidAmount")),
+    documentoRelacionado: valor(relacionado, "ID"),
+    tipoDocumentoRelacionado: valor(relacionado, "DocumentType"),
     items,
   };
 }

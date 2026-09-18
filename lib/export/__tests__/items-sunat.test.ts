@@ -14,7 +14,9 @@ function fila(over: Partial<FilaDetalleCpe> = {}): FilaDetalleCpe {
     enlacePdf: "https://drive.google.com/file/d/pdf/view",
     enlaceXml: "https://drive.google.com/file/d/xml/view",
     formaPago: "Credito", guiaRemision: "T001-1", ordenCompra: "OC-9",
-    detraccionPorcentaje: 12, detraccionMonto: 85.5, detraccionCuentaBanco: "003",
+    documentoRelacionado: "F001-9", tipoDocumentoRelacionado: "ANTICIPO", anticipoAplicado: 500,
+    detraccionPorcentaje: 12, detraccionMonto: 85.5,
+    detraccionCuentaBanco: "00002003147", detraccionCodigoBienServicio: "037",
     ...over,
   };
 }
@@ -41,46 +43,58 @@ describe("filasItemsSunat", () => {
 
   test("el precio unitario lleva cuatro decimales; el importe, dos", () => {
     const r = filas[1];
-    assert.equal(r[19], "2.8500");
-    assert.equal(r[20], "712.50");
+    assert.equal(r[23], "2.8500");
+    assert.equal(r[24], "712.50");
   });
 
   test("un importe ausente queda vacío, no en cero", () => {
     const r = filasItemsSunat([fila({ importe: null })])[1];
-    assert.equal(r[20], "");
+    assert.equal(r[24], "");
   });
 
   test("el PDF y el XML archivados en Drive van al final, PDF primero", () => {
     const r = filas[1];
-    assert.equal(r[22], "https://drive.google.com/file/d/pdf/view");
-    assert.equal(r[23], "https://drive.google.com/file/d/xml/view");
+    assert.equal(r[26], "https://drive.google.com/file/d/pdf/view");
+    assert.equal(r[27], "https://drive.google.com/file/d/xml/view");
   });
 
   test("sin enlace archivado queda vacío, no como texto 'null'", () => {
     const r = filasItemsSunat([fila({ enlacePdf: null, enlaceXml: null })])[1];
-    assert.equal(r[22], "");
-    assert.equal(r[23], "");
+    assert.equal(r[26], "");
+    assert.equal(r[27], "");
   });
 
-  test("forma de pago, guía, OC y detracción van entre la moneda y las líneas", () => {
+  test("forma de pago, guía, OC, documento relacionado y anticipo van entre la moneda y las líneas", () => {
     const r = filas[1];
     assert.equal(r[9], "Credito");
     assert.equal(r[10], "T001-1");
     assert.equal(r[11], "OC-9");
-    assert.equal(r[12], "12.00");
-    assert.equal(r[13], "85.50");
-    assert.equal(r[14], "003");
+    assert.equal(r[12], "F001-9");
+    assert.equal(r[13], "ANTICIPO");
+    assert.equal(r[14], "500.00");
   });
 
-  test("sin detracción, los campos quedan vacíos, no en cero", () => {
+  test("la detracción trae porcentaje, monto, cuenta y código de bien/servicio", () => {
+    const r = filas[1];
+    assert.equal(r[15], "12.00");
+    assert.equal(r[16], "85.50");
+    assert.equal(r[17], "00002003147");
+    assert.equal(r[18], "037");
+  });
+
+  test("sin detracción ni anticipo, los campos quedan vacíos, no en cero", () => {
     const r = filasItemsSunat([fila({
       formaPago: null, guiaRemision: null, ordenCompra: null,
-      detraccionPorcentaje: null, detraccionMonto: null, detraccionCuentaBanco: null,
+      documentoRelacionado: null, tipoDocumentoRelacionado: null, anticipoAplicado: null,
+      detraccionPorcentaje: null, detraccionMonto: null,
+      detraccionCuentaBanco: null, detraccionCodigoBienServicio: null,
     })])[1];
     assert.equal(r[9], "");
     assert.equal(r[12], "");
-    assert.equal(r[13], "");
     assert.equal(r[14], "");
+    assert.equal(r[15], "");
+    assert.equal(r[17], "");
+    assert.equal(r[18], "");
   });
 });
 

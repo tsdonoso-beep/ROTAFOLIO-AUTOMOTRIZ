@@ -196,20 +196,20 @@ const FACTURA_DETRACCION_CREDITO = `<?xml version="1.0" encoding="UTF-8"?>
     <cbc:Amount currencyID="PEN">1000.00</cbc:Amount>
   </cac:PaymentTerms>
   <cac:PaymentTerms>
-    <cbc:ID>FormaPago002</cbc:ID>
+    <cbc:ID>FormaPago</cbc:ID>
     <cbc:PaymentMeansID>Cuota002</cbc:PaymentMeansID>
     <cbc:Amount currencyID="PEN">500.00</cbc:Amount>
     <cbc:PaymentDueDate>2026-10-10</cbc:PaymentDueDate>
   </cac:PaymentTerms>
   <cac:PaymentTerms>
-    <cbc:ID>FormaPago001</cbc:ID>
+    <cbc:ID>FormaPago</cbc:ID>
     <cbc:PaymentMeansID>Cuota001</cbc:PaymentMeansID>
     <cbc:Amount currencyID="PEN">500.00</cbc:Amount>
     <cbc:PaymentDueDate>2026-09-10</cbc:PaymentDueDate>
   </cac:PaymentTerms>
   <cac:PaymentTerms>
     <cbc:ID>Detraccion</cbc:ID>
-    <cbc:PaymentMeansID>Deposito en cuenta - Banco de la Nacion</cbc:PaymentMeansID>
+    <cbc:PaymentMeansID>037</cbc:PaymentMeansID>
     <cbc:PaymentPercent>12.00</cbc:PaymentPercent>
     <cbc:Amount currencyID="PEN">120.00</cbc:Amount>
   </cac:PaymentTerms>
@@ -227,6 +227,93 @@ const FACTURA_DETRACCION_CREDITO = `<?xml version="1.0" encoding="UTF-8"?>
   </cac:InvoiceLine>
 </Invoice>`;
 
+// Recortado de un XML real (factura emitida por INROPRIN, con detracción,
+// crédito a una cuota y un anticipo aplicado de otra factura): la cuota
+// comparte el MISMO cbc:ID «FormaPago» que la cabecera —no «FormaPago001»
+// como se asumió al principio—, y la cuenta de detracción vive en
+// cac:PaymentMeans, no en el PaymentTerms de la detracción.
+const FACTURA_REAL = `<?xml version="1.0" encoding="ISO-8859-1"?>
+<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
+  xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+  xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+  <cbc:ID>E001-2277</cbc:ID>
+  <cbc:IssueDate>2026-08-04</cbc:IssueDate>
+  <cbc:InvoiceTypeCode>01</cbc:InvoiceTypeCode>
+  <cbc:DocumentCurrencyCode>PEN</cbc:DocumentCurrencyCode>
+  <cac:AdditionalDocumentReference>
+    <cbc:ID schemeID="01">E001-1714</cbc:ID>
+    <cbc:DocumentTypeCode>02</cbc:DocumentTypeCode>
+    <cbc:DocumentType>ANTICIPO</cbc:DocumentType>
+  </cac:AdditionalDocumentReference>
+  <cac:AccountingSupplierParty><cac:Party>
+    <cac:PartyIdentification><cbc:ID>20512201611</cbc:ID></cac:PartyIdentification>
+    <cac:PartyLegalEntity><cbc:RegistrationName>INDUSTRIAS ROLAND PRINT S.A.C - INROPRIN S.A.C</cbc:RegistrationName></cac:PartyLegalEntity>
+  </cac:Party></cac:AccountingSupplierParty>
+  <cac:AccountingCustomerParty><cac:Party>
+    <cac:PartyIdentification><cbc:ID>20604269009</cbc:ID></cac:PartyIdentification>
+  </cac:Party></cac:AccountingCustomerParty>
+  <cac:PaymentMeans>
+    <cbc:ID>Detraccion</cbc:ID>
+    <cbc:PaymentMeansCode>001</cbc:PaymentMeansCode>
+    <cac:PayeeFinancialAccount><cbc:ID>00002003147</cbc:ID></cac:PayeeFinancialAccount>
+  </cac:PaymentMeans>
+  <cac:PaymentTerms>
+    <cbc:ID>Detraccion</cbc:ID>
+    <cbc:PaymentMeansID>037</cbc:PaymentMeansID>
+    <cbc:PaymentPercent>12.00</cbc:PaymentPercent>
+    <cbc:Amount currencyID="PEN">13038.00</cbc:Amount>
+  </cac:PaymentTerms>
+  <cac:PaymentTerms>
+    <cbc:ID>FormaPago</cbc:ID>
+    <cbc:PaymentMeansID>Credito</cbc:PaymentMeansID>
+    <cbc:Amount currencyID="PEN">86555.44</cbc:Amount>
+  </cac:PaymentTerms>
+  <cac:PaymentTerms>
+    <cbc:ID>FormaPago</cbc:ID>
+    <cbc:PaymentMeansID>Cuota001</cbc:PaymentMeansID>
+    <cbc:Amount currencyID="PEN">86555.44</cbc:Amount>
+    <cbc:PaymentDueDate>2026-08-14</cbc:PaymentDueDate>
+  </cac:PaymentTerms>
+  <cac:TaxTotal><cbc:TaxAmount currencyID="PEN">16573.33</cbc:TaxAmount></cac:TaxTotal>
+  <cac:LegalMonetaryTotal>
+    <cbc:LineExtensionAmount currencyID="PEN">92074.06</cbc:LineExtensionAmount>
+    <cbc:PrepaidAmount currencyID="PEN">61382.71</cbc:PrepaidAmount>
+    <cbc:PayableAmount currencyID="PEN">108647.39</cbc:PayableAmount>
+  </cac:LegalMonetaryTotal>
+  <cac:InvoiceLine>
+    <cbc:ID>2</cbc:ID>
+    <cbc:InvoicedQuantity unitCode="NIU">1.00</cbc:InvoicedQuantity>
+    <cbc:LineExtensionAmount currencyID="PEN">153456.77</cbc:LineExtensionAmount>
+    <cac:Item><cbc:Description>VALORIZACION NRO 06</cbc:Description></cac:Item>
+    <cac:Price><cbc:PriceAmount currencyID="PEN">153456.77</cbc:PriceAmount></cac:Price>
+  </cac:InvoiceLine>
+</Invoice>`;
+
+describe("leerComprobanteXml — XML real: detracción, crédito de una cuota, anticipo", () => {
+  const c = leerComprobanteXml(FACTURA_REAL);
+
+  test("la cuota no le pisa el valor a la forma de pago, aunque compartan el mismo ID", () => {
+    assert.equal(c.formaPago, "Credito");
+    assert.equal(c.cuotas.length, 1);
+    assert.deepEqual(c.cuotas[0], { numero: 1, monto: 86555.44, fechaVencimiento: "2026-08-14" });
+  });
+
+  test("la cuenta de detracción sale de PaymentMeans, no del código del bien/servicio", () => {
+    assert.deepEqual(c.detraccion, {
+      cuentaBanco: "00002003147",
+      codigoBienServicio: "037",
+      porcentaje: 12,
+      monto: 13038,
+    });
+  });
+
+  test("el anticipo aplicado y el documento que referencia", () => {
+    assert.equal(c.anticipoAplicado, 61382.71);
+    assert.equal(c.documentoRelacionado, "E001-1714");
+    assert.equal(c.tipoDocumentoRelacionado, "ANTICIPO");
+  });
+});
+
 describe("leerComprobanteXml — detracción, crédito, guía y OC", () => {
   const c = leerComprobanteXml(FACTURA_DETRACCION_CREDITO);
 
@@ -236,15 +323,16 @@ describe("leerComprobanteXml — detracción, crédito, guía y OC", () => {
     assert.equal(c.ordenCompra, "OC-2026-77");
   });
 
-  test("las cuotas salen en orden aunque el XML las traiga al revés", () => {
+  test("las cuotas salen en orden aunque el XML las traiga al revés, sin pisar la forma de pago", () => {
     assert.equal(c.cuotas.length, 2);
     assert.deepEqual(c.cuotas[0], { numero: 1, monto: 500, fechaVencimiento: "2026-09-10" });
     assert.deepEqual(c.cuotas[1], { numero: 2, monto: 500, fechaVencimiento: "2026-10-10" });
   });
 
-  test("la detracción, con cuenta, porcentaje y monto", () => {
+  test("la detracción sin cac:PaymentMeans: código del bien/servicio sí, cuenta no", () => {
     assert.deepEqual(c.detraccion, {
-      cuentaBanco: "Deposito en cuenta - Banco de la Nacion",
+      cuentaBanco: null,
+      codigoBienServicio: "037",
       porcentaje: 12,
       monto: 120,
     });
@@ -259,6 +347,9 @@ describe("leerComprobanteXml — sin ninguno de estos datos", () => {
     assert.deepEqual(c.cuotas, []);
     assert.equal(c.guiaRemision, null);
     assert.equal(c.ordenCompra, null);
+    assert.equal(c.anticipoAplicado, null);
+    assert.equal(c.documentoRelacionado, null);
+    assert.equal(c.tipoDocumentoRelacionado, null);
   });
 });
 

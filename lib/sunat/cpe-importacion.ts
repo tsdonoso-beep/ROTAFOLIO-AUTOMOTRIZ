@@ -48,10 +48,14 @@ export interface DocLote {
   formaPago: string | null;
   cuotas: CuotaLote[];
   detraccionCuentaBanco: string | null;
+  detraccionCodigoBienServicio: string | null;
   detraccionPorcentaje: number | null;
   detraccionMonto: number | null;
   guiaRemision: string | null;
   ordenCompra: string | null;
+  anticipoAplicado: number | null;
+  documentoRelacionado: string | null;
+  tipoDocumentoRelacionado: string | null;
   items: ItemLote[];
 }
 
@@ -125,10 +129,14 @@ export function prepararLote(
         numero: q.numero, monto: q.monto, fechaVencimiento: q.fechaVencimiento,
       })),
       detraccionCuentaBanco: c.detraccion?.cuentaBanco ?? null,
+      detraccionCodigoBienServicio: c.detraccion?.codigoBienServicio ?? null,
       detraccionPorcentaje: c.detraccion?.porcentaje ?? null,
       detraccionMonto: c.detraccion?.monto ?? null,
       guiaRemision: c.guiaRemision,
       ordenCompra: c.ordenCompra,
+      anticipoAplicado: c.anticipoAplicado,
+      documentoRelacionado: c.documentoRelacionado,
+      tipoDocumentoRelacionado: c.tipoDocumentoRelacionado,
       items: c.items.map(i => ({
         linea: i.linea,
         descripcion: i.descripcion,
