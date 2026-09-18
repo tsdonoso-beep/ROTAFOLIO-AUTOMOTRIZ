@@ -36,6 +36,71 @@
 function revisarOrdenSunat() { procesar(true); }
 function ordenarComprobantesSunat() { procesar(false); }
 
+function revisarPdfsSueltos() { ordenarPdfsSueltos(true); }
+
+/**
+ * Para cuando el XML de un comprobante ya se movió —quedó en
+ * Emitidas|Recibidas/AAAA-MM— pero su PDF se quedó atrás en la raíz, porque
+ * en esa corrida el emparejamiento todavía no encontraba pareja.
+ *
+ * No hace falta volver a leer el XML para saber a qué carpeta va: ya está
+ * ahí. Se arma un mapa de qué XML quedó en qué carpeta (por serie-número-RUC,
+ * leyendo cada uno una sola vez) y el PDF se manda a la misma carpeta que su
+ * XML, sacando esa misma clave de su propio nombre.
+ */
+function ordenarPdfsSueltos(soloRevisar) {
+  var cfg = configuracion();
+  var raiz = DriveApp.getFolderById(cfg.carpetaRaiz);
+  var mapa = mapaXmlsYaOrdenados(raiz, cfg);
+
+  var movidos = 0;
+  var sinPareja = [];
+  var it = raiz.getFiles();
+  while (it.hasNext()) {
+    var f = it.next();
+    if (!/\.pdf$/i.test(f.getName())) continue;
+
+    var partes = partirNombrePdf(f.getName());
+    var destino = partes ? mapa[partes.serie + "|" + partes.numero + "|" + partes.ruc] : null;
+    if (!destino) { sinPareja.push(f.getName()); continue; }
+
+    if (!soloRevisar) f.moveTo(destino);
+    movidos++;
+  }
+
+  Logger.log((soloRevisar ? "Se moverían " : "Se movieron ") + movidos + " PDF.");
+  if (sinPareja.length > 0) {
+    Logger.log("Sin XML con el que emparejar (" + sinPareja.length + "):");
+    for (var i = 0; i < sinPareja.length; i++) Logger.log("  · " + sinPareja[i]);
+  }
+}
+
+/** clave "serie|número|RUC del proveedor" → la carpeta AAAA-MM donde ya quedó ese XML. */
+function mapaXmlsYaOrdenados(raiz, cfg) {
+  var mapa = {};
+  var subcarpetas = raiz.getFolders();
+  while (subcarpetas.hasNext()) {
+    var sub = subcarpetas.next(); // Emitidas / Recibidas / Otros
+    var meses = sub.getFolders();
+    while (meses.hasNext()) {
+      var mes = meses.next(); // AAAA-MM / Sin fecha
+      var archivos = mes.getFiles();
+      while (archivos.hasNext()) {
+        var f = archivos.next();
+        if (!/\.(xml|zip)$/i.test(f.getName())) continue;
+        try {
+          var texto = leerXmlDeArchivo(f);
+          if (!texto) continue;
+          var c = leerComprobante(texto, cfg.rucEmpresa);
+          if (!c.serie || !c.numero) continue;
+          mapa[c.serie + "|" + c.numero + "|" + c.proveedorRuc] = mes;
+        } catch (e) { /* un XML raro no debe tumbar el resto */ }
+      }
+    }
+  }
+  return mapa;
+}
+
 /**
  * Diagnóstico puntual: imprime, para los primeros XML y PDF, los valores
  * exactos entre corchetes —para pescar un espacio o una diferencia de un
