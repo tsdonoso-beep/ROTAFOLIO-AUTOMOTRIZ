@@ -37,6 +37,7 @@ function revisarOrdenSunat() { procesar(true); }
 function ordenarComprobantesSunat() { procesar(false); }
 
 function revisarPdfsSueltos() { ordenarPdfsSueltos(true); }
+function moverPdfsSueltos() { ordenarPdfsSueltos(false); }
 
 /**
  * Para cuando el XML de un comprobante ya se movió —quedó en
