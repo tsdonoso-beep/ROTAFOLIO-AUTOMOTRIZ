@@ -2,163 +2,168 @@
 <html>
 <head>
 <base target="_top">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  /* Misma paleta que Tablero.html: por rol, no por hex suelto, validada
-     contra las dos superficies (banda de luminosidad, piso de croma,
-     contraste ≥ 3:1). Un solo sitio para cambiar el modo oscuro. */
+  /* Misma identidad que VistaEjecutiva.gs —el otro tablero publicado—: la
+     paleta oficial de Roland Print/INROPRIN, no una inventada. Un solo
+     lugar (:root) para que las dos páginas se mantengan iguales si la marca
+     cambia. Sin variante oscura a propósito: es la vista "formal" que se
+     comparte por enlace, y una marca no cambia con el modo del sistema de
+     quien la mira. */
   :root {
-    color-scheme: light;
-    --surface:     #fcfcfb;
-    --panel:       #ffffff;
-    --borde:       #e5e4df;
-    --borde-suave: #f0efeb;
-    --ink:         #0b0b0b;
-    --ink-2:       #52514e;
-    --ink-3:       #86847d;
-    --serie:       #2a78d6;
-    --critico:     #d03b3b;
-    --bueno:       #0ca30c;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      color-scheme: dark;
-      --surface:     #1a1a19;
-      --panel:       #232322;
-      --borde:       #35352f;
-      --borde-suave: #2b2b28;
-      --ink:         #ffffff;
-      --ink-2:       #c3c2b7;
-      --ink-3:       #8f8e85;
-      --serie:       #3987e5;
-      --critico:     #d03b3b;
-      --bueno:       #1fc21f;
-    }
+    --bg:           #EDF1F4;
+    --surface:      #FFFFFF;
+    --surface2:     #F6F8FA;
+    --border:       #E4E9EE;
+    --border2:      #D2DAE2;
+    --accent:       #00A298;
+    --accent-texto: #007A72;
+    --accent-suave: #E6F5F4;
+    --accent-borde: #A8DED9;
+    --tinta:        #1D1D1B;
+    --text:         #101A24;
+    --text2:        #52627A;
+    --text3:        #8494A8;
+    --danger:       #C62828;
+    --warn:         #A15C07;
+    --success:      #0A6E4E;
+    --sombra:       0 2px 4px rgba(16,26,38,.05), 0 6px 16px rgba(16,26,38,.06);
   }
 
   * { box-sizing: border-box; }
   body {
-    margin: 0; padding: 22px 26px 40px;
-    background: var(--surface); color: var(--ink);
-    font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    margin: 0; padding: 28px 24px 56px;
+    background: var(--bg); color: var(--text);
+    font: 14px/1.5 "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
     -webkit-font-smoothing: antialiased;
   }
+  .pagina { max-width: 1200px; margin: 0 auto; }
   .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
   .rotulo {
     font-size: 10.5px; font-weight: 600; letter-spacing: .09em;
-    text-transform: uppercase; color: var(--ink-3);
+    text-transform: uppercase; color: var(--text3);
   }
 
-  header { display: flex; justify-content: space-between; align-items: flex-start;
-           gap: 18px; flex-wrap: wrap; margin-bottom: 14px; }
-  h1 { margin: 0; font-size: 21px; font-weight: 700; letter-spacing: -.015em; }
-  header p { margin: 4px 0 0; font-size: 12.5px; color: var(--ink-2); }
-  select {
-    font: inherit; padding: 7px 11px; border-radius: 8px;
-    border: 1px solid var(--borde); background: var(--panel); color: var(--ink);
+  header.cabecera {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 16px; flex-wrap: wrap; margin-bottom: 24px; padding-bottom: 20px;
+    border-bottom: 1px solid var(--border2);
   }
+  .marca { display: flex; align-items: center; gap: 16px; }
+  .marca-texto { line-height: 1.35; }
+  .marca-titulo { font-family: "Sora", sans-serif; font-weight: 700; font-size: 17px; color: var(--text); }
+  .marca-sub { font-size: 12.5px; color: var(--text2); margin-top: 2px; }
 
-  .boton {
-    display: inline-flex; align-items: center; gap: 7px;
-    font: inherit; font-weight: 600; font-size: 13px; text-decoration: none;
-    padding: 9px 15px; border-radius: 9px; border: 1px solid var(--borde);
-    background: var(--panel); color: var(--ink); white-space: nowrap;
-    transition: opacity .12s;
+  .boton-hoja {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--tinta); color: #fff; text-decoration: none;
+    font-weight: 600; font-size: 13.5px; padding: 11px 18px; border-radius: 10px;
+    box-shadow: var(--sombra); white-space: nowrap;
   }
-  .boton:hover { opacity: .8; }
-  .boton.primario { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+  .boton-hoja:hover { background: #000; }
 
   /* Las pestañas: dos vistas del mismo tablero, un solo botón hundido a la
      vez. No son enlaces —no hay nada que compartir por URL de una sola
      pestaña—, así que son botones simples. */
-  nav.pestanas { display: flex; gap: 6px; margin-bottom: 18px; border-bottom: 1px solid var(--borde); }
+  nav.pestanas { display: flex; gap: 6px; margin-bottom: 20px; border-bottom: 1px solid var(--border2); }
   nav.pestanas button {
-    font: inherit; font-weight: 600; font-size: 13px; cursor: pointer;
+    font: inherit; font-family: "Sora", sans-serif; font-weight: 700; font-size: 13px; cursor: pointer;
     padding: 10px 4px; margin-bottom: -1px; border: none; border-bottom: 2px solid transparent;
-    background: none; color: var(--ink-3);
+    background: none; color: var(--text3);
   }
   nav.pestanas button + button { margin-left: 14px; }
-  nav.pestanas button.activa { color: var(--ink); border-bottom-color: var(--serie); }
+  nav.pestanas button.activa { color: var(--text); border-bottom-color: var(--accent); }
 
-  .tarjeta { background: var(--panel); border: 1px solid var(--borde);
-             border-radius: 12px; padding: 18px 20px; }
+  select {
+    font: inherit; padding: 7px 11px; border-radius: 8px;
+    border: 1px solid var(--border2); background: var(--surface); color: var(--text);
+  }
 
-  .cifras { display: grid; gap: 12px; margin-bottom: 18px;
-            grid-template-columns: repeat(auto-fit, minmax(158px, 1fr)); }
-  .cifra .v { font-size: 25px; font-weight: 700; letter-spacing: -.02em;
-              font-variant-numeric: tabular-nums; margin: 0 0 3px; }
-  .cifra .v.critico { color: var(--critico); }
-  .cifra .v.bueno { color: var(--bueno); }
-  .cifra .n { font-size: 11px; color: var(--ink-3); margin: 3px 0 0; }
+  .tarjeta {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 20px 22px; box-shadow: var(--sombra);
+  }
 
-  .dos { display: grid; gap: 16px; grid-template-columns: 1.35fr 1fr; align-items: start; }
-  @media (max-width: 900px) { .dos { grid-template-columns: 1fr; } }
+  .cifras { display: grid; gap: 14px; margin-bottom: 18px;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+  .cifra { padding: 18px 18px 16px; }
+  .cifra .v { font-family: "Sora", sans-serif; font-size: 24px; font-weight: 800;
+              letter-spacing: -.01em; margin: 0 0 3px; color: var(--text); }
+  .cifra .v.critico { color: var(--danger); }
+  .cifra .v.bueno { color: var(--success); }
+  .cifra .n { font-size: 12px; color: var(--text2); margin: 6px 0 0; }
 
-  h2 { margin: 0 0 3px; font-size: 14.5px; font-weight: 700; }
-  .sub { margin: 0 0 15px; font-size: 12px; color: var(--ink-2); line-height: 1.5; }
+  .dos { display: grid; gap: 14px; grid-template-columns: 1.35fr 1fr; align-items: start; }
+  @media (max-width: 900px) { .dos { grid-template-columns: 1fr; } header.cabecera { flex-direction: column; align-items: flex-start; } }
 
-  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-  th { text-align: left; padding: 0 12px 7px 0; border-bottom: 1px solid var(--borde);
-       font-size: 10.5px; font-weight: 600; letter-spacing: .07em;
-       text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
-  td { padding: 8px 12px 8px 0; border-bottom: 1px solid var(--borde-suave); vertical-align: top; }
+  h2 { font-family: "Sora", sans-serif; margin: 0 0 3px; font-size: 15px; font-weight: 700; }
+  .sub { margin: 0 0 15px; font-size: 12px; color: var(--text2); line-height: 1.5; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 0 10px 10px 0; border-bottom: 1px solid var(--border2);
+       font-size: 11px; font-weight: 600; letter-spacing: .05em;
+       text-transform: uppercase; color: var(--text3); white-space: nowrap; }
+  td { padding: 11px 10px 11px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
   th.n, td.n { text-align: center; white-space: nowrap; }
   table.derecha th.n, table.derecha td.n { text-align: right; padding-right: 0; }
-  .prov { font-weight: 500; }
-  .sec { display: block; font-size: 10.5px; color: var(--ink-3); margin-top: 1px; }
+  .prov { font-weight: 600; }
+  .sec { display: block; font-size: 11.5px; color: var(--text3); margin-top: 2px; }
 
-  .marca {
+  .marca-pill {
     display: inline-block; padding: 2px 8px; border-radius: 100px;
     font-size: 11px; font-weight: 600;
   }
-  .marca.si { background: color-mix(in srgb, var(--bueno) 15%, transparent); color: var(--bueno); }
-  .marca.no { color: var(--ink-3); }
-  .marca.riesgo { background: color-mix(in srgb, var(--critico) 13%, transparent); color: var(--critico); }
+  .marca-pill.si { background: var(--accent-suave); color: var(--accent-texto); }
+  .marca-pill.no { color: var(--text3); }
+  .marca-pill.riesgo { background: color-mix(in srgb, var(--danger) 13%, transparent); color: var(--danger); }
 
-  .vacio { padding: 26px 0; text-align: center; color: var(--ink-3); font-size: 12.5px; }
-  .aviso { display: flex; gap: 9px; padding: 12px 14px; border-radius: 9px;
+  .vacio { padding: 26px 0; text-align: center; color: var(--text3); font-size: 13px; }
+  .aviso { display: flex; gap: 9px; padding: 12px 14px; border-radius: 10px;
            font-size: 12.5px; line-height: 1.5; margin-bottom: 15px;
-           background: color-mix(in srgb, var(--critico) 9%, transparent);
-           border: 1px solid color-mix(in srgb, var(--critico) 26%, transparent);
-           color: var(--ink); }
-  .aviso b { color: var(--critico); }
+           background: color-mix(in srgb, var(--danger) 8%, transparent);
+           border: 1px solid color-mix(in srgb, var(--danger) 24%, transparent);
+           color: var(--text); }
+  .aviso b { color: var(--danger); }
 
   /* Barras horizontales de comparación (pestaña Padrón): la etiqueta a la
      izquierda, la barra y el número a la derecha. Sin leyenda —el rótulo de
      cada fila la hace innecesaria—. */
-  .barras { display: flex; flex-direction: column; gap: 13px; margin-top: 4px; }
-  .fila-barra { display: grid; grid-template-columns: 130px 1fr 56px; align-items: center; gap: 10px; }
-  .fila-barra .etq { font-size: 12.5px; color: var(--ink-2); }
-  .fila-barra .pista { height: 9px; border-radius: 100px; background: var(--borde-suave); overflow: hidden; }
-  .fila-barra .lleno { height: 100%; border-radius: 100px; background: var(--serie); transition: width .3s; }
-  .fila-barra .val { font-size: 12.5px; text-align: right; font-variant-numeric: tabular-nums; }
+  .barras { display: flex; flex-direction: column; gap: 14px; margin-top: 4px; }
+  .fila-barra { display: grid; grid-template-columns: 140px 1fr 56px; align-items: center; gap: 10px; }
+  .fila-barra .etq { font-size: 13px; font-weight: 500; color: var(--text2); }
+  .fila-barra .pista { height: 8px; border-radius: 6px; background: var(--surface2); overflow: hidden; }
+  .fila-barra .lleno { height: 100%; border-radius: 6px; background: var(--accent); transition: width .3s; }
+  .fila-barra .val { font-size: 12.5px; text-align: right; font-variant-numeric: tabular-nums; color: var(--text2); }
 
   /* El gráfico de barras verticales (pestaña Comprobantes): una sola serie,
      así que no lleva leyenda — el título la nombra. */
   .grafico { position: relative; }
   .barra-mes { cursor: default; transition: opacity .12s; }
   .barra-mes:hover { opacity: .78; }
-  .rejilla { stroke: var(--borde); stroke-width: 1; }
-  .eje { font-size: 10px; fill: var(--ink-3); font-family: inherit; }
-  .valorbarra { font-size: 10.5px; fill: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .rejilla { stroke: var(--border); stroke-width: 1; }
+  .eje { font-size: 10px; fill: var(--text3); font-family: inherit; }
+  .valorbarra { font-size: 10.5px; fill: var(--text2); font-variant-numeric: tabular-nums; }
   #globo {
     position: absolute; pointer-events: none; opacity: 0; transition: opacity .1s;
-    background: var(--ink); color: var(--surface); padding: 7px 10px;
+    background: var(--tinta); color: #fff; padding: 7px 10px;
     border-radius: 7px; font-size: 11.5px; white-space: nowrap; z-index: 5;
     transform: translate(-50%, -100%);
   }
 
   .buscar {
     width: 100%; font: inherit; padding: 9px 12px; margin-bottom: 12px;
-    border-radius: 9px; border: 1px solid var(--borde); background: var(--surface); color: var(--ink);
+    border-radius: 9px; border: 1px solid var(--border2); background: var(--surface2); color: var(--text);
   }
-  .buscar:focus { outline: 2px solid var(--serie); outline-offset: -1px; }
+  .buscar:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 
-  #cargando { padding: 90px 0; text-align: center; color: var(--ink-3); }
+  #cargando { padding: 90px 0; text-align: center; color: var(--text3); }
   #error { display: none; }
-  footer { margin-top: 22px; font-size: 11.5px; color: var(--ink-3); }
+  footer.pie { margin-top: 22px; font-size: 12px; color: var(--text3); }
 </style>
 </head>
 <body>
+<div class="pagina">
 
 <div id="cargando">Consultando la base…</div>
 
@@ -168,14 +173,37 @@
 </div>
 
 <div id="todo" style="display:none">
-  <header>
-    <div>
-      <h1>SUNAT — INROPRIN</h1>
-      <p>Condición de proveedores y registro de compras, en un solo lugar.</p>
+  <header class="cabecera">
+    <div class="marca">
+      <svg width="130" height="29" viewBox="0 0 183 41" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Roland Print">
+        <path opacity="0.15" d="M15.3066 35.9092L26.7855 35.8535L31.4094 40.5052H19.9305L15.3066 35.9092Z" fill="#1D1D1B"/>
+        <path d="M11.9185 20.6918L5.95923 26.6176L0 20.6918L5.95923 14.7715L11.9185 20.6918Z" fill="#006DB1"/>
+        <path d="M18.8459 13.8087L12.8867 19.7345L6.92188 13.8087L12.8867 7.88281L18.8459 13.8087Z" fill="#E30613"/>
+        <path d="M25.7681 6.92584L19.8088 12.8517L13.8496 6.92584L19.8088 1L25.7681 6.92584Z" fill="#006DB1"/>
+        <path d="M18.9683 27.7032L13.009 33.629L7.0498 27.7032L13.009 21.7773L18.9683 27.7032Z" fill="#00A298"/>
+        <path d="M25.8957 20.8148L19.9365 26.7406L13.9717 20.8148L19.9365 14.8945L25.8957 20.8148Z" fill="#FFDD00"/>
+        <path d="M32.8179 13.9317L26.8586 19.8575L20.8994 13.9317L26.8586 8.00586L32.8179 13.9317Z" fill="#00A298"/>
+        <path d="M25.8843 34.5801L19.925 40.506L13.9658 34.5801L19.9306 28.6543L25.8843 34.5801Z" fill="#E30613"/>
+        <path d="M32.812 27.6918L26.8528 33.6176L20.8936 27.6918L26.8528 21.7715L32.812 27.6918Z" fill="#006DB1"/>
+        <path d="M38.5097 24.7486L30.2246 23.2018L31.777 14.9668L40.0621 16.5136L38.5097 24.7486Z" fill="#E30613"/>
+        <path d="M50.4785 16.111H59.0918C61.0171 16.111 62.447 16.5228 63.3763 17.3407C64.3389 18.1976 64.8229 19.444 64.8229 21.0854C64.8229 22.1815 64.5837 23.0829 64.0996 23.8007C63.6879 24.4851 63.0313 24.9803 62.141 25.2864C62.9311 25.559 63.482 25.9707 63.7936 26.516C64.1052 27.0279 64.2943 27.9015 64.3611 29.1312L64.4668 31.2344V31.9021C64.4668 32.1414 64.4835 32.364 64.5169 32.5699C64.6226 33.1875 64.8285 33.577 65.1345 33.7495H61.1116C60.9392 33.41 60.8334 33.0484 60.8 32.67C60.7333 32.1247 60.6943 31.7464 60.6943 31.5405L60.6443 29.6431C60.5775 28.6193 60.3716 27.8793 60.0266 27.4397C59.6483 27.0613 58.975 26.8777 58.0124 26.8777H54.1453V33.7495H50.4841V16.1055L50.4785 16.111ZM54.1397 23.8007H58.4242C59.3534 23.8007 60.0433 23.6115 60.4885 23.2387C60.9336 22.8604 61.1617 22.2817 61.1617 21.4972C61.1617 20.7126 60.9392 20.1284 60.4885 19.7556C60.0767 19.3438 59.4591 19.1379 58.63 19.1379H54.1397V23.8063V23.8007Z" fill="#1D1D1B"/>
+        <path d="M83.786 16.1113V33.7553H80.1748V16.1113H83.786Z" fill="#1D1D1B"/>
+        <path d="M90.3954 33.8169C89.1602 33.8169 88.0751 33.4831 87.1459 32.8154C86.2167 32.1477 85.7549 31.2352 85.7549 29.6994C85.7549 28.2639 86.1778 27.2345 87.018 26.6225C87.4686 26.2942 87.9861 26.0215 88.5704 25.8101C89.0767 25.6265 91.3803 25.2203 91.6919 25.1869C93.2053 24.981 93.962 24.5359 93.962 23.8515C93.962 23.3396 93.695 23.0057 93.1608 22.8499C92.6266 22.6941 92.137 22.6218 91.6919 22.6218C91.2078 22.6218 90.7793 22.6886 90.401 22.8277C90.0226 22.9668 89.75 23.2227 89.5775 23.5955H86.1221C86.2612 22.5384 86.7397 21.6648 87.5688 20.9804C88.498 20.1958 89.8223 19.8008 91.5416 19.8008C93.4668 19.8008 94.9135 20.1235 95.8761 20.7745C96.8721 21.4589 97.3729 22.4159 97.3729 23.6456V33.8169M94.0121 31.046V26.884C93.528 27.1232 92.8603 27.3458 91.9979 27.5517L90.8127 27.8076C90.1951 27.9801 89.7166 28.1749 89.4718 28.4753C89.1935 28.8203 89.1101 29.2265 89.1101 29.6048C89.1101 30.1168 89.2659 30.3338 89.5775 30.6398C89.8835 30.9124 90.3342 31.0515 90.9184 31.0515H94.0121V31.046Z" fill="#1D1D1B"/>
+        <path d="M108.001 33.756V25.037C108.001 24.219 107.751 23.6181 107.256 23.2397C106.755 22.8614 106.198 22.6778 105.581 22.6778C104.963 22.6778 104.412 22.8669 103.928 23.2397C103.45 23.6181 103.205 24.2135 103.205 25.037V33.756H99.5938V25.7547C99.5938 23.4289 100.206 21.8765 101.424 21.0864C102.643 20.3019 103.995 19.8734 105.475 19.8066C106.989 19.8066 108.38 20.2017 109.654 20.9862C110.928 21.7708 111.562 23.3621 111.562 25.7547V33.756H108.001Z" fill="#1D1D1B"/>
+        <path d="M119.864 33.8172C119.096 33.8394 117.889 33.7838 117.232 33.5724C116.575 33.3609 115.685 32.8101 115.168 32.1591C114.172 30.896 113.671 29.1655 113.671 26.9788C113.671 24.7921 114.166 23.1006 115.168 21.7986C116.197 20.4632 117.521 19.7955 119.14 19.7955C120.003 19.7955 120.76 19.968 121.411 20.3074C122.101 20.7191 122.651 21.2477 123.063 21.8987V16.0508H126.569V33.8116H119.858L119.864 33.8172ZM122.941 23.9074C122.39 23.223 120.999 22.8836 120.07 22.8836C119.14 22.8836 118.473 23.2397 117.955 23.9575C117.438 24.6419 117.182 25.5989 117.182 26.8286C117.182 28.1974 117.438 29.2379 117.955 29.9556C118.473 30.6734 119.207 31.0351 120.175 31.0351C121.144 31.0351 121.383 31.0407 122.941 31.0295V23.9074Z" fill="#1D1D1B"/>
+        <path d="M133.758 16.1113H141.653C143.545 16.1113 144.953 16.5898 145.882 17.5469C146.845 18.5039 147.323 19.9228 147.323 21.8035C147.323 23.584 146.861 24.9862 145.932 26.01C145.003 26.967 143.662 27.4455 141.909 27.4455H137.419V33.7553H133.758V16.1113ZM137.425 24.2628H140.986C141.948 24.2628 142.638 24.057 143.05 23.6452C143.495 23.2669 143.723 22.6214 143.723 21.6978C143.723 20.9132 143.517 20.2789 143.106 19.8004C142.627 19.3886 141.987 19.1828 141.197 19.1828H137.43V24.2628H137.425Z" fill="#1D1D1B"/>
+        <path d="M147.612 33.7566V27.1408C147.612 25.8054 147.807 24.687 148.202 23.7801C148.597 22.8731 149.137 22.1498 149.827 21.5989C150.483 21.087 151.246 20.7086 152.125 20.4694C153.004 20.2301 153.905 20.1133 154.835 20.1133H155.352V23.7522H154.167C153.171 23.7522 152.431 23.9915 151.947 24.47C151.468 24.9485 151.223 25.6997 151.223 26.7291V33.7566H147.612Z" fill="#1D1D1B"/>
+        <path d="M161.095 16.1113V18.9324H157.483V16.1113H161.095ZM161.095 20.112V33.7553H157.483V20.112H161.095Z" fill="#1D1D1B"/>
+        <path d="M171.705 33.756V25.037C171.705 24.219 171.455 23.6181 170.96 23.2397C170.459 22.8614 169.903 22.6778 169.285 22.6778C168.667 22.6778 168.116 22.8669 167.632 23.2397C167.148 23.6181 166.909 24.2135 166.909 25.037V33.756H163.298V25.7547C163.298 23.4289 163.91 21.8765 165.128 21.0864C166.347 20.3019 167.699 19.8734 169.179 19.8066C170.693 19.8066 172.089 20.2017 173.358 20.9862C174.632 21.7708 175.266 23.3621 175.266 25.7547V33.756H171.705Z" fill="#1D1D1B"/>
+        <path d="M183.001 22.6211H180.886V33.7495H177.325V16.1055H180.886V20.1562H183.001V22.6155" fill="#1D1D1B"/>
+        <path d="M77.3037 22.8049C76.686 21.553 75.7234 20.6738 74.4159 20.1619C73.2808 19.7558 72.0066 19.6445 70.5988 19.8337C69.1855 20.0228 68.0393 20.6182 67.1435 21.6364C66.5926 22.2429 66.1865 23.0052 65.9305 23.9178C65.6746 24.8303 65.541 25.7484 65.541 26.6609C65.541 27.7793 65.6968 28.8532 66.0084 29.8825C66.3144 30.9175 66.8319 31.7354 67.5552 32.3475C68.2396 32.954 69.1633 33.388 70.3151 33.6439C71.4669 33.8999 72.6131 33.8721 73.7482 33.566C75.0224 33.2989 76.0684 32.6034 76.8975 31.485C77.2758 30.9453 77.5819 30.2832 77.8267 29.5042C78.066 28.7252 78.1884 27.796 78.1884 26.711C78.1884 25.2253 77.8935 23.9178 77.3092 22.7994L77.3037 22.8049ZM71.8619 30.9954C69.9144 30.9954 68.9741 29.1091 68.9741 26.7833C68.9741 24.4575 69.9089 22.5712 71.8619 22.5712C73.8149 22.5712 74.7497 24.4575 74.7497 26.7833C74.7497 29.1091 73.8038 30.9954 71.8619 30.9954Z" fill="#1D1D1B"/>
+      </svg>
+      <div class="marca-texto">
+        <div class="marca-titulo">SUNAT · Comprobantes</div>
+        <div class="marca-sub">Padrón de RUC y registro de compras · INROPRIN S.A.C.</div>
+      </div>
     </div>
-    <a id="enlaceHoja" class="boton primario" target="_blank" rel="noopener">
-      ↗ Abrir la hoja de cálculo
-    </a>
+    <a id="enlaceHoja" class="boton-hoja" target="_blank" rel="noopener">Abrir la hoja de cálculo ↗</a>
   </header>
 
   <nav class="pestanas">
@@ -257,7 +285,7 @@
         </div>
       </div>
 
-      <div class="tarjeta" style="margin-top:16px">
+      <div class="tarjeta" style="margin-top:14px">
         <h2>Notas de crédito del período</h2>
         <p class="sub">Cada una resta del crédito fiscal. «Corrige a» dice sobre qué factura cae.</p>
         <table class="derecha">
@@ -272,7 +300,7 @@
         <p class="sub" id="masNotasComp" style="margin:11px 0 0"></p>
       </div>
 
-      <div class="tarjeta" style="margin-top:16px">
+      <div class="tarjeta" style="margin-top:14px">
         <h2>Comprobantes que cambiaron</h2>
         <p class="sub">Llegaron distintos de como estaban la última vez que se consultó su período.</p>
         <table class="derecha">
@@ -283,9 +311,10 @@
     </div>
   </div>
 
-  <footer id="pie"></footer>
+  <footer class="pie" id="pie"></footer>
 </div>
 
+</div>
 <script>
 // ── Ayudantes compartidos por las dos pestañas ─────────────────────
 var soles = function (n) {
@@ -338,8 +367,8 @@ function fechaCorta(iso) {
   return ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2) + '/' + d.getFullYear();
 }
 function marca(activo) {
-  if (activo == null) return '<span class="marca no">—</span>';
-  return activo ? '<span class="marca si">Sí</span>' : '<span class="marca no">No</span>';
+  if (activo == null) return '<span class="marca-pill no">—</span>';
+  return activo ? '<span class="marca-pill si">Sí</span>' : '<span class="marca-pill no">No</span>';
 }
 
 function pedirPadron() {
@@ -392,7 +421,7 @@ function pintarPadron(d) {
   document.getElementById('piePadron').textContent =
     'Actualizado al abrir esta página, ' + new Date(d.actualizadoEl).toLocaleString('es-PE') + '.';
   document.getElementById('pie').textContent =
-    'Padrón de RUC — SUNAT — actualizado ' + new Date(d.actualizadoEl).toLocaleString('es-PE') + '.';
+    'Generado el ' + new Date(d.actualizadoEl).toLocaleString('es-PE') + ' · SUNAT · INROPRIN S.A.C.';
 
   pintarFilasPadron(TODAS_PADRON);
   document.getElementById('buscar').oninput = function () {
@@ -415,7 +444,7 @@ function pintarFilasPadron(filas) {
     var esNoHabido = f.condicion && f.condicion.toUpperCase().indexOf('NO HABIDO') >= 0;
     return '<tr>' +
       '<td class="prov">' + esc(f.razonSocial || '(sin nombre)') + '<span class="sec mono">' + esc(f.ruc) + '</span></td>' +
-      '<td>' + (esNoHabido ? '<span class="marca riesgo">' + esc(f.condicion) + '</span>' : esc(f.condicion || '—')) + '</td>' +
+      '<td>' + (esNoHabido ? '<span class="marca-pill riesgo">' + esc(f.condicion) + '</span>' : esc(f.condicion || '—')) + '</td>' +
       '<td class="n">' + marca(f.buenContribuyente) + '</td>' +
       '<td class="n">' + marca(f.agenteRetencion) + '</td>' +
       '<td class="n">' + marca(f.agentePercepcion) + '</td>' +
@@ -498,7 +527,7 @@ function pintarComprobantes(d) {
           + '<td class="mono">' + esc(n.corrigeA || '—') + '</td>'
           + '<td>' + esc(n.rindio || '—') + '</td>'
           + '<td class="n mono">' + soles(n.monto) + '</td>'
-          + '<td class="n mono" style="color:var(--critico)">' + soles(n.igv) + '</td></tr>';
+          + '<td class="n mono" style="color:var(--danger)">' + soles(n.igv) + '</td></tr>';
       }).join('')
     : '<tr><td colspan="6" class="vacio">Ninguna nota de crédito en este período.</td></tr>';
   document.getElementById('masNotasComp').textContent =
@@ -564,7 +593,7 @@ function dibujarGrafico(porMes, elegido) {
 
     var b = crear('rect', {
       x: cx - ancla / 2, y: arriba, width: ancla, height: h, rx: 4,
-      fill: p.igv < 0 ? 'var(--critico)' : 'var(--serie)',
+      fill: p.igv < 0 ? 'var(--danger)' : 'var(--accent)',
       opacity: esElegido ? 1 : 0.5, class: 'barra-mes'
     });
     b.addEventListener('mousemove', function () {
@@ -590,7 +619,7 @@ function dibujarGrafico(porMes, elegido) {
 
   svg.appendChild(crear('line', {
     x1: m.left, x2: W - m.right, y1: cero, y2: cero,
-    stroke: 'var(--ink-3)', 'stroke-width': 1
+    stroke: 'var(--text3)', 'stroke-width': 1
   }));
 }
 

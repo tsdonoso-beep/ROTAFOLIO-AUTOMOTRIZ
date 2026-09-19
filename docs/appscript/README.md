@@ -197,18 +197,25 @@ adelante, sobre esta misma pestaña.
 ## Tablero SUNAT, publicado (no dentro del Sheet)
 
 `CodigoPadron.gs` + `TableroPadron.html` arman un tablero **publicado como
-su propia URL**, con dos pestañas y un botón para abrir la hoja de cálculo.
-Se llaman distinto a propósito: Apps Script no deja que un Script y un HTML
-compartan el mismo nombre en un proyecto (por eso tampoco `Codigo.gs` se
-llama `Tablero.gs`).
+su propia URL, y autocontenido**: no necesita que `Codigo.gs`, `PadronRuc.gs`
+ni ningún otro archivo del proyecto exista para funcionar — se puede pegar
+en un proyecto de Apps Script en blanco y ya queda completo. Se llaman
+distinto a propósito: Apps Script no deja que un Script y un HTML compartan
+el mismo nombre en un proyecto (por eso tampoco `Codigo.gs` se llama
+`Tablero.gs`).
+
+Lleva la identidad visual de Roland Print/INROPRIN —el mismo logo y la misma
+paleta que usa `VistaEjecutiva.gs`, el otro tablero publicado—, para que los
+dos se vean como parte de la misma familia.
 
 - **Padrón de RUC**: cuánto del registro ya se revisó, qué porcentaje son
   Buenos Contribuyentes o Agentes de Retención/Percepción, cuántos «No
   Habido», y la lista completa filtrable por RUC o nombre.
 - **Comprobantes SUNAT**: el mismo contenido de `Tablero.html` —IGV neto por
   mes, notas de crédito, quién rindió, comprobantes que cambiaron, quién
-  factura más—, llamando a la misma `datosDelTablero()` que ya usa
-  `Codigo.gs` (no se duplica esa lógica).
+  factura más—. `CodigoPadron.gs` trae su propia copia de esa lógica
+  (`datosDelTablero()` con nombres de variable propios), no depende de
+  `Codigo.gs`.
 
 A diferencia de `Tablero.html` (que se abre como diálogo desde el menú de la
 hoja y necesita tenerla abierta), este es una página aparte que se comparte
@@ -218,15 +225,16 @@ vista de conjunto para quien no quiere entrar al Sheet.
 
 ### Instalación
 
-1. En el **mismo proyecto** de Apps Script donde ya está `PadronRuc.gs`
-   (hereda sus mismas Propiedades del script: `SUPABASE_URL`,
-   `SUPABASE_ANON_KEY`, `ROBOT_CORREO`, `ROBOT_CLAVE`) y `Codigo.gs`
-   (de ahí sale `datosDelTablero()`, para la pestaña de Comprobantes): el
-   **+** · **Script**, llámalo `CodigoPadron` —cualquier nombre sirve, menos
-   `TableroPadron`, que ya lo usa el HTML—, pega `CodigoPadron.gs`. El
-   **+** · **HTML**, llámalo exactamente `TableroPadron` (sin `.html`), pega
+1. En **cualquier proyecto** de Apps Script —puede ser uno nuevo y vacío, o
+   el mismo donde ya está `PadronRuc.gs`, da igual—: el **+** · **Script**,
+   llámalo `CodigoPadron` —cualquier nombre sirve, menos `TableroPadron`,
+   que ya lo usa el HTML—, pega `CodigoPadron.gs`. El **+** · **HTML**,
+   llámalo exactamente `TableroPadron` (sin `.html`), pega
    `TableroPadron.html`.
-2. Guarda.
+2. **Extensiones → Configuración del proyecto → Propiedades del script**:
+   agrega `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `ROBOT_CORREO`,
+   `ROBOT_CLAVE` (los del robot de Supabase — los mismos que usa
+   `PadronRuc.gs`, si también está en este proyecto). Guarda.
 3. **Implementar → Nueva implementación → tipo «Aplicación web»**.
    - **Ejecutar como**: tu cuenta — así corre con tus permisos, sin pedirle
      nada a quien lo abra.
