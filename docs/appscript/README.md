@@ -256,10 +256,13 @@ el script calcula los números una vez por visita y el HTML solo los pinta
 1. Abre **COMPROBANTES SUNAT - DETALLE** → **Extensiones · Apps Script**.
 2. El **+** junto a «Archivos» → **Script** → llámalo **`VistaEjecutiva`** →
    borra el contenido de ejemplo y pega el de **`VistaEjecutiva.gs`**.
-3. El **+** → **HTML** → llámalo **exactamente `VistaEjecutiva`** (sin
-   `.html` al crearlo, Apps Script se lo agrega solo) → pega el contenido de
-   **`VistaEjecutiva.html`**. Si el nombre no calza exacto, `doGet()` no lo
-   encuentra.
+3. El **+** → **HTML** → llámalo **exactamente `VistaEjecutivaPagina`**
+   (sin `.html` al crearlo, Apps Script se lo agrega solo) → pega el
+   contenido de **`VistaEjecutivaPagina.html`**. Tiene que ser un nombre
+   **distinto** al del script: Apps Script comparte un solo espacio de
+   nombres entre todos los archivos del proyecto sin importar el tipo, así
+   que un script y un HTML no pueden llamarse igual. Si el nombre no calza
+   exacto, `doGet()` no lo encuentra.
 4. Guarda con el disquete.
 5. **Implementar** (arriba a la derecha) → **Nueva implementación** → el
    engranaje → **Aplicación web**.

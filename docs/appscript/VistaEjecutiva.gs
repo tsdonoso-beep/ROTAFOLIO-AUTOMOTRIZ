@@ -8,26 +8,29 @@
  * a mes— con un botón que abre la hoja real para quien necesite el
  * desglose línea por línea.
  *
- * Mismo patrón que `TableroPadron.gs` + `TableroPadron.html`: este archivo
+ * Mismo espíritu que `TableroPadron.gs` + `TableroPadron.html`: este archivo
  * calcula los números UNA vez por visita —no tiene sentido bajar cientos de
  * filas al navegador de cada persona solo para sumarlas ahí— y
- * `VistaEjecutiva.html` los pinta. `doGet()` es lo que hace posible
+ * `VistaEjecutivaPagina.html` los pinta. `doGet()` es lo que hace posible
  * publicarlo como su propia URL, distinto de `Tablero.html` (que se abre
  * como diálogo desde el menú de la hoja).
  *
  * ── Instalación ──
  * 1. Abre "COMPROBANTES SUNAT - DETALLE" → Extensiones → Apps Script.
- * 2. Pega esto en un archivo `VistaEjecutiva` (Script) y el contenido de
- *    `VistaEjecutiva.html` en un archivo HTML con el mismo nombre exacto
- *    (`VistaEjecutiva`, sin `.html` al crearlo) — el `+` junto a «Archivos».
- * 3. Guarda.
- * 4. Implementar → Nueva implementación → tipo «Aplicación web».
+ * 2. Pega esto en un archivo `VistaEjecutiva` (Script) — el `+` junto a
+ *    «Archivos» → Script.
+ * 3. El `+` → HTML → llámalo `VistaEjecutivaPagina` (un script y un HTML NO
+ *    pueden llamarse igual: Apps Script comparte un solo espacio de nombres
+ *    entre todos los archivos del proyecto, sin importar el tipo) → pega el
+ *    contenido de `VistaEjecutivaPagina.html`.
+ * 4. Guarda.
+ * 5. Implementar → Nueva implementación → tipo «Aplicación web».
  *    - Ejecutar como: Yo (tu cuenta).
  *    - Quién tiene acceso: «Cualquier usuario con el enlace» (o la variante
  *      de Workspace si solo debe verlo gente de la empresa).
- * 5. Implementar → copia la URL que termina en `/exec`. Esa es la que se
+ * 6. Implementar → copia la URL que termina en `/exec`. Esa es la que se
  *    comparte, no la del editor de Apps Script.
- * 6. Cada vez que cambies el código hay que volver a «Gestionar
+ * 7. Cada vez que cambies el código hay que volver a «Gestionar
  *    implementaciones» → el lápiz → Versión «Nueva» → Implementar: una
  *    implementación ya publicada no se actualiza sola con el código nuevo.
  */
@@ -38,7 +41,7 @@ var URL_HOJA_VISTA = 'https://docs.google.com/spreadsheets/d/' + HOJA_ID_VISTA +
 
 /** Punto de entrada de la aplicación web. Apps Script lo llama solo al visitar la URL publicada. */
 function doGet() {
-  return HtmlService.createTemplateFromFile('VistaEjecutiva')
+  return HtmlService.createTemplateFromFile('VistaEjecutivaPagina')
     .evaluate()
     .setTitle('SUNAT · Comprobantes — Vista ejecutiva')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
