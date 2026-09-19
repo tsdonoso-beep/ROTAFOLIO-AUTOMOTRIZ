@@ -422,6 +422,23 @@ async function consultarUnTipo(page: Page, tipo: string): Promise<FilaBajada[]> 
   } catch (e) {
     console.log(`  · no se pudo guardar el HTML del frame: ${e instanceof Error ? e.message : e}`);
   }
+  // La tabla es un dojox.grid.DataGrid (id "recibido.facturasGrid" en FE
+  // Recibidas): virtualiza el DOM —solo pinta las filas visibles— pero el
+  // widget en sí suele guardar el total real en `rowCount`, sin necesidad de
+  // scrollear todo. Se sondea por diagnóstico, antes de decidir si conviene
+  // leer de ahí en vez de contar enlaces.
+  try {
+    const info = await res.evaluate(() => {
+      const w = window as unknown as { dijit?: { registry?: { toArray?: () => Array<Record<string, unknown>> } } };
+      const widgets = w.dijit?.registry?.toArray?.() ?? [];
+      return widgets
+        .filter((x) => typeof x.rowCount === "number")
+        .map((x) => ({ id: x.id, rowCount: x.rowCount }));
+    });
+    console.log(`  · grids dojox en el frame: ${JSON.stringify(info)}`);
+  } catch (e) {
+    console.log(`  · no se pudo leer el grid: ${e instanceof Error ? e.message : e}`);
+  }
 
   if (DEBUG) {
     console.log(`Modo depuración [${tipo}]: se ven ${descargas} comprobantes. No se baja nada.`);
