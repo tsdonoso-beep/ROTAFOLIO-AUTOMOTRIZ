@@ -354,16 +354,35 @@ async function consultarUnTipo(page: Page, tipo: string): Promise<FilaBajada[]> 
   // Tras Aceptar, la tabla de resultados carga en OTRO frame (anidado), no en
   // el del formulario. Se busca en TODOS los frames el que tenga los enlaces
   // «Descargar Factura», sondeando hasta que aparezcan.
+  //
+  // La tabla la va llenando SUNAT de a poco —no aparece de una—: un run real
+  // (marzo, con 1470 facturas recibidas según el SIRE) se quedaba en 25
+  // porque el sondeo paraba en cuanto veía el PRIMER resultado, no cuando la
+  // tabla terminaba de cargar. Por eso ahora no alcanza con "ya hay algo": se
+  // sigue mirando hasta que el conteo deja de crecer varias lecturas
+  // seguidas, con un tope de tiempo para no quedarse esperando para siempre
+  // si de verdad son pocos comprobantes.
   let res: Frame = marco;
   let descargas = 0;
-  for (let i = 0; i < 25; i++) {
+  let lecturasSinCambio = 0;
+  for (let i = 0; i < 45; i++) {
+    let maxAhora = 0;
+    let marcoAhora: Frame = res;
     for (const f of page.frames()) {
       try {
         const c = await f.locator('a:has-text("Descargar Factura")').count();
-        if (c > descargas) { descargas = c; res = f; }
+        if (c > maxAhora) { maxAhora = c; marcoAhora = f; }
       } catch { /* frame navegando */ }
     }
-    if (descargas > 0) break;
+    if (maxAhora > descargas) {
+      descargas = maxAhora;
+      res = marcoAhora;
+      lecturasSinCambio = 0;
+    } else if (descargas > 0) {
+      lecturasSinCambio++;
+    }
+    // Tres lecturas seguidas (6s) sin que crezca: se dio por terminada la carga.
+    if (descargas > 0 && lecturasSinCambio >= 3) break;
     await page.waitForTimeout(2000);
   }
   await evidencia(page, `resultados-${slug(tipo)}`);
