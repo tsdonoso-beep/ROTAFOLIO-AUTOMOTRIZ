@@ -255,21 +255,31 @@ o WhatsApp— con un resumen visual (cuánto, de quién, por tipo de
 comprobante, mes a mes) y un botón que abre la hoja real para quien
 necesite el desglose. Pensado para mostrar, no para trabajar sobre él.
 
+Son dos archivos, mismo patrón que `TableroPadron.gs` + `TableroPadron.html`:
+el script calcula los números una vez por visita y el HTML solo los pinta
+(se los pide con `google.script.run`, no hay que tocar nada de eso).
+
 ### Instalación
 
 1. Abre **COMPROBANTES SUNAT - DETALLE** → **Extensiones · Apps Script**.
 2. El **+** junto a «Archivos» → **Script** → llámalo **`VistaEjecutiva`** →
-   borra el contenido de ejemplo y pega el de **`VistaEjecutiva.gs`**
-   completo. No hace falta ningún archivo `.html`: la página se arma en el
-   mismo script. Guarda con el disquete.
-3. **Implementar** (arriba a la derecha) → **Nueva implementación** → el
+   borra el contenido de ejemplo y pega el de **`VistaEjecutiva.gs`**.
+3. El **+** → **HTML** → llámalo **exactamente `VistaEjecutivaPagina`**
+   (sin `.html` al crearlo, Apps Script se lo agrega solo) → pega el
+   contenido de **`VistaEjecutivaPagina.html`**. Tiene que ser un nombre
+   **distinto** al del script: Apps Script comparte un solo espacio de
+   nombres entre todos los archivos del proyecto sin importar el tipo, así
+   que un script y un HTML no pueden llamarse igual. Si el nombre no calza
+   exacto, `doGet()` no lo encuentra.
+4. Guarda con el disquete.
+5. **Implementar** (arriba a la derecha) → **Nueva implementación** → el
    engranaje → **Aplicación web**.
    - Ejecutar como: **Yo** (tu cuenta).
    - Quién tiene acceso: **Cualquier usuario con el enlace** (o la variante
      de Workspace si solo debe verlo gente de la empresa).
-4. **Implementar**. La primera vez pide autorización: elige tu cuenta,
+6. **Implementar**. La primera vez pide autorización: elige tu cuenta,
    **Configuración avanzada** → **Ir a (nombre del proyecto)** → **Permitir**.
-5. Copia la URL que termina en **`/exec`** — esa es la que se comparte, no
+7. Copia la URL que termina en **`/exec`** — esa es la que se comparte, no
    la del editor de Apps Script.
 
 ### Si se edita el código después
