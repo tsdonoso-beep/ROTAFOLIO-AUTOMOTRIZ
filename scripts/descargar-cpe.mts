@@ -317,12 +317,55 @@ interface ArchivoBajado { nombre: string; datos: Buffer; tipo: string }
 interface FilaBajada { xml: ArchivoBajado | null; pdf: ArchivoBajado | null }
 
 /**
+ * El total real de una tabla de resultados, leído del propio widget en vez
+ * de contar enlaces en el DOM.
+ *
+ * La tabla es un dojox.grid.DataGrid: virtualiza el DOM —solo pinta las
+ * filas visibles y las recicla al scrollear—, así que contar `<a>` nunca ve
+ * más que un puñado (~25) aunque haya cientos. El widget en sí sí sabe el
+ * total (`rowCount`), sin importar cuánto se haya scrolleado.
+ */
+async function rowCountDeGrid(f: Frame): Promise<number | null> {
+  try {
+    return await f.evaluate(() => {
+      const w = window as unknown as { dijit?: { registry?: { toArray?: () => Array<Record<string, unknown>> } } };
+      const widgets = w.dijit?.registry?.toArray?.() ?? [];
+      const grid = widgets.find((x) => typeof x.rowCount === "number");
+      return grid ? (grid.rowCount as number) : null;
+    });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Descarga la fila `indice` llamando directo a la función de SUNAT, sin
+ * pasar por el enlace.
+ *
+ * Se confirmó contra el HTML real (FE y NC por igual) que el enlace no hace
+ * más que esto: `onclick="consultaFactura.descargar('0')"` para el XML,
+ * `consultaFactura.descargarComprobantePdf('0')` para el PDF, con el índice
+ * de la fila —no un dato propio de esa fila—. Como es un índice, no hace
+ * falta que la fila esté pintada ni visible: se llama igual para las 400
+ * que para las 4.
+ */
+function descargarPorIndice(f: Frame, indice: number, metodo: "descargar" | "descargarComprobantePdf") {
+  return f.evaluate(({ i, m }) => {
+    const w = window as unknown as Record<string, Record<string, (i: string) => void> | undefined>;
+    const cf = w.consultaFactura;
+    if (cf && typeof cf[m] === "function") cf[m](String(i));
+  }, { i: indice, m: metodo });
+}
+
+/**
  * Pide un tipo de consulta puntual —«FE Recibidas», «NC Emitidas»...— para el
  * rango de fechas ya fijado, y devuelve las descargas.
  *
  * Las fechas se escriben directo (dd/mm/yyyy) en vez de pelear con el
  * calendario emergente. Aceptar trae la tabla, y de cada fila cuelgan los
- * enlaces «Descargar Factura (XML)» y «Descargar PDF».
+ * enlaces «Descargar Factura (XML)» y «Descargar PDF» —el texto cambia según
+ * el tipo («Descargar NC (XML)» en notas de crédito—, así que no se busca
+ * por texto para decidir cuántas filas hay: se lee `rowCount` del grid.
  */
 async function consultarUnTipo(page: Page, tipo: string): Promise<FilaBajada[]> {
   const marco = await marcoConsulta(page);
@@ -352,92 +395,47 @@ async function consultarUnTipo(page: Page, tipo: string): Promise<FilaBajada[]> 
   await clicAceptar(marco);
 
   // Tras Aceptar, la tabla de resultados carga en OTRO frame (anidado), no en
-  // el del formulario. Se busca en TODOS los frames el que tenga los enlaces
-  // «Descargar Factura», sondeando hasta que aparezcan.
-  //
-  // La tabla es de scroll infinito: SUNAT solo trae la primera tanda (~25
-  // filas) y no carga el resto hasta que alguien la hace scrollear —se
-  // confirmó a mano en el portal real, viendo cómo las filas se «recargan»
-  // al bajar—. Un run real (marzo, con 1470 facturas recibidas según el
-  // SIRE) se quedaba en 25 exactas porque el sondeo original paraba en
-  // cuanto veía el PRIMER resultado y nunca tocaba el scroll. Por eso ahora,
-  // mientras el conteo siga creciendo, se fuerza el scroll de cualquier
-  // contenedor scrolleable del frame hasta el fondo antes de cada lectura —
-  // lo mismo que haría una persona arrastrando la barra—, y solo se da por
-  // terminado cuando el conteo deja de crecer varias lecturas seguidas ya
-  // con el scroll al fondo.
+  // el del formulario. Se sondean todos los frames buscando la grilla dojox
+  // —ahí vive el total real (`rowCount`), sin depender de cuántas filas
+  // estén pintadas—. Si no aparece ninguna en ~20s, se cae al respaldo de
+  // contar enlaces «Descargar Factura» (el camino viejo, por si el portal
+  // cambia y deja de usar esa grilla, o da un resultado vacío sin ella).
   let res: Frame = marco;
   let descargas = 0;
-  let lecturasSinCambio = 0;
-  let intentosSinNada = 0;
-  // Si en ~20s no aparece ni un resultado, es que de verdad no hay —no vale
-  // la pena esperar los minutos completos que sí se le dan a una tabla que
-  // está creciendo—.
-  const TOPE_SIN_NADA = 10;
-  // Hasta ~4 minutos siguiendo el scroll mientras el conteo siga creciendo.
-  const TOPE_TOTAL = 120;
-  const agotarScroll = (f: Frame) => f.evaluate(() => {
-    document.querySelectorAll<HTMLElement>("*").forEach((el) => {
-      if (el.scrollHeight > el.clientHeight + 10) el.scrollTop = el.scrollHeight;
-    });
-    window.scrollTo(0, document.body.scrollHeight);
-  }).catch(() => {});
-  for (let i = 0; i < TOPE_TOTAL; i++) {
-    let maxAhora = 0;
-    let marcoAhora: Frame = res;
+  let usandoRowCount = false;
+  for (let i = 0; i < 10; i++) {
     for (const f of page.frames()) {
-      try {
-        const c = await f.locator('a:has-text("Descargar Factura")').count();
-        if (c > maxAhora) { maxAhora = c; marcoAhora = f; }
-      } catch { /* frame navegando */ }
+      const rc = await rowCountDeGrid(f);
+      if (rc != null) { descargas = rc; res = f; usandoRowCount = true; break; }
     }
-    if (maxAhora > descargas) {
-      descargas = maxAhora;
-      res = marcoAhora;
-      lecturasSinCambio = 0;
-      intentosSinNada = 0;
-    } else if (descargas > 0) {
-      lecturasSinCambio++;
-    } else {
-      intentosSinNada++;
-    }
-    // Tres lecturas seguidas (6s) sin que crezca, ya con el scroll al fondo:
-    // se dio por terminada la carga.
-    if (descargas > 0 && lecturasSinCambio >= 3) break;
-    if (descargas === 0 && intentosSinNada >= TOPE_SIN_NADA) break;
-    if (descargas > 0) await agotarScroll(res);
+    if (usandoRowCount) break;
     await page.waitForTimeout(2000);
   }
+
+  if (!usandoRowCount) {
+    // Respaldo: el conteo por enlaces de antes. Sirve tal cual para un
+    // resultado vacío (0 enlaces = 0 comprobantes) y como red de seguridad
+    // si la grilla no se pudo leer.
+    for (let i = 0; i < 15; i++) {
+      let maxAhora = 0;
+      let marcoAhora: Frame = res;
+      for (const f of page.frames()) {
+        try {
+          const c = await f.locator('a:has-text("Descargar Factura")').count();
+          if (c > maxAhora) { maxAhora = c; marcoAhora = f; }
+        } catch { /* frame navegando */ }
+      }
+      if (maxAhora > descargas) { descargas = maxAhora; res = marcoAhora; }
+      if (descargas > 0) break;
+      await page.waitForTimeout(2000);
+    }
+  }
+
   await evidencia(page, `resultados-${slug(tipo)}`);
-  console.log(`  · resultados [${tipo}]: ${descargas} enlaces «Descargar Factura» en ${res.url().slice(0, 70)}`);
+  console.log(`  · resultados [${tipo}]: ${descargas} comprobantes (${usandoRowCount ? "rowCount de la grilla" : "conteo de enlaces, respaldo"}) en ${res.url().slice(0, 70)}`);
   if (descargas === 0) {
-    // Si no hay enlaces, radiografiar para ver dónde quedó la tabla.
+    // Si no hay nada, radiografiar para ver dónde quedó la tabla.
     await radiografia(page);
-  }
-  // El HTML del frame con la tabla —no solo el de la página principal, que
-  // es lo único que guarda evidencia()—: para ver de verdad cómo scrollea
-  // (o no) sin tener que adivinarlo por fuera.
-  try {
-    writeFileSync(join(CAPTURAS, `zz-frame-resultados-${slug(tipo)}.html`), await res.content());
-  } catch (e) {
-    console.log(`  · no se pudo guardar el HTML del frame: ${e instanceof Error ? e.message : e}`);
-  }
-  // La tabla es un dojox.grid.DataGrid (id "recibido.facturasGrid" en FE
-  // Recibidas): virtualiza el DOM —solo pinta las filas visibles— pero el
-  // widget en sí suele guardar el total real en `rowCount`, sin necesidad de
-  // scrollear todo. Se sondea por diagnóstico, antes de decidir si conviene
-  // leer de ahí en vez de contar enlaces.
-  try {
-    const info = await res.evaluate(() => {
-      const w = window as unknown as { dijit?: { registry?: { toArray?: () => Array<Record<string, unknown>> } } };
-      const widgets = w.dijit?.registry?.toArray?.() ?? [];
-      return widgets
-        .filter((x) => typeof x.rowCount === "number")
-        .map((x) => ({ id: x.id, rowCount: x.rowCount }));
-    });
-    console.log(`  · grids dojox en el frame: ${JSON.stringify(info)}`);
-  } catch (e) {
-    console.log(`  · no se pudo leer el grid: ${e instanceof Error ? e.message : e}`);
   }
 
   if (DEBUG) {
@@ -445,18 +443,31 @@ async function consultarUnTipo(page: Page, tipo: string): Promise<FilaBajada[]> 
     return [];
   }
 
+  console.log(`Bajando ${descargas} comprobantes de ${tipo} (XML + PDF)…`);
   const salida: FilaBajada[] = [];
-  const xml = res.locator('a:has-text("Descargar Factura")');
-  const pdf = res.locator('a:has-text("Descargar PDF")');
-  const n = await xml.count();
-  console.log(`Bajando ${n} comprobantes de ${tipo} (XML + PDF)…`);
 
-  for (let i = 0; i < n; i++) {
-    let xmlArchivo: ArchivoBajado | null = null;
-    let pdfArchivo: ArchivoBajado | null = null;
-    try { xmlArchivo = await bajar(page, () => xml.nth(i).click()); } catch (e) { console.log(`  · XML fila ${i + 1} [${tipo}]: ${e instanceof Error ? e.message : e}`); }
-    try { pdfArchivo = await bajar(page, () => pdf.nth(i).click()); } catch (e) { console.log(`  · PDF fila ${i + 1} [${tipo}]: ${e instanceof Error ? e.message : e}`); }
-    salida.push({ xml: xmlArchivo, pdf: pdfArchivo });
+  if (usandoRowCount) {
+    // Se llama directo a la función de SUNAT por índice de fila: no depende
+    // de que esa fila esté pintada ni de cómo se llame su enlace (distinto
+    // entre FE y NC/ND).
+    for (let i = 0; i < descargas; i++) {
+      let xmlArchivo: ArchivoBajado | null = null;
+      let pdfArchivo: ArchivoBajado | null = null;
+      try { xmlArchivo = await bajar(page, () => descargarPorIndice(res, i, "descargar")); } catch (e) { console.log(`  · XML fila ${i + 1} [${tipo}]: ${e instanceof Error ? e.message : e}`); }
+      try { pdfArchivo = await bajar(page, () => descargarPorIndice(res, i, "descargarComprobantePdf")); } catch (e) { console.log(`  · PDF fila ${i + 1} [${tipo}]: ${e instanceof Error ? e.message : e}`); }
+      salida.push({ xml: xmlArchivo, pdf: pdfArchivo });
+    }
+  } else {
+    // Respaldo: el clic por enlace de antes, para cuando no hubo grilla que leer.
+    const xml = res.locator('a:has-text("Descargar Factura")');
+    const pdf = res.locator('a:has-text("Descargar PDF")');
+    for (let i = 0; i < descargas; i++) {
+      let xmlArchivo: ArchivoBajado | null = null;
+      let pdfArchivo: ArchivoBajado | null = null;
+      try { xmlArchivo = await bajar(page, () => xml.nth(i).click()); } catch (e) { console.log(`  · XML fila ${i + 1} [${tipo}]: ${e instanceof Error ? e.message : e}`); }
+      try { pdfArchivo = await bajar(page, () => pdf.nth(i).click()); } catch (e) { console.log(`  · PDF fila ${i + 1} [${tipo}]: ${e instanceof Error ? e.message : e}`); }
+      salida.push({ xml: xmlArchivo, pdf: pdfArchivo });
+    }
   }
   return salida;
 }
