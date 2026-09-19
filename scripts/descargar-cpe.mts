@@ -278,9 +278,19 @@ async function clicAceptar(marco: Frame) {
  * verdad, veinte corridas seguidas sin fallar: apostar a que el formulario
  * queda listo para una segunda consulta sin volver a entrar es un supuesto
  * que nadie confirmó contra el portal real.
+ *
+ * A partir del tercer tipo en la misma sesión, hacer clic en los enlaces del
+ * menú deja de abrir una pestaña nueva del módulo: se queda pegado en la que
+ * ya estaba abierta, todavía con los resultados de la consulta anterior (se
+ * vio en un run real: NC/ND «heredaron» los resultados de FE Recibidas y
+ * nunca encontraron el formulario). Por eso primero se recarga el menú desde
+ * cero —la sesión sigue viva, no vuelve a pedir clave— para cerrar cualquier
+ * pestaña del módulo que haya quedado abierta.
  */
 async function abrirModuloConsulta(page: Page) {
   console.log("Menú → Empresas → Consulta de Facturas y Notas Electrónicas…");
+  await irConReintento(page, LOGIN_URL);
+  await page.waitForLoadState("networkidle", { timeout: 30000 }).catch(() => {});
   await evidencia(page, "menu-inicio");
   console.log(`  · frames: ${page.frames().map(f => f.url() || "(vacío)").join(" | ")}`);
 
