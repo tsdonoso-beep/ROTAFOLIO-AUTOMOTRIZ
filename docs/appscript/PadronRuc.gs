@@ -265,25 +265,45 @@ function quitarPadronAutomatico() {
 var URL_FORMULARIO_RUC_ = 'https://e-consultaruc.sunat.gob.pe/cl-ti-itmrconsruc/FrameCriterioBusquedaWeb.jsp';
 var URL_CONSULTA_RUC_   = 'https://e-consultaruc.sunat.gob.pe/cl-ti-itmrconsruc/jcrS00Alias';
 
+/**
+ * Cabeceras de un navegador real. Sin esto, algunos WAF (como el de SUNAT)
+ * tratan distinto una petición que llega sin pinta de navegador, y devuelven
+ * una página distinta a la que ve una persona — ya pasó lo mismo con el
+ * portal SOL en `scripts/descargar-cpe.mts`.
+ */
+var CABECERAS_NAVEGADOR_ = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+  'Accept-Language': 'es-PE,es;q=0.9'
+};
+
 /** Trae el formulario, saca el token oculto y las cookies, y consulta el RUC. */
 function consultarRuc_(ruc) {
-  var form = UrlFetchApp.fetch(URL_FORMULARIO_RUC_, { muteHttpExceptions: true });
+  var form = UrlFetchApp.fetch(URL_FORMULARIO_RUC_, {
+    headers: CABECERAS_NAVEGADOR_,
+    muteHttpExceptions: true
+  });
   if (form.getResponseCode() !== 200) {
     throw new Error('SUNAT no respondió al abrir el formulario (código ' + form.getResponseCode() + ').');
   }
 
   var cookies = cookiesDe_(form);
-  var token = tokenDelFormulario_(form.getContentText());
+  var html = form.getContentText();
+  var token = tokenDelFormulario_(html);
   if (!token) {
     throw new Error(
-      'No se encontró el campo "token" en el formulario de SUNAT. ' +
-      'Puede que la página haya cambiado — revisar con las herramientas de desarrollador del navegador.'
+      'No se encontró el campo "token" en el formulario de SUNAT (código ' + form.getResponseCode() + ').\n' +
+      'Esto es lo que llegó, para comparar con lo que muestra el navegador:\n\n' +
+      html.substring(0, 600)
     );
   }
 
+  var cabecerasPost = { Cookie: cookies };
+  for (var h in CABECERAS_NAVEGADOR_) cabecerasPost[h] = CABECERAS_NAVEGADOR_[h];
+
   var resp = UrlFetchApp.fetch(URL_CONSULTA_RUC_, {
     method: 'post',
-    headers: { Cookie: cookies },
+    headers: cabecerasPost,
     payload: {
       accion: 'consPorRuc', razSoc: '', nroRuc: ruc, nrodoc: '',
       token: token, contexto: 'ti-it', modo: '1', rbtnTipo: '1',
@@ -315,8 +335,8 @@ function cookiesDe_(resp) {
 
 /** El valor del input oculto `token`. No lo calcula el navegador: ya viene en el HTML. */
 function tokenDelFormulario_(html) {
-  var m = /<input\b[^>]*\bname="token"[^>]*\bvalue="([^"]*)"/i.exec(html) ||
-          /<input\b[^>]*\bvalue="([^"]*)"[^>]*\bname="token"/i.exec(html);
+  var m = /<input\b[^>]*\bname=["']token["'][^>]*\bvalue=["']([^"']*)["']/i.exec(html) ||
+          /<input\b[^>]*\bvalue=["']([^"']*)["'][^>]*\bname=["']token["']/i.exec(html);
   return m ? m[1] : null;
 }
 
