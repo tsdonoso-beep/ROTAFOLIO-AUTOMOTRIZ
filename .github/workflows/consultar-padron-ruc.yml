@@ -11,10 +11,20 @@
 # prueba y sube capturas y HTML de cada paso como artefacto, sin guardar
 # nada. Con eso se confirma que el navegador de verdad resuelve el captcha
 # antes de dejarlo correr con la lista completa (debug=false).
+#
+# Además del disparo manual, corre solo todos los días: como cada corrida
+# consulta solo los RUC nuevos o vencidos (nunca repite uno ya al día), no
+# hace falta acordarse de correrlo — se pone al día con el proveedor nuevo
+# que trajo «SUNAT diario» esa misma madrugada, y con el tiempo cubre solos
+# a todos los proveedores del registro de compras, no solo a los de hoy.
 
 name: SUNAT padrón de RUC
 
 on:
+  schedule:
+    # 09:00 en Lima (UTC-5): media hora después de «SUNAT diario» (08:00),
+    # para que ya haya alcanzado a traer los comprobantes de esa madrugada.
+    - cron: "0 14 * * *"
   workflow_dispatch:
     inputs:
       debug:
@@ -33,7 +43,14 @@ on:
       max_consultas:
         description: "Tope de RUC a consultar en esta corrida."
         required: false
-        default: "40"
+        default: "80"
+
+# Nunca dos corridas a la vez —una manual mientras corre la del cron, por
+# ejemplo—: encadenarían consultas al mismo RUC en simultáneo sin necesidad.
+# La segunda espera a que la primera termine, no se cancela.
+concurrency:
+  group: consultar-padron-ruc
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -41,7 +58,7 @@ permissions:
 jobs:
   consultar:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v7

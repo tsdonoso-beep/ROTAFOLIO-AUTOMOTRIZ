@@ -41,7 +41,7 @@ function pedir(...nombres: string[]): string {
 
 const DEBUG = process.env.DEBUG !== "0";
 const DIAS_VIGENCIA = Number(process.env.DIAS_VIGENCIA?.trim() || "30");
-const MAX_CONSULTAS = Number(process.env.MAX_CONSULTAS?.trim() || "40");
+const MAX_CONSULTAS = Number(process.env.MAX_CONSULTAS?.trim() || "80");
 
 // En depuración, o para probar un RUC puntual sin esperar la lista de la
 // base: "20501529363,20601712521".

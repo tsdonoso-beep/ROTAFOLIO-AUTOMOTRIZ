@@ -171,10 +171,20 @@ Contabilidad la vea ahí mismo sin entrar a la aplicación.
 4. **Menú → «Activar sincronización automática diaria»** para que se ponga
    al día sola todas las mañanas, después de que corra el scraper.
 
-Del lado de SUNAT hay que correr, aparte, el workflow **«SUNAT padrón de
-RUC»** en GitHub Actions (manual por ahora) — ese es el que de verdad
-consulta a SUNAT y llena `padron_ruc`. `PadronRuc.gs` solo refleja lo que
-ya haya ahí.
+Del lado de SUNAT, el workflow **«SUNAT padrón de RUC»** de GitHub Actions
+—el que de verdad consulta a SUNAT y llena `padron_ruc`— corre **solo,
+todos los días a las 9 de la mañana** (media hora después de «SUNAT
+diario», para alcanzar a ver los proveedores que trajo esa madrugada). Cada
+corrida consulta hasta 80 RUC —los nuevos o los que llevan más de 30 días
+sin revisarse—, así que un registro de compras grande no se cubre en un
+solo día, pero tampoco hace falta acordarse de correrlo: se va poniendo al
+día solo. `PadronRuc.gs` solo refleja lo que ya haya en la base en ese
+momento.
+
+Para adelantar el primer barrido completo en vez de esperar varios días,
+dispara el workflow a mano (pestaña Actions → «SUNAT padrón de RUC» → Run
+workflow) con `debug=false` las veces que haga falta — cada corrida es
+segura de repetir: nunca vuelve a consultar un RUC que ya quedó al día.
 
 ### Lo que esto NO decide
 
