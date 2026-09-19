@@ -53,6 +53,10 @@ function onOpen() {
   // que no haya dos. Si ese archivo no está, el menú sigue funcionando igual.
   if (typeof itemsMenuDesglose_ === 'function') menu = itemsMenuDesglose_(menu);
 
+  // La condición del RUC (Buen Contribuyente / Agente de Retención) vive en
+  // PadronRuc.gs, con el mismo enganche opcional.
+  if (typeof itemsMenuPadron_ === 'function') menu = itemsMenuPadron_(menu);
+
   menu.addToUi();
 }
 

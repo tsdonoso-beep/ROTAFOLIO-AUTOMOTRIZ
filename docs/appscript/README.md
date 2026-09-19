@@ -131,6 +131,52 @@ tiempo activado, nadie tiene que abrir el script.
 Reprocesar un ZIP no duplica: un ítem ya escrito se reconoce por
 tipo-serie-número-proveedor-línea y se salta.
 
+## Condición del RUC (Buen Contribuyente / Agente de Retención)
+
+`PadronRuc.gs` agrega al mismo menú la consulta que hoy Contabilidad hace a
+mano, RUC por RUC, en `e-consultaruc.sunat.gob.pe`: si el proveedor está en
+el Padrón de Buenos Contribuyentes o es Agente de Retención/Percepción —de
+eso depende si a esa factura le corresponde o no la retención del IGV—.
+
+Escribe el resultado en una pestaña **PADRÓN RUC**, una fila por proveedor,
+con su Estado, Condición (Habido/No Habido) y los tres padrones. No vuelve a
+consultar un RUC que ya revisó hace menos de 30 días —los padrones casi no
+cambian, y así el número de consultas queda atado a cuántos proveedores
+distintos hay, no a cuántas facturas se emitieron.
+
+### Por qué no hace falta un navegador esta vez
+
+A diferencia del portal SOL, la Consulta RUC pública no pide Clave SOL ni
+tiene captcha: es un formulario de dos pasos (uno trae un token oculto ya
+resuelto por el servidor, el otro lo usa para consultar). `UrlFetchApp`
+alcanza. Si algún día SUNAT le agrega ahí un captcha o un token que sí se
+calcule con JavaScript en el navegador, esto se rompe — el respaldo sería
+mover la misma consulta al scraper de Playwright que ya existe para el
+portal SOL (`scripts/descargar-cpe.mts`), en vez de a Apps Script.
+
+### Cómo se usa
+
+1. En Apps Script, el **+** · **Script**, llámalo `PadronRuc` y pega el
+   contenido de `PadronRuc.gs`. Necesita que `Codigo.gs` ya esté instalado
+   (usa `PESTANA_DATOS` y `COL.ruc` de ahí para saber qué RUC consultar).
+   Guarda y recarga la hoja.
+2. **Menú → «Consultar un RUC ahora»** para probar uno suelto y ver el
+   resultado en un cuadro de diálogo.
+3. **Menú → «Actualizar condición de todos los proveedores»** para
+   recorrerlos todos (hasta 40 por corrida, para no acercarse al límite de
+   tiempo de ejecución).
+4. **Menú → «Activar actualización automática diaria»** para que corra sola
+   todas las mañanas y se ponga al día con lo pendiente en unos días si hay
+   más de 40 proveedores nuevos de golpe.
+
+### Lo que esto NO decide
+
+Dice la condición del proveedor. **No calcula si corresponde retener** ni
+cuánto: para eso falta además confirmar que INROPRIN esté designada Agente
+de Retención, que la operación supere S/ 700, y que no esté sujeta a
+detracción (si hay detracción, no hay retención). Ese cálculo queda para más
+adelante, sobre esta misma pestaña.
+
 ## Si algo falla
 
 **«La hoja no trae estas columnas…»** — cambiaron los títulos en la fuente. El
@@ -138,6 +184,15 @@ mensaje dice cuáles. Se arreglan en `COL`, al principio de `Codigo.gs`.
 
 **El tablero sale vacío** — la persona no tiene acceso a la hoja. Ver el
 paso 4.
+
+**«No se encontró el campo "token"...» al consultar un RUC** — SUNAT cambió
+el formulario de Consulta RUC. Hay que revisar con las herramientas de
+desarrollador del navegador (pestaña Red, al hacer una consulta) cómo quedó
+el nuevo formulario, y ajustar `tokenDelFormulario_` en `PadronRuc.gs`.
+
+**«La respuesta de SUNAT no trajo los datos esperados...»** — mismo caso,
+pero en la página de resultado: cambiaron las etiquetas («Estado del
+Contribuyente:», «Padrones:», …). Se ajustan en `ETIQUETAS_CONSULTA_RUC_`.
 
 **Se borró una pestaña que alguien agregó** — no debería volver a pasar: la
 publicación escribe solo dentro de la pestaña de datos. Si pasa, avisa: es un
