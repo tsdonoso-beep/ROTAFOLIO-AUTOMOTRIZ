@@ -49,9 +49,13 @@
   }
 
   header { display: flex; justify-content: space-between; align-items: flex-start;
-           gap: 18px; flex-wrap: wrap; margin-bottom: 20px; }
+           gap: 18px; flex-wrap: wrap; margin-bottom: 14px; }
   h1 { margin: 0; font-size: 21px; font-weight: 700; letter-spacing: -.015em; }
   header p { margin: 4px 0 0; font-size: 12.5px; color: var(--ink-2); }
+  select {
+    font: inherit; padding: 7px 11px; border-radius: 8px;
+    border: 1px solid var(--borde); background: var(--panel); color: var(--ink);
+  }
 
   .boton {
     display: inline-flex; align-items: center; gap: 7px;
@@ -62,6 +66,18 @@
   }
   .boton:hover { opacity: .8; }
   .boton.primario { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+
+  /* Las pestañas: dos vistas del mismo tablero, un solo botón hundido a la
+     vez. No son enlaces —no hay nada que compartir por URL de una sola
+     pestaña—, así que son botones simples. */
+  nav.pestanas { display: flex; gap: 6px; margin-bottom: 18px; border-bottom: 1px solid var(--borde); }
+  nav.pestanas button {
+    font: inherit; font-weight: 600; font-size: 13px; cursor: pointer;
+    padding: 10px 4px; margin-bottom: -1px; border: none; border-bottom: 2px solid transparent;
+    background: none; color: var(--ink-3);
+  }
+  nav.pestanas button + button { margin-left: 14px; }
+  nav.pestanas button.activa { color: var(--ink); border-bottom-color: var(--serie); }
 
   .tarjeta { background: var(--panel); border: 1px solid var(--borde);
              border-radius: 12px; padding: 18px 20px; }
@@ -74,7 +90,7 @@
   .cifra .v.bueno { color: var(--bueno); }
   .cifra .n { font-size: 11px; color: var(--ink-3); margin: 3px 0 0; }
 
-  .dos { display: grid; gap: 16px; grid-template-columns: 1fr 1.3fr; align-items: start; }
+  .dos { display: grid; gap: 16px; grid-template-columns: 1.35fr 1fr; align-items: start; }
   @media (max-width: 900px) { .dos { grid-template-columns: 1fr; } }
 
   h2 { margin: 0 0 3px; font-size: 14.5px; font-weight: 700; }
@@ -86,6 +102,7 @@
        text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
   td { padding: 8px 12px 8px 0; border-bottom: 1px solid var(--borde-suave); vertical-align: top; }
   th.n, td.n { text-align: center; white-space: nowrap; }
+  table.derecha th.n, table.derecha td.n { text-align: right; padding-right: 0; }
   .prov { font-weight: 500; }
   .sec { display: block; font-size: 10.5px; color: var(--ink-3); margin-top: 1px; }
 
@@ -98,16 +115,37 @@
   .marca.riesgo { background: color-mix(in srgb, var(--critico) 13%, transparent); color: var(--critico); }
 
   .vacio { padding: 26px 0; text-align: center; color: var(--ink-3); font-size: 12.5px; }
+  .aviso { display: flex; gap: 9px; padding: 12px 14px; border-radius: 9px;
+           font-size: 12.5px; line-height: 1.5; margin-bottom: 15px;
+           background: color-mix(in srgb, var(--critico) 9%, transparent);
+           border: 1px solid color-mix(in srgb, var(--critico) 26%, transparent);
+           color: var(--ink); }
+  .aviso b { color: var(--critico); }
 
-  /* Barras horizontales de comparación: la etiqueta a la izquierda, la barra
-     y el número a la derecha. Sin leyenda —el rótulo de cada fila la hace
-     innecesaria—. */
+  /* Barras horizontales de comparación (pestaña Padrón): la etiqueta a la
+     izquierda, la barra y el número a la derecha. Sin leyenda —el rótulo de
+     cada fila la hace innecesaria—. */
   .barras { display: flex; flex-direction: column; gap: 13px; margin-top: 4px; }
   .fila-barra { display: grid; grid-template-columns: 130px 1fr 56px; align-items: center; gap: 10px; }
   .fila-barra .etq { font-size: 12.5px; color: var(--ink-2); }
   .fila-barra .pista { height: 9px; border-radius: 100px; background: var(--borde-suave); overflow: hidden; }
   .fila-barra .lleno { height: 100%; border-radius: 100px; background: var(--serie); transition: width .3s; }
   .fila-barra .val { font-size: 12.5px; text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* El gráfico de barras verticales (pestaña Comprobantes): una sola serie,
+     así que no lleva leyenda — el título la nombra. */
+  .grafico { position: relative; }
+  .barra-mes { cursor: default; transition: opacity .12s; }
+  .barra-mes:hover { opacity: .78; }
+  .rejilla { stroke: var(--borde); stroke-width: 1; }
+  .eje { font-size: 10px; fill: var(--ink-3); font-family: inherit; }
+  .valorbarra { font-size: 10.5px; fill: var(--ink-2); font-variant-numeric: tabular-nums; }
+  #globo {
+    position: absolute; pointer-events: none; opacity: 0; transition: opacity .1s;
+    background: var(--ink); color: var(--surface); padding: 7px 10px;
+    border-radius: 7px; font-size: 11.5px; white-space: nowrap; z-index: 5;
+    transform: translate(-50%, -100%);
+  }
 
   .buscar {
     width: 100%; font: inherit; padding: 9px 12px; margin-bottom: 12px;
@@ -132,37 +170,114 @@
 <div id="todo" style="display:none">
   <header>
     <div>
-      <h1>Padrón de RUC</h1>
-      <p>Condición de los proveedores ante SUNAT — Buen Contribuyente, Agente de Retención/Percepción</p>
+      <h1>SUNAT — INROPRIN</h1>
+      <p>Condición de proveedores y registro de compras, en un solo lugar.</p>
     </div>
     <a id="enlaceHoja" class="boton primario" target="_blank" rel="noopener">
       ↗ Abrir la hoja de cálculo
     </a>
   </header>
 
-  <div class="cifras" id="cifras"></div>
+  <nav class="pestanas">
+    <button type="button" id="tabPadronBtn" class="activa">Padrón de RUC</button>
+    <button type="button" id="tabComprobantesBtn">Comprobantes SUNAT</button>
+  </nav>
 
-  <div class="dos">
-    <div class="tarjeta">
-      <h2>Por padrón</h2>
-      <p class="sub">Sobre los proveedores ya consultados.</p>
-      <div class="barras" id="barras"></div>
+  <!-- ══════════════ Pestaña 1: Padrón de RUC ══════════════ -->
+  <div id="vistaPadron">
+    <div class="cifras" id="cifras"></div>
+
+    <div class="dos">
+      <div class="tarjeta">
+        <h2>Por padrón</h2>
+        <p class="sub">Sobre los proveedores ya consultados.</p>
+        <div class="barras" id="barras"></div>
+      </div>
+
+      <div class="tarjeta">
+        <h2>Todos los proveedores consultados</h2>
+        <p class="sub">Filtra por RUC o nombre.</p>
+        <input class="buscar" id="buscar" type="search" placeholder="Buscar por RUC o proveedor…">
+        <div style="max-height:420px; overflow:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Proveedor</th><th>Condición</th>
+                <th class="n">Buen Contrib.</th><th class="n">Ag. Retención</th><th class="n">Ag. Percepción</th>
+                <th>Consultado</th>
+              </tr>
+            </thead>
+            <tbody id="filas"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
-    <div class="tarjeta">
-      <h2>Todos los proveedores consultados</h2>
-      <p class="sub">Filtra por RUC o nombre.</p>
-      <input class="buscar" id="buscar" type="search" placeholder="Buscar por RUC o proveedor…">
-      <div style="max-height:420px; overflow:auto">
-        <table>
+    <p class="sub" id="piePadron" style="margin-top:14px"></p>
+  </div>
+
+  <!-- ══════════════ Pestaña 2: Comprobantes SUNAT (IGV / notas) ══════════════ -->
+  <div id="vistaComprobantes" style="display:none">
+    <div id="cargandoComp" class="vacio">Leyendo la hoja…</div>
+    <div id="errorComp" class="tarjeta" style="display:none">
+      <h2>No se pudo leer la hoja</h2>
+      <p class="sub" id="errorTextoComp"></p>
+    </div>
+
+    <div id="contenidoComp" style="display:none">
+      <div style="display:flex; justify-content:flex-end; margin-bottom:14px">
+        <label>
+          <span class="rotulo" style="display:block;margin-bottom:5px">Período</span>
+          <select id="periodoComp"></select>
+        </label>
+      </div>
+
+      <div class="cifras" id="cifrasComp"></div>
+
+      <div id="avisoNotasComp"></div>
+
+      <div class="dos">
+        <div class="tarjeta">
+          <h2>IGV neto por mes</h2>
+          <p class="sub">Lo que suman las compras menos lo que restan las notas de crédito.</p>
+          <div class="grafico">
+            <div id="globo"></div>
+            <svg id="chartComp" width="100%" height="230" role="img"
+                 aria-label="IGV neto por mes"></svg>
+          </div>
+        </div>
+
+        <div class="tarjeta">
+          <h2>Quién factura más</h2>
+          <p class="sub">Proveedores del período, sin contar notas de crédito.</p>
+          <table class="derecha">
+            <thead><tr><th>Proveedor</th><th class="n">Comprob.</th><th class="n">Total</th></tr></thead>
+            <tbody id="proveedoresComp"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="tarjeta" style="margin-top:16px">
+        <h2>Notas de crédito del período</h2>
+        <p class="sub">Cada una resta del crédito fiscal. «Corrige a» dice sobre qué factura cae.</p>
+        <table class="derecha">
           <thead>
             <tr>
-              <th>Proveedor</th><th>Condición</th>
-              <th class="n">Buen Contrib.</th><th class="n">Ag. Retención</th><th class="n">Ag. Percepción</th>
-              <th>Consultado</th>
+              <th>Proveedor</th><th>Nota</th><th>Corrige a</th>
+              <th>Lo rindió</th><th class="n">Monto</th><th class="n">IGV que resta</th>
             </tr>
           </thead>
-          <tbody id="filas"></tbody>
+          <tbody id="notasComp"></tbody>
+        </table>
+        <p class="sub" id="masNotasComp" style="margin:11px 0 0"></p>
+      </div>
+
+      <div class="tarjeta" style="margin-top:16px">
+        <h2>Comprobantes que cambiaron</h2>
+        <p class="sub">Llegaron distintos de como estaban la última vez que se consultó su período.</p>
+        <table class="derecha">
+          <thead><tr><th>Proveedor</th><th>Comprobante</th><th class="n">Total</th><th class="n">Visto</th></tr></thead>
+          <tbody id="cambiadosComp"></tbody>
         </table>
       </div>
     </div>
@@ -172,28 +287,64 @@
 </div>
 
 <script>
-var TODAS = [];
-
-function esc(s) {
+// ── Ayudantes compartidos por las dos pestañas ─────────────────────
+var soles = function (n) {
+  return 'S/ ' + Number(n || 0).toLocaleString('es-PE',
+    { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+var miles = function (n) { return Number(n || 0).toLocaleString('es-PE'); };
+var esc = function (s) {
   return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
     return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
   });
+};
+function tarjeta(valor, rotulo, nota, tono) {
+  return '<div class="tarjeta cifra"><p class="v' + (tono ? ' ' + tono : '') + '">' + valor + '</p>' +
+    '<p class="rotulo">' + rotulo + '</p>' +
+    (nota ? '<p class="n">' + esc(nota) + '</p>' : '') + '</div>';
 }
+
+// ── Pestañas ─────────────────────────────────────────────────────
+var comprobantesCargados = false;
+
+document.addEventListener('DOMContentLoaded', function () {
+  document.getElementById('tabPadronBtn').addEventListener('click', function () { mostrarPestana('padron'); });
+  document.getElementById('tabComprobantesBtn').addEventListener('click', function () { mostrarPestana('comprobantes'); });
+});
+
+function mostrarPestana(cual) {
+  var esPadron = cual === 'padron';
+  document.getElementById('vistaPadron').style.display = esPadron ? '' : 'none';
+  document.getElementById('vistaComprobantes').style.display = esPadron ? 'none' : '';
+  document.getElementById('tabPadronBtn').classList.toggle('activa', esPadron);
+  document.getElementById('tabComprobantesBtn').classList.toggle('activa', !esPadron);
+
+  if (!esPadron && !comprobantesCargados) {
+    comprobantesCargados = true;
+    pedirComprobantes(null);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Pestaña 1: Padrón de RUC
+// ══════════════════════════════════════════════════════════════════
+
+var TODAS_PADRON = [];
+
 function fechaCorta(iso) {
   if (!iso) return '—';
   var d = new Date(iso);
   if (isNaN(d.getTime())) return '—';
   return ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2) + '/' + d.getFullYear();
 }
-function marca(activo, esRiesgo) {
+function marca(activo) {
   if (activo == null) return '<span class="marca no">—</span>';
-  if (esRiesgo) return activo ? '<span class="marca riesgo">Sí</span>' : '<span class="marca no">No</span>';
   return activo ? '<span class="marca si">Sí</span>' : '<span class="marca no">No</span>';
 }
 
-function pedir() {
+function pedirPadron() {
   google.script.run
-    .withSuccessHandler(pintar)
+    .withSuccessHandler(pintarPadron)
     .withFailureHandler(function (e) {
       document.getElementById('cargando').style.display = 'none';
       document.getElementById('error').style.display = '';
@@ -202,7 +353,7 @@ function pedir() {
     .datosDelPadron();
 }
 
-function pintar(d) {
+function pintarPadron(d) {
   document.getElementById('cargando').style.display = 'none';
 
   if (d.error) {
@@ -213,7 +364,7 @@ function pintar(d) {
 
   document.getElementById('todo').style.display = '';
   document.getElementById('enlaceHoja').href = d.urlHoja;
-  TODAS = d.filas;
+  TODAS_PADRON = d.filas;
 
   var coberturaTxt = d.cobertura.porcentaje == null
     ? (d.total + ' consultados')
@@ -238,21 +389,23 @@ function pintar(d) {
       '</div>';
   }).join('');
 
-  document.getElementById('pie').textContent =
+  document.getElementById('piePadron').textContent =
     'Actualizado al abrir esta página, ' + new Date(d.actualizadoEl).toLocaleString('es-PE') + '.';
+  document.getElementById('pie').textContent =
+    'Padrón de RUC — SUNAT — actualizado ' + new Date(d.actualizadoEl).toLocaleString('es-PE') + '.';
 
-  pintarFilas(TODAS);
+  pintarFilasPadron(TODAS_PADRON);
   document.getElementById('buscar').oninput = function () {
     var q = this.value.trim().toLowerCase();
-    if (!q) { pintarFilas(TODAS); return; }
-    pintarFilas(TODAS.filter(function (f) {
+    if (!q) { pintarFilasPadron(TODAS_PADRON); return; }
+    pintarFilasPadron(TODAS_PADRON.filter(function (f) {
       return (f.ruc || '').toLowerCase().indexOf(q) >= 0 ||
         (f.razonSocial || '').toLowerCase().indexOf(q) >= 0;
     }));
   };
 }
 
-function pintarFilas(filas) {
+function pintarFilasPadron(filas) {
   var cuerpo = document.getElementById('filas');
   if (!filas.length) {
     cuerpo.innerHTML = '<tr><td colspan="6" class="vacio">Sin resultados.</td></tr>';
@@ -271,13 +424,188 @@ function pintarFilas(filas) {
   }).join('');
 }
 
-function tarjeta(valor, rotulo, nota, tono) {
-  return '<div class="tarjeta cifra"><p class="v' + (tono ? ' ' + tono : '') + '">' + valor + '</p>' +
-    '<p class="rotulo">' + rotulo + '</p>' +
-    (nota ? '<p class="n">' + esc(nota) + '</p>' : '') + '</div>';
+// ══════════════════════════════════════════════════════════════════
+// Pestaña 2: Comprobantes SUNAT (IGV / notas / quién rindió)
+// ══════════════════════════════════════════════════════════════════
+
+var mesNombre = function (p) {
+  var n = ['ene','feb','mar','abr','may','jun','jul','ago','set','oct','nov','dic'];
+  return p.length === 6 ? n[Number(p.slice(4)) - 1] + ' ' + p.slice(2, 4) : p;
+};
+
+var ultimoComp = null;
+
+function pedirComprobantes(periodo) {
+  document.getElementById('cargandoComp').style.display = '';
+  document.getElementById('contenidoComp').style.display = 'none';
+  document.getElementById('errorComp').style.display = 'none';
+  google.script.run
+    .withSuccessHandler(pintarComprobantes)
+    .withFailureHandler(function (e) {
+      document.getElementById('cargandoComp').style.display = 'none';
+      document.getElementById('errorComp').style.display = '';
+      document.getElementById('errorTextoComp').textContent = e && e.message ? e.message : String(e);
+    })
+    .datosDelTablero(periodo || null);
 }
 
-pedir();
+function pintarComprobantes(d) {
+  ultimoComp = d;
+  document.getElementById('cargandoComp').style.display = 'none';
+  document.getElementById('contenidoComp').style.display = '';
+
+  var sel = document.getElementById('periodoComp');
+  sel.innerHTML = d.periodos.map(function (p) {
+    return '<option value="' + p + '"' + (p === d.elegido ? ' selected' : '') + '>' + mesNombre(p) + '</option>';
+  }).join('');
+  sel.onchange = function () { pedirComprobantes(this.value); };
+
+  var r = d.resumen;
+  var neto = r.igvCompras - r.igvNotas;
+  document.getElementById('cifrasComp').innerHTML = [
+    tarjeta(soles(neto), 'IGV neto del mes',
+            r.igvNotas > 0 ? soles(r.igvCompras) + ' menos ' + soles(r.igvNotas) : null),
+    tarjeta(miles(r.comprobantes), 'comprobantes', miles(r.proveedores) + ' proveedores'),
+    tarjeta(soles(r.base), 'base imponible', null),
+    tarjeta(soles(r.total), 'total facturado', null),
+    tarjeta(miles(d.notas.length), 'notas de crédito',
+            d.notas.length ? soles(r.igvNotas) + ' de IGV' : 'ninguna', d.notas.length > 0 ? 'critico' : null)
+  ].join('');
+
+  document.getElementById('avisoNotasComp').innerHTML = d.notas.length
+    ? '<div class="aviso"><span>⚠</span><div><b>' + d.notas.length
+      + (d.notas.length === 1 ? ' nota de crédito resta ' : ' notas de crédito restan ')
+      + soles(r.igvNotas) + '</b> del crédito fiscal de este período.'
+      + (r.rendidos ? '' : ' Ninguno de estos comprobantes se rindió por la aplicación todavía.')
+      + '</div></div>'
+    : '';
+
+  document.getElementById('proveedoresComp').innerHTML = d.topProveedores.length
+    ? d.topProveedores.map(function (p) {
+        return '<tr><td class="prov">' + esc(p.proveedor)
+          + '<span class="sec mono">' + esc(p.ruc) + '</span></td>'
+          + '<td class="n mono">' + miles(p.n) + '</td>'
+          + '<td class="n mono">' + soles(p.total) + '</td></tr>';
+      }).join('')
+    : '<tr><td colspan="3" class="vacio">Sin comprobantes en este período.</td></tr>';
+
+  var notas = d.notas.slice(0, 25);
+  document.getElementById('notasComp').innerHTML = notas.length
+    ? notas.map(function (n) {
+        return '<tr><td class="prov">' + esc(n.proveedor)
+          + '<span class="sec mono">' + esc(n.ruc) + '</span></td>'
+          + '<td class="mono">' + esc(n.comprobante) + '<span class="sec">' + esc(n.fecha) + '</span></td>'
+          + '<td class="mono">' + esc(n.corrigeA || '—') + '</td>'
+          + '<td>' + esc(n.rindio || '—') + '</td>'
+          + '<td class="n mono">' + soles(n.monto) + '</td>'
+          + '<td class="n mono" style="color:var(--critico)">' + soles(n.igv) + '</td></tr>';
+      }).join('')
+    : '<tr><td colspan="6" class="vacio">Ninguna nota de crédito en este período.</td></tr>';
+  document.getElementById('masNotasComp').textContent =
+    d.notas.length > notas.length ? 'Se muestran ' + notas.length + ' de ' + d.notas.length + '.' : '';
+
+  document.getElementById('cambiadosComp').innerHTML = d.cambiados.length
+    ? d.cambiados.map(function (c) {
+        return '<tr><td class="prov">' + esc(c.proveedor) + '</td>'
+          + '<td class="mono">' + esc(c.comprobante) + '</td>'
+          + '<td class="n mono">' + soles(c.total) + '</td>'
+          + '<td class="n mono">' + esc(c.ultimaVez) + '</td></tr>';
+      }).join('')
+    : '<tr><td colspan="4" class="vacio">Ninguno cambió desde la última consulta. Eso es lo normal.</td></tr>';
+
+  dibujarGrafico(d.porMes, d.elegido);
+}
+
+/**
+ * Barras del IGV neto por mes.
+ *
+ * Una sola serie, así que no lleva leyenda: el título la nombra. Se etiquetan
+ * solo el mes elegido y el más alto — un número sobre cada barra convierte el
+ * gráfico en una tabla mal hecha.
+ */
+function dibujarGrafico(porMes, elegido) {
+  var svg = document.getElementById('chartComp');
+  var globo = document.getElementById('globo');
+  svg.innerHTML = '';
+  if (!porMes.length) return;
+
+  var W = svg.clientWidth || 640, H = 230;
+  var m = { top: 22, right: 8, bottom: 26, left: 58 };
+  var ancho = W - m.left - m.right, alto = H - m.top - m.bottom;
+
+  var max = Math.max.apply(null, porMes.map(function (p) { return p.igv; }).concat([0]));
+  var min = Math.min.apply(null, porMes.map(function (p) { return p.igv; }).concat([0]));
+  var rango = (max - min) || 1;
+  var y = function (v) { return m.top + alto - ((v - min) / rango) * alto; };
+  var cero = y(0);
+
+  var ns = 'http://www.w3.org/2000/svg';
+  var crear = function (t, a) {
+    var e = document.createElementNS(ns, t);
+    for (var k in a) e.setAttribute(k, a[k]);
+    return e;
+  };
+
+  [min, (min + max) / 2, max].forEach(function (v) {
+    svg.appendChild(crear('line', { x1: m.left, x2: W - m.right, y1: y(v), y2: y(v), class: 'rejilla' }));
+    var t = crear('text', { x: m.left - 9, y: y(v) + 3.5, class: 'eje', 'text-anchor': 'end' });
+    t.textContent = 'S/ ' + Math.round(v / 1000) + 'k';
+    svg.appendChild(t);
+  });
+
+  var paso = ancho / porMes.length;
+  var ancla = Math.max(Math.min(paso - 12, 34), 10);
+
+  porMes.forEach(function (p, i) {
+    var cx = m.left + paso * i + paso / 2;
+    var arriba = Math.min(y(p.igv), cero), abajo = Math.max(y(p.igv), cero);
+    var h = Math.max(abajo - arriba, 2);
+    var esElegido = p.periodo === elegido;
+
+    var b = crear('rect', {
+      x: cx - ancla / 2, y: arriba, width: ancla, height: h, rx: 4,
+      fill: p.igv < 0 ? 'var(--critico)' : 'var(--serie)',
+      opacity: esElegido ? 1 : 0.5, class: 'barra-mes'
+    });
+    b.addEventListener('mousemove', function () {
+      globo.style.opacity = 1;
+      globo.style.left = cx + 'px';
+      globo.style.top = (arriba - 8) + 'px';
+      globo.innerHTML = '<b>' + mesNombre(p.periodo) + '</b> · ' + soles(p.igv)
+        + ' · ' + miles(p.comprobantes) + ' comprob.';
+    });
+    b.addEventListener('mouseleave', function () { globo.style.opacity = 0; });
+    svg.appendChild(b);
+
+    var e = crear('text', { x: cx, y: H - 8, class: 'eje', 'text-anchor': 'middle' });
+    e.textContent = mesNombre(p.periodo);
+    svg.appendChild(e);
+
+    if (esElegido || p.igv === max) {
+      var v = crear('text', { x: cx, y: arriba - 7, class: 'valorbarra', 'text-anchor': 'middle' });
+      v.textContent = 'S/ ' + Math.round(p.igv / 1000) + 'k';
+      svg.appendChild(v);
+    }
+  });
+
+  svg.appendChild(crear('line', {
+    x1: m.left, x2: W - m.right, y1: cero, y2: cero,
+    stroke: 'var(--ink-3)', 'stroke-width': 1
+  }));
+}
+
+// Al cambiar el ancho solo se redibuja el gráfico de la pestaña de
+// comprobantes, y solo si ya se cargó. Volver a pedir los datos costaría
+// releer trece mil filas por arrastrar el borde de la ventana.
+var redibujar;
+window.addEventListener('resize', function () {
+  clearTimeout(redibujar);
+  redibujar = setTimeout(function () {
+    if (ultimoComp) dibujarGrafico(ultimoComp.porMes, ultimoComp.elegido);
+  }, 150);
+});
+
+pedirPadron();
 </script>
 </body>
 </html>

@@ -194,22 +194,34 @@ de Retención, que la operación supere S/ 700, y que no esté sujeta a
 detracción (si hay detracción, no hay retención). Ese cálculo queda para más
 adelante, sobre esta misma pestaña.
 
-## Tablero del padrón de RUC (publicado, no dentro del Sheet)
+## Tablero SUNAT, publicado (no dentro del Sheet)
 
-`TableroPadron.gs` + `TableroPadron.html` arman un tablero aparte —cuánto del
-registro ya se revisó, qué porcentaje son Buenos Contribuyentes o Agentes de
-Retención/Percepción, cuántos «No Habido»— y lo **publican como su propia
-URL**, con un botón para abrir la hoja de cálculo. A diferencia de
-`Tablero.html` (que se abre como diálogo desde el menú de la hoja), este no
-depende de tener el Sheet abierto: es una página que se comparte por enlace.
+`TableroPadron.gs` + `TableroPadron.html` arman un tablero **publicado como
+su propia URL**, con dos pestañas y un botón para abrir la hoja de cálculo:
+
+- **Padrón de RUC**: cuánto del registro ya se revisó, qué porcentaje son
+  Buenos Contribuyentes o Agentes de Retención/Percepción, cuántos «No
+  Habido», y la lista completa filtrable por RUC o nombre.
+- **Comprobantes SUNAT**: el mismo contenido de `Tablero.html` —IGV neto por
+  mes, notas de crédito, quién rindió, comprobantes que cambiaron, quién
+  factura más—, llamando a la misma `datosDelTablero()` que ya usa
+  `Codigo.gs` (no se duplica esa lógica).
+
+A diferencia de `Tablero.html` (que se abre como diálogo desde el menú de la
+hoja y necesita tenerla abierta), este es una página aparte que se comparte
+por enlace. `Tablero.html` y el menú «Abrir tablero» siguen existiendo y
+funcionando igual que antes —no hace falta borrarlos—; este tablero es la
+vista de conjunto para quien no quiere entrar al Sheet.
 
 ### Instalación
 
 1. En el **mismo proyecto** de Apps Script donde ya está `PadronRuc.gs`
    (hereda sus mismas Propiedades del script: `SUPABASE_URL`,
-   `SUPABASE_ANON_KEY`, `ROBOT_CORREO`, `ROBOT_CLAVE`): el **+** · **Script**,
-   llámalo `TableroPadron`, pega `TableroPadron.gs`. El **+** · **HTML**,
-   llámalo exactamente `TableroPadron` (sin `.html`), pega `TableroPadron.html`.
+   `SUPABASE_ANON_KEY`, `ROBOT_CORREO`, `ROBOT_CLAVE`) y `Codigo.gs`
+   (de ahí sale `datosDelTablero()`, para la pestaña de Comprobantes): el
+   **+** · **Script**, llámalo `TableroPadron`, pega `TableroPadron.gs`. El
+   **+** · **HTML**, llámalo exactamente `TableroPadron` (sin `.html`), pega
+   `TableroPadron.html`.
 2. Guarda.
 3. **Implementar → Nueva implementación → tipo «Aplicación web»**.
    - **Ejecutar como**: tu cuenta — así corre con tus permisos, sin pedirle
