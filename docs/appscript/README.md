@@ -239,6 +239,38 @@ vista de conjunto para quien no quiere entrar al Sheet.
    Implementar. Una implementación ya publicada no se actualiza sola con el
    código nuevo — sin este paso, la URL sigue mostrando la versión vieja.
 
+## Vista ejecutiva (para compartir de forma formal)
+
+`VistaEjecutiva.gs` es distinto a todo lo anterior: no es una pestaña dentro
+de la hoja, es un **sitio aparte** —un enlace propio que se manda por correo
+o WhatsApp— con un resumen visual (cuánto, de quién, por tipo de
+comprobante, mes a mes) y un botón que abre la hoja real para quien
+necesite el desglose. Pensado para mostrar, no para trabajar sobre él.
+
+### Instalación
+
+1. Abre **COMPROBANTES SUNAT - DETALLE** → **Extensiones · Apps Script**.
+2. El **+** junto a «Archivos» → **Script** → llámalo **`VistaEjecutiva`** →
+   borra el contenido de ejemplo y pega el de **`VistaEjecutiva.gs`**
+   completo. No hace falta ningún archivo `.html`: la página se arma en el
+   mismo script. Guarda con el disquete.
+3. **Implementar** (arriba a la derecha) → **Nueva implementación** → el
+   engranaje → **Aplicación web**.
+   - Ejecutar como: **Yo** (tu cuenta).
+   - Quién tiene acceso: **Cualquier usuario con el enlace** (o la variante
+     de Workspace si solo debe verlo gente de la empresa).
+4. **Implementar**. La primera vez pide autorización: elige tu cuenta,
+   **Configuración avanzada** → **Ir a (nombre del proyecto)** → **Permitir**.
+5. Copia la URL que termina en **`/exec`** — esa es la que se comparte, no
+   la del editor de Apps Script.
+
+### Si se edita el código después
+
+Cada cambio necesita una implementación nueva para que el enlace ya
+compartido lo refleje: **Implementar** → **Gestionar implementaciones** →
+el lápiz sobre la implementación activa → **Versión: Nueva versión** →
+**Implementar**. La URL no cambia.
+
 ## Si algo falla
 
 **«La hoja no trae estas columnas…»** — cambiaron los títulos en la fuente. El
