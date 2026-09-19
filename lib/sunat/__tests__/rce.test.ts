@@ -2,7 +2,8 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
   leerPropuestaRce, separadorDe, partirLinea, aNumero, aFecha,
-  normalizarNumero, codigoTipo, normalizar, revisarIdentidad, partirCsv, type FilaRce,
+  normalizarNumero, codigoTipo, normalizar, revisarIdentidad, partirCsv,
+  pareceIdentidad, type FilaRce,
 } from "../rce.ts";
 
 describe("normalizar títulos", () => {
@@ -91,6 +92,23 @@ describe("normalizarNumero", () => {
   });
 });
 
+describe("pareceIdentidad", () => {
+  test("un RUC de once dígitos y un DNI de ocho pasan", () => {
+    assert.equal(pareceIdentidad("20100055237"), true);
+    assert.equal(pareceIdentidad("45678912"), true);
+  });
+  test("una cantidad de dígitos que no es ni RUC ni DNI no pasa", () => {
+    assert.equal(pareceIdentidad("6"), false);
+    assert.equal(pareceIdentidad("123456"), false);
+  });
+  test("algo que no son solo dígitos no pasa", () => {
+    assert.equal(pareceIdentidad("20602743960A"), false);
+  });
+  test("nulo no pasa", () => {
+    assert.equal(pareceIdentidad(null), false);
+  });
+});
+
 describe("codigoTipo", () => {
   test("rellena a dos dígitos", () => {
     assert.equal(codigoTipo("1"), "01");
@@ -172,6 +190,23 @@ describe("leerPropuestaRce", () => {
     const r = leerPropuestaRce(conPie);
     assert.equal(r.filas.length, 2);
     assert.equal(r.descartadas, 1);
+  });
+
+  // Pasó de verdad: un separador suelto dentro de un campo de texto sin
+  // comillas corrió las columnas de una fila, y lo que cayó en "RUC" fue un
+  // "6" — nada que sea un RUC ni un DNI.
+  test("una fila con algo sin forma de RUC/DNI se guarda sin proveedor, no con uno inventado", () => {
+    const conFilaRara = archivo + "\n202609;6;20602743960;01;F001;999;18/09/2026;100.00;PEN";
+    const r = leerPropuestaRce(conFilaRara);
+    assert.equal(r.filas.length, 3);
+    assert.equal(r.rucSospechoso, 1);
+    const rara = r.filas.find(f => f.numero === "999");
+    assert.equal(rara?.ruc, null);
+    assert.equal(rara?.razonSocial, null);
+  });
+
+  test("un archivo sin filas raras no avisa nada", () => {
+    assert.equal(leerPropuestaRce(archivo).rucSospechoso, 0);
   });
 
   test("un archivo vacío no revienta", () => {

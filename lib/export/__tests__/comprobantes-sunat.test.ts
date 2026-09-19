@@ -2,7 +2,7 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
   filasComprobantesSunat, nombreDeTipo, fechaCorta, nombreArchivoSunat,
-  CABECERAS_SUNAT, type ComprobanteHistorico,
+  mapaPadronPorRuc, CABECERAS_SUNAT, type ComprobanteHistorico,
 } from "../comprobantes-sunat.ts";
 import { aCsv } from "../csv.ts";
 
@@ -142,10 +142,48 @@ describe("las columnas de impuestos", () => {
 
   test("siguen calzando las celdas con los títulos", () => {
     const f = filasComprobantesSunat([c()]);
-    assert.equal(f[0].length, 21);
+    assert.equal(f[0].length, 25);
     assert.equal(f[1].length, f[0].length);
     assert.equal(f[0][9], "Base imponible");
     assert.equal(f[0][10], "IGV");
     assert.equal(f[0][12], "Detracción");
+  });
+});
+
+// La condición del RUC (Buen Contribuyente / Agente de Retención) decide si
+// a la compra le corresponde o no la retención del IGV.
+describe("la condición del RUC, al final de la hoja", () => {
+  test("un proveedor sin consultar todavía deja esas columnas vacías, no en 'No'", () => {
+    const f = filasComprobantesSunat([c()])[1];
+    assert.deepEqual(f.slice(21), ["", "", "", ""]);
+  });
+
+  test("un proveedor consultado muestra su condición real", () => {
+    const padron = mapaPadronPorRuc([{
+      ruc: "20100055237", condicion: "HABIDO",
+      buen_contribuyente: true, agente_retencion: false, agente_percepcion: false,
+    }]);
+    const f = filasComprobantesSunat([c()], padron)[1];
+    assert.deepEqual(f.slice(21), ["HABIDO", "Sí", "No", "No"]);
+  });
+
+  test("un comprobante sin RUC de proveedor no revienta el cruce", () => {
+    const padron = mapaPadronPorRuc([{ ruc: "20100055237", condicion: "HABIDO", buen_contribuyente: true }]);
+    const f = filasComprobantesSunat([c({ proveedorRuc: null })], padron)[1];
+    assert.deepEqual(f.slice(21), ["", "", "", ""]);
+  });
+});
+
+describe("mapaPadronPorRuc", () => {
+  test("una fila sin RUC no entra al mapa", () => {
+    const m = mapaPadronPorRuc([{ ruc: null, buen_contribuyente: true }]);
+    assert.equal(m.size, 0);
+  });
+
+  test("los booleanos que no vinieron se leen como false, no como error", () => {
+    const m = mapaPadronPorRuc([{ ruc: "20100055237" }]);
+    assert.deepEqual(m.get("20100055237"), {
+      condicion: null, buenContribuyente: false, agenteRetencion: false, agentePercepcion: false,
+    });
   });
 });

@@ -39,15 +39,51 @@ export interface ComprobanteHistorico {
   cambios: number;
 }
 
+/**
+ * La condición del proveedor ante SUNAT (Buen Contribuyente, Agente de
+ * Retención/Percepción), tal como la guarda `padron_ruc`. De ahí depende si
+ * a la compra le corresponde o no la retención del IGV.
+ */
+export interface CondicionProveedor {
+  /** "HABIDO" / "NO HABIDO". */
+  condicion: string | null;
+  buenContribuyente: boolean;
+  agenteRetencion: boolean;
+  agentePercepcion: boolean;
+}
+
+/**
+ * Arma el mapa RUC → condición desde las filas crudas de `padron_ruc`
+ * (snake_case, tal como las devuelve PostgREST), para no repetir esta
+ * conversión en cada sitio que publica la hoja.
+ */
+export function mapaPadronPorRuc(filas: Array<Record<string, unknown>>): Map<string, CondicionProveedor> {
+  const mapa = new Map<string, CondicionProveedor>();
+  for (const f of filas) {
+    const ruc = f.ruc as string | null;
+    if (!ruc) continue;
+    mapa.set(ruc, {
+      condicion: (f.condicion as string) ?? null,
+      buenContribuyente: Boolean(f.buen_contribuyente),
+      agenteRetencion: Boolean(f.agente_retencion),
+      agentePercepcion: Boolean(f.agente_percepcion),
+    });
+  }
+  return mapa;
+}
+
 // El orden importa: lo que Contabilidad busca primero va a la izquierda, y
 // lo técnico al final. Cambiarlo después rompe lo que alguien haya armado
-// encima, así que se decide una vez.
+// encima, así que se decide una vez. Las de la condición del RUC se
+// agregaron después: van al final, no intercaladas, para no correr las
+// columnas que alguien ya tenga referenciadas.
 export const CABECERAS_SUNAT = [
   "Período", "RUC proveedor", "Proveedor", "Tipo", "Serie", "Número",
   "Fecha de emisión", "Moneda", "Tipo de cambio",
   "Base imponible", "IGV", "Total", "Detracción",
   "Estado", "Es nota de", "Corrige a", "Lo rindió", "Cambios detectados",
   "Visto por primera vez", "Visto por última vez", "CAR SUNAT",
+  "Condición SUNAT", "Buen Contribuyente", "Agente de Retención", "Agente de Percepción",
 ];
 
 /**
@@ -91,6 +127,10 @@ export const TIPOS_SUNAT: TipoColumna[] = [
   "fecha",  // Visto por primera vez
   "fecha",  // Visto por última vez
   "texto",  // CAR SUNAT
+  "texto",  // Condición SUNAT
+  "texto",  // Buen Contribuyente
+  "texto",  // Agente de Retención
+  "texto",  // Agente de Percepción
 ];
 
 const NOMBRE_TIPO: Record<string, string> = {
@@ -119,10 +159,22 @@ export function fechaCorta(iso: string | null): string {
   return m ? `${m[3]}/${m[2]}/${m[1]}` : "";
 }
 
-export function filasComprobantesSunat(cs: ComprobanteHistorico[]): string[][] {
+/**
+ * `padronPorRuc` es opcional: si no se pasa (o el proveedor todavía no se
+ * consultó), las cuatro columnas de condición salen vacías, no "No" — un
+ * proveedor sin consultar y uno que de verdad no es Agente de Retención no
+ * son el mismo dato.
+ */
+export function filasComprobantesSunat(
+  cs: ComprobanteHistorico[], padronPorRuc?: Map<string, CondicionProveedor>
+): string[][] {
+  const siNo = (v: boolean) => (v ? "Sí" : "No");
+
   return [
     CABECERAS_SUNAT,
-    ...cs.map(c => [
+    ...cs.map(c => {
+      const padron = c.proveedorRuc ? padronPorRuc?.get(c.proveedorRuc) : undefined;
+      return [
       c.periodo,
       c.proveedorRuc ?? "",
       c.proveedorNombre ?? "",
@@ -148,7 +200,12 @@ export function filasComprobantesSunat(cs: ComprobanteHistorico[]): string[][] {
       fechaCorta(c.primeraVez),
       fechaCorta(c.ultimaVez),
       c.carSunat ?? "",
-    ]),
+      padron?.condicion ?? "",
+      padron ? siNo(padron.buenContribuyente) : "",
+      padron ? siNo(padron.agenteRetencion) : "",
+      padron ? siNo(padron.agentePercepcion) : "",
+      ];
+    }),
   ];
 }
 

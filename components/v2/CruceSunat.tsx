@@ -390,6 +390,14 @@ function Procedencia({ res }: { res: Resultado }) {
             Se descartaron {lectura.descartadas} filas sin RUC ni número (suelen ser totales).
           </p>
         )}
+        {lectura.rucSospechoso > 0 && (
+          <p style={{ color: "var(--warn)", marginTop: 6 }}>
+            {lectura.rucSospechoso} fila{lectura.rucSospechoso === 1 ? "" : "s"} traían algo
+            sin forma de RUC ni de DNI en esa columna —probablemente un separador suelto en el
+            archivo de SUNAT corrió las columnas de esa fila—. Se guardaron sin proveedor en
+            vez de con uno inventado.
+          </p>
+        )}
       </div>
     </details>
   );

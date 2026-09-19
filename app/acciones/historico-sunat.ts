@@ -11,7 +11,7 @@
 import { solicitanteActual, clienteServidor } from "@/lib/supabase/servidor";
 import { autoriza } from "@/lib/dominio/permisos";
 import {
-  filasComprobantesSunat, nombreArchivoSunat, TIPOS_SUNAT,
+  filasComprobantesSunat, nombreArchivoSunat, mapaPadronPorRuc, TIPOS_SUNAT,
   type ComprobanteHistorico,
 } from "@/lib/export/comprobantes-sunat";
 import { publicarHoja, darLectura, explicarFallo } from "@/lib/drive/servidor";
@@ -121,9 +121,17 @@ export async function hojaDelHistorico(periodo?: string): Promise<HojaHistorico 
     ) ?? null,
   }));
 
+  // La condición del RUC (Buen Contribuyente / Agente de Retención), de la
+  // tabla que llena el scraper de Playwright. Es chica —una fila por
+  // proveedor, no por comprobante— así que se trae entera de una vez.
+  const { data: padronCrudo } = await sb
+    .from("padron_ruc")
+    .select("ruc, condicion, buen_contribuyente, agente_retencion, agente_percepcion");
+  const padron = mapaPadronPorRuc((padronCrudo as Array<Record<string, unknown>>) ?? []);
+
   return {
     nombre: nombreArchivoSunat(periodo ?? null),
-    filas: filasComprobantesSunat(historico),
+    filas: filasComprobantesSunat(historico, padron),
     cuantos: historico.length,
   };
 }

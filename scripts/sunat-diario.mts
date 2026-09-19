@@ -18,7 +18,7 @@ import { periodoDe, periodoCerradoAnterior, validarPeriodo } from "../lib/sunat/
 import { leerZip } from "../lib/sunat/zip.ts";
 import { leerPropuestaRce, revisarIdentidad } from "../lib/sunat/rce.ts";
 import {
-  filasComprobantesSunat, TIPOS_SUNAT, type ComprobanteHistorico,
+  filasComprobantesSunat, mapaPadronPorRuc, TIPOS_SUNAT, type ComprobanteHistorico,
 } from "../lib/export/comprobantes-sunat.ts";
 import { publicarHoja } from "../lib/drive/servidor.ts";
 
@@ -128,6 +128,9 @@ async function consultar(periodo: string): Promise<boolean> {
   const identidad = revisarIdentidad(filas, cred.ruc);
   if (!identidad.ok) console.error(`  ⚠ ${identidad.motivo}`);
   console.log(`  ${filas.length} comprobantes leídos`);
+  if (lectura.rucSospechoso > 0) {
+    console.log(`  ⚠ ${lectura.rucSospechoso} fila(s) con algo sin forma de RUC/DNI: se guardaron sin proveedor.`);
+  }
 
   const { data: g, error: eG } = await sb.rpc("guardar_comprobantes_sunat", {
     p_empresa_ruc: cred.ruc, p_periodo: periodo, p_filas: filas,
@@ -218,8 +221,16 @@ async function publicarLaHoja(): Promise<void> {
     rendidoPor: quien.get(llave(c.proveedorRuc, c.tipoComprobante, c.serie, c.numero)) ?? null,
   }));
 
+  // La condición del RUC (Buen Contribuyente / Agente de Retención), de la
+  // tabla que llena el scraper de Playwright. Es chica —una fila por
+  // proveedor, no por comprobante— así que se trae entera de una vez.
+  const { data: padronCrudo } = await sb
+    .from("padron_ruc")
+    .select("ruc, condicion, buen_contribuyente, agente_retencion, agente_percepcion");
+  const padron = mapaPadronPorRuc((padronCrudo as Array<Record<string, unknown>>) ?? []);
+
   const r = await publicarHoja({
-    filas: filasComprobantesSunat(historico),
+    filas: filasComprobantesSunat(historico, padron),
     nombre: "COMPROBANTES SUNAT",
     carpetas: ["SUNAT"],
     tipos: TIPOS_SUNAT,

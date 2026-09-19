@@ -133,6 +133,13 @@ export interface LecturaRce {
   faltantes: string[];
   /** Filas que se descartaron por no tener nada aprovechable. */
   descartadas: number;
+  /**
+   * Filas donde lo que venía en la columna del RUC no tenía forma de RUC ni
+   * de DNI. Se guarda el comprobante igual —el número y el total pueden
+   * seguir sirviendo—, pero sin proveedor: uno inventado es peor que uno
+   * vacío.
+   */
+  rucSospechoso: number;
 }
 
 /** Quita acentos, baja a minúsculas y junta espacios, para comparar títulos. */
@@ -364,6 +371,20 @@ export function codigoTipo(v: string): string | null {
   return /^\d{1,2}$/.test(s) ? s.padStart(2, "0") : s.toUpperCase();
 }
 
+/**
+ * Si algo con forma de RUC o DNI de verdad.
+ *
+ * Solo dígitos, ocho (DNI) u once (RUC). Existe porque una fila puede llegar
+ * con las columnas corridas —pasó de verdad: un separador suelto dentro de
+ * un campo de texto sin comillas, que ningún lector de CSV puede distinguir
+ * de un límite de columna real— y entonces lo que cae en "ruc" es cualquier
+ * cosa: un "6", un código de dos letras. Usar eso como si fuera un RUC deja
+ * un comprobante a nombre de un proveedor que no existe.
+ */
+export function pareceIdentidad(v: string | null): boolean {
+  return v != null && /^\d{8}$|^\d{11}$/.test(v);
+}
+
 /** Deja el número del comprobante comparable: sin ceros a la izquierda. */
 export function normalizarNumero(v: string | null): string | null {
   if (v == null) return null;
@@ -403,7 +424,7 @@ export function leerPropuestaRce(texto: string): LecturaRce {
   if (primeraLinea.trim() === "") {
     return {
       filas: [], mapeo: [], sinMapear: [], duplicadas: [], titulos: [], ejemplo: [],
-      faltantes: [...ESPERADOS], descartadas: 0,
+      faltantes: [...ESPERADOS], descartadas: 0, rucSospechoso: 0,
     };
   }
 
@@ -438,6 +459,7 @@ export function leerPropuestaRce(texto: string): LecturaRce {
 
   const filas: FilaRce[] = [];
   let descartadas = 0;
+  let rucSospechoso = 0;
 
   for (let i = 1; i < registros.length; i++) {
     const celdas = registros[i];
@@ -446,9 +468,17 @@ export function leerPropuestaRce(texto: string): LecturaRce {
 
     // Si el archivo trae una sola identidad —formatos más simples que el RCE
     // completo— esa es la contraparte y se usa como tal.
+    let ruc = (dame(celdas, "ruc").trim() || dame(celdas, "rucGenerador").trim()) || null;
+    let razonSocial = (dame(celdas, "razonSocial").trim() || dame(celdas, "razonGenerador").trim()) || null;
+    if (ruc && !pareceIdentidad(ruc)) {
+      rucSospechoso++;
+      ruc = null;
+      razonSocial = null;
+    }
+
     const fila: FilaRce = {
-      ruc: (dame(celdas, "ruc").trim() || dame(celdas, "rucGenerador").trim()) || null,
-      razonSocial: (dame(celdas, "razonSocial").trim() || dame(celdas, "razonGenerador").trim()) || null,
+      ruc,
+      razonSocial,
       rucGenerador: dame(celdas, "rucGenerador").trim() || null,
       razonGenerador: dame(celdas, "razonGenerador").trim() || null,
       tipoComprobante: codigoTipo(dame(celdas, "tipoComprobante")),
@@ -495,6 +525,7 @@ export function leerPropuestaRce(texto: string): LecturaRce {
       return true;
     }),
     descartadas,
+    rucSospechoso,
   };
 }
 
