@@ -414,6 +414,14 @@ async function consultarUnTipo(page: Page, tipo: string): Promise<FilaBajada[]> 
     // Si no hay enlaces, radiografiar para ver dónde quedó la tabla.
     await radiografia(page);
   }
+  // El HTML del frame con la tabla —no solo el de la página principal, que
+  // es lo único que guarda evidencia()—: para ver de verdad cómo scrollea
+  // (o no) sin tener que adivinarlo por fuera.
+  try {
+    writeFileSync(join(CAPTURAS, `zz-frame-resultados-${slug(tipo)}.html`), await res.content());
+  } catch (e) {
+    console.log(`  · no se pudo guardar el HTML del frame: ${e instanceof Error ? e.message : e}`);
+  }
 
   if (DEBUG) {
     console.log(`Modo depuración [${tipo}]: se ven ${descargas} comprobantes. No se baja nada.`);
