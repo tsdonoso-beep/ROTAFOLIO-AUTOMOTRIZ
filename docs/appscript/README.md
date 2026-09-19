@@ -138,36 +138,43 @@ mano, RUC por RUC, en `e-consultaruc.sunat.gob.pe`: si el proveedor está en
 el Padrón de Buenos Contribuyentes o es Agente de Retención/Percepción —de
 eso depende si a esa factura le corresponde o no la retención del IGV—.
 
-Escribe el resultado en una pestaña **PADRÓN RUC**, una fila por proveedor,
-con su Estado, Condición (Habido/No Habido) y los tres padrones. No vuelve a
-consultar un RUC que ya revisó hace menos de 30 días —los padrones casi no
-cambian, y así el número de consultas queda atado a cuántos proveedores
-distintos hay, no a cuántas facturas se emitieron.
+### Por qué la consulta en sí NO vive en Apps Script
 
-### Por qué no hace falta un navegador esta vez
+Se intentó primero con `UrlFetchApp` —la Consulta RUC pública no pide Clave
+SOL, así que parecía no necesitar navegador—, pero esa pantalla tiene
+**reCAPTCHA v3**: el campo `token` del formulario llega vacío del servidor y
+solo se llena cuando `grecaptcha.execute(...)` corre en un navegador de
+verdad, al hacer clic en «Buscar». `UrlFetchApp` no ejecuta JavaScript, así
+que no hay forma de conseguir ese token desde ahí — no es un detalle de
+formato, es la barrera que SUNAT puso a propósito.
 
-A diferencia del portal SOL, la Consulta RUC pública no pide Clave SOL ni
-tiene captcha: es un formulario de dos pasos (uno trae un token oculto ya
-resuelto por el servidor, el otro lo usa para consultar). `UrlFetchApp`
-alcanza. Si algún día SUNAT le agrega ahí un captcha o un token que sí se
-calcule con JavaScript en el navegador, esto se rompe — el respaldo sería
-mover la misma consulta al scraper de Playwright que ya existe para el
-portal SOL (`scripts/descargar-cpe.mts`), en vez de a Apps Script.
+Por eso la consulta la hace un scraper de Playwright
+(`scripts/consultar-padron-ruc.mts`), corriendo en GitHub Actions igual que
+`descargar-cpe.mts` —un navegador real resuelve el captcha en silencio,
+como lo haría una persona—, y guarda cada resultado en la tabla `padron_ruc`
+de la base (migración `038_padron_de_ruc.sql`).
+
+`PadronRuc.gs` hace la otra mitad, la que si le toca a Apps Script: **trae
+esa tabla a una pestaña PADRÓN RUC** de esta misma hoja, para que
+Contabilidad la vea ahí mismo sin entrar a la aplicación.
 
 ### Cómo se usa
 
 1. En Apps Script, el **+** · **Script**, llámalo `PadronRuc` y pega el
-   contenido de `PadronRuc.gs`. Necesita que `Codigo.gs` ya esté instalado
-   (usa `PESTANA_DATOS` y `COL.ruc` de ahí para saber qué RUC consultar).
-   Guarda y recarga la hoja.
-2. **Menú → «Consultar un RUC ahora»** para probar uno suelto y ver el
-   resultado en un cuadro de diálogo.
-3. **Menú → «Actualizar condición de todos los proveedores»** para
-   recorrerlos todos (hasta 40 por corrida, para no acercarse al límite de
-   tiempo de ejecución).
-4. **Menú → «Activar actualización automática diaria»** para que corra sola
-   todas las mañanas y se ponga al día con lo pendiente en unos días si hay
-   más de 40 proveedores nuevos de golpe.
+   contenido de `PadronRuc.gs`. Guarda.
+2. **Extensiones → Propiedades del proyecto → Propiedades del script**:
+   agrega `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `ROBOT_CORREO` y
+   `ROBOT_CLAVE` —los mismos valores que ya usa `OrdenarCPE.gs`—. Recarga la
+   hoja.
+3. **Menú → «Traer el padrón de RUC desde la base»** para probarlo: reemplaza
+   la pestaña PADRÓN RUC con lo que haya en `padron_ruc` en ese momento.
+4. **Menú → «Activar sincronización automática diaria»** para que se ponga
+   al día sola todas las mañanas, después de que corra el scraper.
+
+Del lado de SUNAT hay que correr, aparte, el workflow **«SUNAT padrón de
+RUC»** en GitHub Actions (manual por ahora) — ese es el que de verdad
+consulta a SUNAT y llena `padron_ruc`. `PadronRuc.gs` solo refleja lo que
+ya haya ahí.
 
 ### Lo que esto NO decide
 
@@ -185,14 +192,20 @@ mensaje dice cuáles. Se arreglan en `COL`, al principio de `Codigo.gs`.
 **El tablero sale vacío** — la persona no tiene acceso a la hoja. Ver el
 paso 4.
 
-**«No se encontró el campo "token"...» al consultar un RUC** — SUNAT cambió
-el formulario de Consulta RUC. Hay que revisar con las herramientas de
-desarrollador del navegador (pestaña Red, al hacer una consulta) cómo quedó
-el nuevo formulario, y ajustar `tokenDelFormulario_` en `PadronRuc.gs`.
+**«Faltan credenciales de la base» al sincronizar el padrón** — faltan las
+Propiedades del script (paso 2 de la sección del padrón de RUC). No son las
+mismas que las de `Codigo.gs`: van en Propiedades del proyecto, no en
+variables del código.
 
-**«La respuesta de SUNAT no trajo los datos esperados...»** — mismo caso,
-pero en la página de resultado: cambiaron las etiquetas («Estado del
-Contribuyente:», «Padrones:», …). Se ajustan en `ETIQUETAS_CONSULTA_RUC_`.
+**El padrón de RUC no trae ni un RUC nuevo** — el workflow «SUNAT padrón de
+RUC» de GitHub Actions no ha corrido, o corrió en modo depuración (no
+guarda nada). Revisa las Actions del repositorio.
+
+**El scraper de Playwright ya no encuentra los datos en la página de
+resultado** — SUNAT cambió las etiquetas de la Consulta RUC («Estado del
+Contribuyente:», «Padrones:», …). Se ajustan en
+`lib/sunat/consulta-ruc.ts` (función `ETIQUETAS_CONSULTA_RUC`), no en este
+archivo.
 
 **Se borró una pestaña que alguien agregó** — no debería volver a pasar: la
 publicación escribe solo dentro de la pestaña de datos. Si pasa, avisa: es un

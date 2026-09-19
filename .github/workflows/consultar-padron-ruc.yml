@@ -1,0 +1,79 @@
+# Consultar en SUNAT la condición del RUC de cada proveedor (Buen
+# Contribuyente / Agente de Retención) y guardarla en la base
+#
+# Esta consulta pública de SUNAT tiene reCAPTCHA v3: el botón «Buscar» pide
+# un token que solo un navegador de verdad puede resolver, así que corre acá
+# con Playwright —Apps Script (UrlFetchApp) no ejecuta JavaScript y no puede
+# pasarlo— igual que `descargar-cpe.mts`. No necesita Clave SOL: la Consulta
+# RUC es pública.
+#
+# Arranca en modo depuración (debug=true): consulta uno o pocos RUC de
+# prueba y sube capturas y HTML de cada paso como artefacto, sin guardar
+# nada. Con eso se confirma que el navegador de verdad resuelve el captcha
+# antes de dejarlo correr con la lista completa (debug=false).
+
+name: SUNAT padrón de RUC
+
+on:
+  workflow_dispatch:
+    inputs:
+      debug:
+        description: "Solo consultar los RUC de prueba, sin guardar nada."
+        type: boolean
+        required: false
+        default: true
+      rucs:
+        description: "RUC de prueba, separados por coma (solo en depuración)."
+        required: false
+        default: "20501529363"
+      dias_vigencia:
+        description: "No repetir la consulta de un RUC antes de estos días."
+        required: false
+        default: "30"
+      max_consultas:
+        description: "Tope de RUC a consultar en esta corrida."
+        required: false
+        default: "40"
+
+permissions:
+  contents: read
+
+jobs:
+  consultar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - run: npx playwright install --with-deps chromium
+
+      - name: Consultar el padrón de RUC
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          PROJECT_URL: ${{ secrets.PROJECT_URL }}
+          ANON_KEY: ${{ secrets.ANON_KEY }}
+          ROBOT_CORREO: ${{ secrets.ROBOT_CORREO }}
+          ROBOT_CLAVE: ${{ secrets.ROBOT_CLAVE }}
+          DEBUG: ${{ inputs.debug && '1' || '0' }}
+          RUCS: ${{ inputs.rucs }}
+          DIAS_VIGENCIA: ${{ inputs.dias_vigencia }}
+          MAX_CONSULTAS: ${{ inputs.max_consultas }}
+        run: node --experimental-strip-types scripts/consultar-padron-ruc.mts
+
+      - name: Subir capturas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capturas-padron-ruc
+          path: capturas/
+          if-no-files-found: warn
+          retention-days: 7
