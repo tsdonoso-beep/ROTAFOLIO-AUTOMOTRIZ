@@ -1,25 +1,39 @@
 /**
- * Tablero del padrón de RUC — publicado como aplicación web
+ * Servidor del tablero SUNAT publicado — el «Código» detrás de TableroPadron.html
  * --------------------------------------------------------------------------
  *
- * Muestra qué proporción de los proveedores son Buenos Contribuyentes,
- * Agentes de Retención/Percepción, o «No Habido» —la información que hoy
- * vive en la tabla `padron_ruc` de Supabase, que llena el scraper de
- * Playwright (`scripts/consultar-padron-ruc.mts`)— con un enlace directo a
- * la hoja de cálculo.
+ * Se llama distinto del HTML a propósito: Apps Script no deja que un archivo
+ * de Script y uno HTML tengan el mismo nombre en un mismo proyecto —por eso
+ * `Codigo.gs` y `Tablero.html` tampoco se llaman igual entre sí—. Este es el
+ * equivalente de `Codigo.gs`, pero para `TableroPadron.html`.
+ *
+ * Trae la pestaña «Padrón de RUC»: qué proporción de los proveedores son
+ * Buenos Contribuyentes, Agentes de Retención/Percepción, o «No Habido» — lo
+ * que hoy vive en la tabla `padron_ruc` de Supabase, que llena el scraper de
+ * Playwright (`scripts/consultar-padron-ruc.mts`).
+ *
+ * La otra pestaña, «Comprobantes SUNAT», llama a `datosDelTablero()` — y esa
+ * función vive en `Codigo.gs`, no acá. Para que esa pestaña funcione, este
+ * archivo tiene que estar en el MISMO proyecto que `Codigo.gs` (el que ya
+ * tiene el menú «Monitoreo SUNAT» de la hoja). Si se prefiere un proyecto
+ * aparte, sin `Codigo.gs`, la pestaña de Padrón funciona igual —no depende de
+ * nada de este archivo—, pero la de Comprobantes fallará con «datosDelTablero
+ * is not a function».
  *
  * A diferencia de `Tablero.html` (que se abre como diálogo DESDE el menú de
- * la hoja), este se **publica** como su propia URL: `doGet()` es lo que hace
- * eso posible. Vive en el mismo proyecto que `PadronRuc.gs` —reusa sus mismas
- * Propiedades del script—, pero es independiente: no toca el menú ni el otro
- * tablero.
+ * la hoja), esto se **publica** como su propia URL: `doGet()` es lo que hace
+ * eso posible.
  *
  * ── Instalación ──
- * 1. Pega esto en un archivo `TableroPadron` (Script) y `TableroPadron.html`
- *    en el otro archivo, en el MISMO proyecto de Apps Script donde ya está
- *    `PadronRuc.gs` (así hereda SUPABASE_URL, SUPABASE_ANON_KEY,
- *    ROBOT_CORREO, ROBOT_CLAVE de Propiedades del script — Extensiones →
- *    Configuración del proyecto). Si no están, agrégalas ahí.
+ * 1. Pega esto en un archivo de **Script** llamado `CodigoPadron` (el nombre
+ *    exacto no importa para que funcione, pero no puede ser `TableroPadron`
+ *    —ese nombre ya lo usa el HTML—). Pega `TableroPadron.html` en un
+ *    archivo **HTML** llamado exactamente `TableroPadron` (sin `.html`).
+ *    Ambos en el mismo proyecto donde ya está `PadronRuc.gs` (hereda
+ *    SUPABASE_URL, SUPABASE_ANON_KEY, ROBOT_CORREO, ROBOT_CLAVE de
+ *    Propiedades del script — Extensiones → Configuración del proyecto). Si
+ *    no están, agrégalas ahí. Y, para la pestaña de Comprobantes, que
+ *    `Codigo.gs` también esté en este mismo proyecto.
  * 2. Guarda.
  * 3. Implementar → Nueva implementación → tipo «Aplicación web».
  *    - Ejecutar como: **Yo** (tu cuenta) — así corre con tus permisos sin

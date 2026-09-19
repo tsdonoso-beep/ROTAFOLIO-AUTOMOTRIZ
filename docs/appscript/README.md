@@ -196,8 +196,11 @@ adelante, sobre esta misma pestaña.
 
 ## Tablero SUNAT, publicado (no dentro del Sheet)
 
-`TableroPadron.gs` + `TableroPadron.html` arman un tablero **publicado como
-su propia URL**, con dos pestañas y un botón para abrir la hoja de cálculo:
+`CodigoPadron.gs` + `TableroPadron.html` arman un tablero **publicado como
+su propia URL**, con dos pestañas y un botón para abrir la hoja de cálculo.
+Se llaman distinto a propósito: Apps Script no deja que un Script y un HTML
+compartan el mismo nombre en un proyecto (por eso tampoco `Codigo.gs` se
+llama `Tablero.gs`).
 
 - **Padrón de RUC**: cuánto del registro ya se revisó, qué porcentaje son
   Buenos Contribuyentes o Agentes de Retención/Percepción, cuántos «No
@@ -219,7 +222,8 @@ vista de conjunto para quien no quiere entrar al Sheet.
    (hereda sus mismas Propiedades del script: `SUPABASE_URL`,
    `SUPABASE_ANON_KEY`, `ROBOT_CORREO`, `ROBOT_CLAVE`) y `Codigo.gs`
    (de ahí sale `datosDelTablero()`, para la pestaña de Comprobantes): el
-   **+** · **Script**, llámalo `TableroPadron`, pega `TableroPadron.gs`. El
+   **+** · **Script**, llámalo `CodigoPadron` —cualquier nombre sirve, menos
+   `TableroPadron`, que ya lo usa el HTML—, pega `CodigoPadron.gs`. El
    **+** · **HTML**, llámalo exactamente `TableroPadron` (sin `.html`), pega
    `TableroPadron.html`.
 2. Guarda.
