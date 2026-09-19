@@ -49,7 +49,13 @@ const CLAVE     = pedir("SUNAT_INROPRIN_CLAVE");
 const USUARIO_SOL = USUARIO.startsWith(RUC) ? USUARIO.slice(RUC.length) : USUARIO;
 
 const DEBUG = process.env.DEBUG !== "0";
-const TIPO_CONSULTA = process.env.TIPO_CONSULTA?.trim() || "FE Recibidas";
+
+// Uno o varios, separados por coma: "FE Emitidas,FE Recibidas,NC Emitidas".
+// El portal los tiene como consultas separadas —no hay un «todo junto»—, así
+// que en vez de disparar el workflow una vez por tipo (con su propio login
+// cada vez) esto entra una sola vez y los recorre todos en la misma sesión.
+const TIPOS_CONSULTA = (process.env.TIPOS_CONSULTA?.trim() || process.env.TIPO_CONSULTA?.trim() || "FE Recibidas")
+  .split(",").map(t => t.trim()).filter(Boolean);
 
 // La carpeta de Drive del proyecto donde se archivan los comprobantes.
 const CARPETA_DRIVE = process.env.SUNAT_DRIVE_FOLDER?.trim() || "1RnyGimYdnhbQ3nKxGOoBc_iRz38fxCnX";
@@ -265,17 +271,15 @@ async function clicAceptar(marco: Frame) {
 }
 
 /**
- * Llega a «Consultar Factura y Nota», pide el rango y devuelve las descargas.
+ * Llega a «Consultar Factura y Nota» desde el menú «¿Qué necesitas hacer?».
  *
- * El menú «¿Qué necesitas hacer?» está en el documento principal; la consulta,
- * en un iframe. Las fechas se escriben directo (dd/mm/yyyy) en vez de pelear
- * con el calendario emergente. Aceptar trae la tabla, y de cada fila cuelgan
- * los enlaces «Descargar Factura (XML)» y «Descargar PDF».
+ * Se repite antes de CADA tipo de consulta —aunque sea un poco más lento que
+ * reusar el formulario ya abierto— porque es el único camino que se probó de
+ * verdad, veinte corridas seguidas sin fallar: apostar a que el formulario
+ * queda listo para una segunda consulta sin volver a entrar es un supuesto
+ * que nadie confirmó contra el portal real.
  */
-interface ArchivoBajado { nombre: string; datos: Buffer; tipo: string }
-interface FilaBajada { xml: ArchivoBajado | null; pdf: ArchivoBajado | null }
-
-async function consultarYBajar(page: Page): Promise<FilaBajada[]> {
+async function abrirModuloConsulta(page: Page) {
   console.log("Menú → Empresas → Consulta de Facturas y Notas Electrónicas…");
   await evidencia(page, "menu-inicio");
   console.log(`  · frames: ${page.frames().map(f => f.url() || "(vacío)").join(" | ")}`);
@@ -292,7 +296,25 @@ async function consultarYBajar(page: Page): Promise<FilaBajada[]> {
   }
   await page.waitForTimeout(3000);
   await evidencia(page, "consulta-abierta");
+}
 
+/** Un nombre de archivo seguro para las capturas, a partir del tipo de consulta. */
+function slug(s: string): string {
+  return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-");
+}
+
+interface ArchivoBajado { nombre: string; datos: Buffer; tipo: string }
+interface FilaBajada { xml: ArchivoBajado | null; pdf: ArchivoBajado | null }
+
+/**
+ * Pide un tipo de consulta puntual —«FE Recibidas», «NC Emitidas»...— para el
+ * rango de fechas ya fijado, y devuelve las descargas.
+ *
+ * Las fechas se escriben directo (dd/mm/yyyy) en vez de pelear con el
+ * calendario emergente. Aceptar trae la tabla, y de cada fila cuelgan los
+ * enlaces «Descargar Factura (XML)» y «Descargar PDF».
+ */
+async function consultarUnTipo(page: Page, tipo: string): Promise<FilaBajada[]> {
   const marco = await marcoConsulta(page);
   console.log(`  · marco de la consulta: ${marco.url() || "(principal)"}`);
 
@@ -309,12 +331,12 @@ async function consultarYBajar(page: Page): Promise<FilaBajada[]> {
   // Tipo de Consulta: no es un <select> sino un combobox (input visible
   // #criterio.tipoConsulta + hidden name=tipoConsulta). Se maneja como un
   // humano: clic en el visible y clic en la opción.
-  await elegirTipo(marco, TIPO_CONSULTA);
+  await elegirTipo(marco, tipo);
 
   // Confirmar qué quedó puesto de verdad en el formulario.
   const leer = async (n: string) => (await marco.locator(`input[name="${n}"]`).first().inputValue().catch(() => "?"));
-  console.log(`  · form: fec_desde=${await leer("fec_desde")} fec_hasta=${await leer("fec_hasta")} tipo(hidden)=${await leer("tipoConsulta")}`);
-  await evidencia(page, "consulta-lista");
+  console.log(`  · form [${tipo}]: fec_desde=${await leer("fec_desde")} fec_hasta=${await leer("fec_hasta")} tipo(hidden)=${await leer("tipoConsulta")}`);
+  await evidencia(page, `consulta-lista-${slug(tipo)}`);
 
   // Aceptar: es un <input type="button"> con su texto en value.
   await clicAceptar(marco);
@@ -334,16 +356,15 @@ async function consultarYBajar(page: Page): Promise<FilaBajada[]> {
     if (descargas > 0) break;
     await page.waitForTimeout(2000);
   }
-  await evidencia(page, "resultados");
-  console.log(`  · resultados: ${descargas} enlaces «Descargar Factura» en ${res.url().slice(0, 70)}`);
+  await evidencia(page, `resultados-${slug(tipo)}`);
+  console.log(`  · resultados [${tipo}]: ${descargas} enlaces «Descargar Factura» en ${res.url().slice(0, 70)}`);
   if (descargas === 0) {
     // Si no hay enlaces, radiografiar para ver dónde quedó la tabla.
     await radiografia(page);
   }
 
   if (DEBUG) {
-    const cuantos = await res.locator('a:has-text("Descargar Factura")').count();
-    console.log(`Modo depuración: se ven ${cuantos} comprobantes. No se baja nada.`);
+    console.log(`Modo depuración [${tipo}]: se ven ${descargas} comprobantes. No se baja nada.`);
     return [];
   }
 
@@ -351,13 +372,13 @@ async function consultarYBajar(page: Page): Promise<FilaBajada[]> {
   const xml = res.locator('a:has-text("Descargar Factura")');
   const pdf = res.locator('a:has-text("Descargar PDF")');
   const n = await xml.count();
-  console.log(`Bajando ${n} comprobantes (XML + PDF)…`);
+  console.log(`Bajando ${n} comprobantes de ${tipo} (XML + PDF)…`);
 
   for (let i = 0; i < n; i++) {
     let xmlArchivo: ArchivoBajado | null = null;
     let pdfArchivo: ArchivoBajado | null = null;
-    try { xmlArchivo = await bajar(page, () => xml.nth(i).click()); } catch (e) { console.log(`  · XML fila ${i + 1}: ${e instanceof Error ? e.message : e}`); }
-    try { pdfArchivo = await bajar(page, () => pdf.nth(i).click()); } catch (e) { console.log(`  · PDF fila ${i + 1}: ${e instanceof Error ? e.message : e}`); }
+    try { xmlArchivo = await bajar(page, () => xml.nth(i).click()); } catch (e) { console.log(`  · XML fila ${i + 1} [${tipo}]: ${e instanceof Error ? e.message : e}`); }
+    try { pdfArchivo = await bajar(page, () => pdf.nth(i).click()); } catch (e) { console.log(`  · PDF fila ${i + 1} [${tipo}]: ${e instanceof Error ? e.message : e}`); }
     salida.push({ xml: xmlArchivo, pdf: pdfArchivo });
   }
   return salida;
@@ -602,16 +623,27 @@ function xmlsDe(f: ArchivoBajado): string[] {
 
 try {
   await entrar(page);
-  const filas = await consultarYBajar(page);
 
-  if (DEBUG) {
-    console.log("\nModo depuración: no se bajó nada. Revisa el artefacto 'capturas/'.");
-  } else if (filas.length === 0) {
-    console.log("No se bajó ningún archivo en el rango.");
-  } else {
-    const drive = clienteDrive();
-    let nuevos = 0, existentes = 0;
-    const comprobantes: Array<{ c: ComprobanteCpe; xmlUrl: string | null; pdfUrl: string | null }> = [];
+  const drive = DEBUG ? null : clienteDrive();
+  let nuevos = 0, existentes = 0;
+  const comprobantes: Array<{ c: ComprobanteCpe; xmlUrl: string | null; pdfUrl: string | null }> = [];
+
+  console.log(`\nTipos a consultar: ${TIPOS_CONSULTA.join(" · ")}`);
+
+  for (const [i, tipo] of TIPOS_CONSULTA.entries()) {
+    console.log(`\n── ${tipo} (${FECHA_INICIO} a ${FECHA_FIN}) ──`);
+    let filas: FilaBajada[];
+    try {
+      await abrirModuloConsulta(page);
+      filas = await consultarUnTipo(page, tipo);
+    } catch (e) {
+      // Un tipo que falla —el portal cambió, se cortó la conexión— no debe
+      // tumbar los demás: los otros cinco igual merecen bajarse.
+      console.error(`  ✗ ${tipo}: ${e instanceof Error ? e.message : e}`);
+      continue;
+    }
+
+    if (DEBUG || filas.length === 0) continue;
 
     // Se lee el XML antes de subir para saber, por comprobante, si es
     // Emitida o Recibida y de qué mes es —así cada archivo va directo a su
@@ -622,24 +654,35 @@ try {
       const c = xmls[0] ? leerComprobanteXml(xmls[0]) : null;
       const origen = c ? origenDe(c, RUC) : "OTRO";
       const periodo = c ? periodoDe(c.fechaEmision) : null;
-      const carpetaId = await carpetaDelLote(drive, origen, periodo);
+      const carpetaId = await carpetaDelLote(drive!, origen, periodo);
 
       let xmlUrl: string | null = null;
       let pdfUrl: string | null = null;
       if (fila.xml) {
-        const r = await subirADrive(drive, carpetaId, fila.xml);
+        const r = await subirADrive(drive!, carpetaId, fila.xml);
         if (r.estado === "nuevo") nuevos++; else existentes++;
         xmlUrl = r.url;
       }
       if (fila.pdf) {
-        const r = await subirADrive(drive, carpetaId, fila.pdf);
+        const r = await subirADrive(drive!, carpetaId, fila.pdf);
         if (r.estado === "nuevo") nuevos++; else existentes++;
         pdfUrl = r.url;
       }
       if (c) comprobantes.push({ c, xmlUrl, pdfUrl });
     }
-    console.log(`Archivados en Drive: ${nuevos} nuevos, ${existentes} ya estaban.`);
 
+    // Un respiro entre tipos: son consultas seguidas dentro de la misma
+    // sesión, y encadenarlas sin pausa es justo el patrón que un WAF marca
+    // como robot. No aplica tras el último tipo.
+    if (i < TIPOS_CONSULTA.length - 1) await page.waitForTimeout(3000);
+  }
+
+  if (DEBUG) {
+    console.log("\nModo depuración: no se bajó nada. Revisa el artefacto 'capturas/'.");
+  } else if (comprobantes.length === 0) {
+    console.log("\nNo se bajó ningún archivo en el rango, en ninguno de los tipos consultados.");
+  } else {
+    console.log(`\nArchivados en Drive: ${nuevos} nuevos, ${existentes} ya estaban.`);
     const sb = await guardarDetalle(comprobantes);
     if (sb) await publicarLaHojaDetalle(sb);
   }

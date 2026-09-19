@@ -31,9 +31,14 @@ on:
         required: false
         default: ""
       tipo_consulta:
-        description: "Tipo de consulta del portal (ej. FE Recibidas)."
+        description: >-
+          Uno o varios tipos del portal, separados por coma. El portal no
+          tiene un «todo junto»: son consultas separadas (FE Emitidas, FE
+          Recibidas, FE Rechazadas, NC Emitidas, NC Recibidas, ND Emitidas,
+          ND Recibidas), y esto entra una sola vez y las recorre todas en la
+          misma sesión, sin volver a loguearse por cada una.
         required: false
-        default: "FE Recibidas"
+        default: "FE Emitidas,FE Recibidas,NC Emitidas,NC Recibidas,ND Emitidas,ND Recibidas"
 
 permissions:
   contents: read
@@ -41,7 +46,9 @@ permissions:
 jobs:
   descargar:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Con varios tipos de consulta en la misma corrida, un mes cargado puede
+    # tardar bastante más que los ~4 minutos de un solo tipo.
+    timeout-minutes: 90
 
     steps:
       - uses: actions/checkout@v7
@@ -82,7 +89,7 @@ jobs:
           DEBUG: ${{ inputs.debug && '1' || '0' }}
           FECHA_INICIO: ${{ inputs.fecha_inicio }}
           FECHA_FIN: ${{ inputs.fecha_fin }}
-          TIPO_CONSULTA: ${{ inputs.tipo_consulta }}
+          TIPOS_CONSULTA: ${{ inputs.tipo_consulta }}
         run: node --experimental-strip-types scripts/descargar-cpe.mts
 
       # Las capturas y el HTML de cada paso, para ver el portal real y fijar
