@@ -1,7 +1,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
-  filasItemsSunat, CABECERAS_ITEMS, nombreArchivoItems, type FilaDetalleCpe,
+  filasItemsSunat, CABECERAS_ITEMS, nombreArchivoItems, detalleCpeCompleto, type FilaDetalleCpe,
 } from "../items-sunat.ts";
 
 function fila(over: Partial<FilaDetalleCpe> = {}): FilaDetalleCpe {
@@ -102,5 +102,53 @@ describe("nombreArchivoItems", () => {
   test("con y sin período, sin pisar el de cabeceras", () => {
     assert.equal(nombreArchivoItems(null), "COMPROBANTES SUNAT - DETALLE.csv");
     assert.equal(nombreArchivoItems("202608"), "COMPROBANTES SUNAT - DETALLE 202608.csv");
+  });
+});
+
+describe("detalleCpeCompleto", () => {
+  /** Un cliente falso que reparte `total` filas en páginas de `tamano`. */
+  function clienteFalso(total: number, tamano: number) {
+    const pedidos: Array<[number, number]> = [];
+    return {
+      cliente: {
+        rpc: (_fn: string, _args: Record<string, unknown>) => ({
+          range: async (desde: number, hasta: number) => {
+            pedidos.push([desde, hasta]);
+            const filas = [];
+            for (let i = desde; i <= Math.min(hasta, total - 1); i++) filas.push({ linea: i });
+            return { data: filas, error: null };
+          },
+        }),
+      },
+      pedidos,
+    };
+  }
+
+  test("una sola página cuando el detalle no llega al tope", async () => {
+    const { cliente, pedidos } = clienteFalso(120, 1000);
+    const filas = await detalleCpeCompleto(cliente, null);
+    assert.equal(filas.length, 120);
+    assert.deepEqual(pedidos, [[0, 999]]);
+  });
+
+  test("pide una página más cuando el detalle cae justo en el tope: si no, se corta lo más reciente", async () => {
+    const { cliente, pedidos } = clienteFalso(1000, 1000);
+    const filas = await detalleCpeCompleto(cliente, null);
+    assert.equal(filas.length, 1000);
+    assert.deepEqual(pedidos, [[0, 999], [1000, 1999]]);
+  });
+
+  test("junta varias páginas cuando el detalle las supera", async () => {
+    const { cliente, pedidos } = clienteFalso(2350, 1000);
+    const filas = await detalleCpeCompleto(cliente, null);
+    assert.equal(filas.length, 2350);
+    assert.deepEqual(pedidos, [[0, 999], [1000, 1999], [2000, 2999]]);
+  });
+
+  test("propaga el error de una página en vez de devolver lo parcial", async () => {
+    const cliente = {
+      rpc: () => ({ range: async () => ({ data: null, error: { message: "sin permiso" } }) }),
+    };
+    await assert.rejects(() => detalleCpeCompleto(cliente, null), /sin permiso/);
   });
 });

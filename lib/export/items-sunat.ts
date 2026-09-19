@@ -93,6 +93,41 @@ export const TIPOS_ITEMS: TipoColumna[] = [
   "texto",  // XML
 ];
 
+/** Lo mínimo de un `SupabaseClient` que hace falta para paginar un RPC. */
+interface ClienteConRpc {
+  rpc(fn: string, args: Record<string, unknown>): {
+    range(desde: number, hasta: number): PromiseLike<{ data: unknown; error: { message: string } | null }>;
+  };
+}
+
+const TAMANO_PAGINA_DETALLE = 1000;
+
+/**
+ * Trae TODO el detalle de `detalle_cpe`, paginando.
+ *
+ * Supabase corta cada respuesta de su API en 1000 filas por omisión si no se
+ * pide un rango explícito — un solo `.rpc(...)` sin `.range()` se queda
+ * callado con lo que entra en esa página, no avisa que recortó nada. Como
+ * `detalle_cpe` ordena por fecha de emisión ascendente, lo que se pierde en
+ * cuanto el detalle pasa de 1000 ítems es siempre lo MÁS RECIENTE: se notó
+ * porque julio y agosto —ya guardados en la base— no aparecían en la hoja
+ * aunque marzo a junio sí.
+ */
+export async function detalleCpeCompleto(
+  sb: ClienteConRpc, periodo: string | null
+): Promise<Record<string, unknown>[]> {
+  const filas: Record<string, unknown>[] = [];
+  for (let desde = 0; ; desde += TAMANO_PAGINA_DETALLE) {
+    const { data, error } = await sb.rpc("detalle_cpe", { p_periodo: periodo })
+      .range(desde, desde + TAMANO_PAGINA_DETALLE - 1);
+    if (error) throw new Error(error.message);
+    const pagina = Array.isArray(data) ? (data as Record<string, unknown>[]) : [];
+    filas.push(...pagina);
+    if (pagina.length < TAMANO_PAGINA_DETALLE) break;
+  }
+  return filas;
+}
+
 /**
  * Convierte una fila cruda de `detalle_cpe` —tal como la manda PostgREST, en
  * snake_case y con los números como texto— a `FilaDetalleCpe`.

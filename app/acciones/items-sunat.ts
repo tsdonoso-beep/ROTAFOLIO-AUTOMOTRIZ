@@ -14,7 +14,7 @@ import { leerZip } from "@/lib/sunat/zip";
 import { leerComprobanteXml } from "@/lib/sunat/cpe-xml";
 import { prepararLote } from "@/lib/sunat/cpe-importacion";
 import {
-  filasItemsSunat, filaDetalleDesdeRpc, nombreArchivoItems, TIPOS_ITEMS, type FilaDetalleCpe,
+  filasItemsSunat, filaDetalleDesdeRpc, detalleCpeCompleto, nombreArchivoItems, TIPOS_ITEMS, type FilaDetalleCpe,
 } from "@/lib/export/items-sunat";
 import { publicarHoja, explicarFallo } from "@/lib/drive/servidor";
 
@@ -143,10 +143,12 @@ async function filasDetalle(periodo?: string): Promise<FilaDetalleCpe[] | null> 
   if (!solicitante || !autoriza(solicitante, "exportar").ok) return null;
 
   const sb = await clienteServidor();
-  const { data, error } = await sb.rpc("detalle_cpe", { p_periodo: periodo ?? null });
-  if (error || !Array.isArray(data)) return null;
-
-  return (data as Record<string, unknown>[]).map(filaDetalleDesdeRpc);
+  try {
+    const datos = await detalleCpeCompleto(sb, periodo ?? null);
+    return datos.map(filaDetalleDesdeRpc);
+  } catch {
+    return null;
+  }
 }
 
 /** Cuántos comprobantes importados hay y de qué períodos. */

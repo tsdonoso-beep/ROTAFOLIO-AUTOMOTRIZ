@@ -30,7 +30,7 @@ import { normalizarClavePrivada, correoDeServicio, carpeta, publicarHoja } from 
 import { leerZip } from "../lib/sunat/zip.ts";
 import { leerComprobanteXml, type ComprobanteCpe } from "../lib/sunat/cpe-xml.ts";
 import { prepararLote, origenDe, periodoDe, identidad, type DocLote } from "../lib/sunat/cpe-importacion.ts";
-import { filasItemsSunat, filaDetalleDesdeRpc, TIPOS_ITEMS } from "../lib/export/items-sunat.ts";
+import { filasItemsSunat, filaDetalleDesdeRpc, detalleCpeCompleto, TIPOS_ITEMS } from "../lib/export/items-sunat.ts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 // ── Configuración desde el entorno ────────────────────────────────
@@ -572,13 +572,15 @@ async function publicarLaHojaDetalle(sb: SupabaseClient): Promise<void> {
     return;
   }
 
-  const { data, error } = await sb.rpc("detalle_cpe", { p_periodo: null });
-  if (error || !Array.isArray(data)) {
-    console.error("⚠ No se pudo leer el detalle para la hoja:", error?.message);
+  let datos: Record<string, unknown>[];
+  try {
+    datos = await detalleCpeCompleto(sb, null);
+  } catch (e) {
+    console.error("⚠ No se pudo leer el detalle para la hoja:", e instanceof Error ? e.message : e);
     return;
   }
 
-  const filas = (data as Record<string, unknown>[]).map(filaDetalleDesdeRpc);
+  const filas = datos.map(filaDetalleDesdeRpc);
   const r = await publicarHoja({
     filas: filasItemsSunat(filas),
     nombre: "COMPROBANTES SUNAT - DETALLE",
