@@ -355,17 +355,34 @@ async function consultarUnTipo(page: Page, tipo: string): Promise<FilaBajada[]> 
   // el del formulario. Se busca en TODOS los frames el que tenga los enlaces
   // «Descargar Factura», sondeando hasta que aparezcan.
   //
-  // La tabla la va llenando SUNAT de a poco —no aparece de una—: un run real
-  // (marzo, con 1470 facturas recibidas según el SIRE) se quedaba en 25
-  // porque el sondeo paraba en cuanto veía el PRIMER resultado, no cuando la
-  // tabla terminaba de cargar. Por eso ahora no alcanza con "ya hay algo": se
-  // sigue mirando hasta que el conteo deja de crecer varias lecturas
-  // seguidas, con un tope de tiempo para no quedarse esperando para siempre
-  // si de verdad son pocos comprobantes.
+  // La tabla es de scroll infinito: SUNAT solo trae la primera tanda (~25
+  // filas) y no carga el resto hasta que alguien la hace scrollear —se
+  // confirmó a mano en el portal real, viendo cómo las filas se «recargan»
+  // al bajar—. Un run real (marzo, con 1470 facturas recibidas según el
+  // SIRE) se quedaba en 25 exactas porque el sondeo original paraba en
+  // cuanto veía el PRIMER resultado y nunca tocaba el scroll. Por eso ahora,
+  // mientras el conteo siga creciendo, se fuerza el scroll de cualquier
+  // contenedor scrolleable del frame hasta el fondo antes de cada lectura —
+  // lo mismo que haría una persona arrastrando la barra—, y solo se da por
+  // terminado cuando el conteo deja de crecer varias lecturas seguidas ya
+  // con el scroll al fondo.
   let res: Frame = marco;
   let descargas = 0;
   let lecturasSinCambio = 0;
-  for (let i = 0; i < 45; i++) {
+  let intentosSinNada = 0;
+  // Si en ~20s no aparece ni un resultado, es que de verdad no hay —no vale
+  // la pena esperar los minutos completos que sí se le dan a una tabla que
+  // está creciendo—.
+  const TOPE_SIN_NADA = 10;
+  // Hasta ~4 minutos siguiendo el scroll mientras el conteo siga creciendo.
+  const TOPE_TOTAL = 120;
+  const agotarScroll = (f: Frame) => f.evaluate(() => {
+    document.querySelectorAll<HTMLElement>("*").forEach((el) => {
+      if (el.scrollHeight > el.clientHeight + 10) el.scrollTop = el.scrollHeight;
+    });
+    window.scrollTo(0, document.body.scrollHeight);
+  }).catch(() => {});
+  for (let i = 0; i < TOPE_TOTAL; i++) {
     let maxAhora = 0;
     let marcoAhora: Frame = res;
     for (const f of page.frames()) {
@@ -378,11 +395,17 @@ async function consultarUnTipo(page: Page, tipo: string): Promise<FilaBajada[]> 
       descargas = maxAhora;
       res = marcoAhora;
       lecturasSinCambio = 0;
+      intentosSinNada = 0;
     } else if (descargas > 0) {
       lecturasSinCambio++;
+    } else {
+      intentosSinNada++;
     }
-    // Tres lecturas seguidas (6s) sin que crezca: se dio por terminada la carga.
+    // Tres lecturas seguidas (6s) sin que crezca, ya con el scroll al fondo:
+    // se dio por terminada la carga.
     if (descargas > 0 && lecturasSinCambio >= 3) break;
+    if (descargas === 0 && intentosSinNada >= TOPE_SIN_NADA) break;
+    if (descargas > 0) await agotarScroll(res);
     await page.waitForTimeout(2000);
   }
   await evidencia(page, `resultados-${slug(tipo)}`);
