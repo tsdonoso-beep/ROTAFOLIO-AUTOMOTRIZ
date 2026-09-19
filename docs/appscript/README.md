@@ -194,6 +194,35 @@ de Retención, que la operación supere S/ 700, y que no esté sujeta a
 detracción (si hay detracción, no hay retención). Ese cálculo queda para más
 adelante, sobre esta misma pestaña.
 
+## Tablero del padrón de RUC (publicado, no dentro del Sheet)
+
+`TableroPadron.gs` + `TableroPadron.html` arman un tablero aparte —cuánto del
+registro ya se revisó, qué porcentaje son Buenos Contribuyentes o Agentes de
+Retención/Percepción, cuántos «No Habido»— y lo **publican como su propia
+URL**, con un botón para abrir la hoja de cálculo. A diferencia de
+`Tablero.html` (que se abre como diálogo desde el menú de la hoja), este no
+depende de tener el Sheet abierto: es una página que se comparte por enlace.
+
+### Instalación
+
+1. En el **mismo proyecto** de Apps Script donde ya está `PadronRuc.gs`
+   (hereda sus mismas Propiedades del script: `SUPABASE_URL`,
+   `SUPABASE_ANON_KEY`, `ROBOT_CORREO`, `ROBOT_CLAVE`): el **+** · **Script**,
+   llámalo `TableroPadron`, pega `TableroPadron.gs`. El **+** · **HTML**,
+   llámalo exactamente `TableroPadron` (sin `.html`), pega `TableroPadron.html`.
+2. Guarda.
+3. **Implementar → Nueva implementación → tipo «Aplicación web»**.
+   - **Ejecutar como**: tu cuenta — así corre con tus permisos, sin pedirle
+     nada a quien lo abra.
+   - **Quién tiene acceso**: **«Cualquier usuario de tu organización»**, no
+     «Cualquier usuario» — muestra información de proveedores, no hace falta
+     que sea público en internet.
+4. **Implementar** → copia la URL. Esa es la que se comparte.
+5. **Cada vez que cambies el código** hay que volver a **«Gestionar
+   implementaciones»** → el lápiz de editar → Versión: **«Nueva»** →
+   Implementar. Una implementación ya publicada no se actualiza sola con el
+   código nuevo — sin este paso, la URL sigue mostrando la versión vieja.
+
 ## Si algo falla
 
 **«La hoja no trae estas columnas…»** — cambiaron los títulos en la fuente. El

@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<style>
+  /* Misma paleta que Tablero.html: por rol, no por hex suelto, validada
+     contra las dos superficies (banda de luminosidad, piso de croma,
+     contraste ≥ 3:1). Un solo sitio para cambiar el modo oscuro. */
+  :root {
+    color-scheme: light;
+    --surface:     #fcfcfb;
+    --panel:       #ffffff;
+    --borde:       #e5e4df;
+    --borde-suave: #f0efeb;
+    --ink:         #0b0b0b;
+    --ink-2:       #52514e;
+    --ink-3:       #86847d;
+    --serie:       #2a78d6;
+    --critico:     #d03b3b;
+    --bueno:       #0ca30c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface:     #1a1a19;
+      --panel:       #232322;
+      --borde:       #35352f;
+      --borde-suave: #2b2b28;
+      --ink:         #ffffff;
+      --ink-2:       #c3c2b7;
+      --ink-3:       #8f8e85;
+      --serie:       #3987e5;
+      --critico:     #d03b3b;
+      --bueno:       #1fc21f;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 22px 26px 40px;
+    background: var(--surface); color: var(--ink);
+    font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
+  .rotulo {
+    font-size: 10.5px; font-weight: 600; letter-spacing: .09em;
+    text-transform: uppercase; color: var(--ink-3);
+  }
+
+  header { display: flex; justify-content: space-between; align-items: flex-start;
+           gap: 18px; flex-wrap: wrap; margin-bottom: 20px; }
+  h1 { margin: 0; font-size: 21px; font-weight: 700; letter-spacing: -.015em; }
+  header p { margin: 4px 0 0; font-size: 12.5px; color: var(--ink-2); }
+
+  .boton {
+    display: inline-flex; align-items: center; gap: 7px;
+    font: inherit; font-weight: 600; font-size: 13px; text-decoration: none;
+    padding: 9px 15px; border-radius: 9px; border: 1px solid var(--borde);
+    background: var(--panel); color: var(--ink); white-space: nowrap;
+    transition: opacity .12s;
+  }
+  .boton:hover { opacity: .8; }
+  .boton.primario { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+
+  .tarjeta { background: var(--panel); border: 1px solid var(--borde);
+             border-radius: 12px; padding: 18px 20px; }
+
+  .cifras { display: grid; gap: 12px; margin-bottom: 18px;
+            grid-template-columns: repeat(auto-fit, minmax(158px, 1fr)); }
+  .cifra .v { font-size: 25px; font-weight: 700; letter-spacing: -.02em;
+              font-variant-numeric: tabular-nums; margin: 0 0 3px; }
+  .cifra .v.critico { color: var(--critico); }
+  .cifra .v.bueno { color: var(--bueno); }
+  .cifra .n { font-size: 11px; color: var(--ink-3); margin: 3px 0 0; }
+
+  .dos { display: grid; gap: 16px; grid-template-columns: 1fr 1.3fr; align-items: start; }
+  @media (max-width: 900px) { .dos { grid-template-columns: 1fr; } }
+
+  h2 { margin: 0 0 3px; font-size: 14.5px; font-weight: 700; }
+  .sub { margin: 0 0 15px; font-size: 12px; color: var(--ink-2); line-height: 1.5; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { text-align: left; padding: 0 12px 7px 0; border-bottom: 1px solid var(--borde);
+       font-size: 10.5px; font-weight: 600; letter-spacing: .07em;
+       text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
+  td { padding: 8px 12px 8px 0; border-bottom: 1px solid var(--borde-suave); vertical-align: top; }
+  th.n, td.n { text-align: center; white-space: nowrap; }
+  .prov { font-weight: 500; }
+  .sec { display: block; font-size: 10.5px; color: var(--ink-3); margin-top: 1px; }
+
+  .marca {
+    display: inline-block; padding: 2px 8px; border-radius: 100px;
+    font-size: 11px; font-weight: 600;
+  }
+  .marca.si { background: color-mix(in srgb, var(--bueno) 15%, transparent); color: var(--bueno); }
+  .marca.no { color: var(--ink-3); }
+  .marca.riesgo { background: color-mix(in srgb, var(--critico) 13%, transparent); color: var(--critico); }
+
+  .vacio { padding: 26px 0; text-align: center; color: var(--ink-3); font-size: 12.5px; }
+
+  /* Barras horizontales de comparación: la etiqueta a la izquierda, la barra
+     y el número a la derecha. Sin leyenda —el rótulo de cada fila la hace
+     innecesaria—. */
+  .barras { display: flex; flex-direction: column; gap: 13px; margin-top: 4px; }
+  .fila-barra { display: grid; grid-template-columns: 130px 1fr 56px; align-items: center; gap: 10px; }
+  .fila-barra .etq { font-size: 12.5px; color: var(--ink-2); }
+  .fila-barra .pista { height: 9px; border-radius: 100px; background: var(--borde-suave); overflow: hidden; }
+  .fila-barra .lleno { height: 100%; border-radius: 100px; background: var(--serie); transition: width .3s; }
+  .fila-barra .val { font-size: 12.5px; text-align: right; font-variant-numeric: tabular-nums; }
+
+  .buscar {
+    width: 100%; font: inherit; padding: 9px 12px; margin-bottom: 12px;
+    border-radius: 9px; border: 1px solid var(--borde); background: var(--surface); color: var(--ink);
+  }
+  .buscar:focus { outline: 2px solid var(--serie); outline-offset: -1px; }
+
+  #cargando { padding: 90px 0; text-align: center; color: var(--ink-3); }
+  #error { display: none; }
+  footer { margin-top: 22px; font-size: 11.5px; color: var(--ink-3); }
+</style>
+</head>
+<body>
+
+<div id="cargando">Consultando la base…</div>
+
+<div id="error" class="tarjeta">
+  <h2>No se pudo armar el tablero</h2>
+  <p class="sub" id="errorTexto"></p>
+</div>
+
+<div id="todo" style="display:none">
+  <header>
+    <div>
+      <h1>Padrón de RUC</h1>
+      <p>Condición de los proveedores ante SUNAT — Buen Contribuyente, Agente de Retención/Percepción</p>
+    </div>
+    <a id="enlaceHoja" class="boton primario" target="_blank" rel="noopener">
+      ↗ Abrir la hoja de cálculo
+    </a>
+  </header>
+
+  <div class="cifras" id="cifras"></div>
+
+  <div class="dos">
+    <div class="tarjeta">
+      <h2>Por padrón</h2>
+      <p class="sub">Sobre los proveedores ya consultados.</p>
+      <div class="barras" id="barras"></div>
+    </div>
+
+    <div class="tarjeta">
+      <h2>Todos los proveedores consultados</h2>
+      <p class="sub">Filtra por RUC o nombre.</p>
+      <input class="buscar" id="buscar" type="search" placeholder="Buscar por RUC o proveedor…">
+      <div style="max-height:420px; overflow:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Proveedor</th><th>Condición</th>
+              <th class="n">Buen Contrib.</th><th class="n">Ag. Retención</th><th class="n">Ag. Percepción</th>
+              <th>Consultado</th>
+            </tr>
+          </thead>
+          <tbody id="filas"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <footer id="pie"></footer>
+</div>
+
+<script>
+var TODAS = [];
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+  });
+}
+function fechaCorta(iso) {
+  if (!iso) return '—';
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  return ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2) + '/' + d.getFullYear();
+}
+function marca(activo, esRiesgo) {
+  if (activo == null) return '<span class="marca no">—</span>';
+  if (esRiesgo) return activo ? '<span class="marca riesgo">Sí</span>' : '<span class="marca no">No</span>';
+  return activo ? '<span class="marca si">Sí</span>' : '<span class="marca no">No</span>';
+}
+
+function pedir() {
+  google.script.run
+    .withSuccessHandler(pintar)
+    .withFailureHandler(function (e) {
+      document.getElementById('cargando').style.display = 'none';
+      document.getElementById('error').style.display = '';
+      document.getElementById('errorTexto').textContent = e && e.message ? e.message : String(e);
+    })
+    .datosDelPadron();
+}
+
+function pintar(d) {
+  document.getElementById('cargando').style.display = 'none';
+
+  if (d.error) {
+    document.getElementById('error').style.display = '';
+    document.getElementById('errorTexto').textContent = d.error;
+    return;
+  }
+
+  document.getElementById('todo').style.display = '';
+  document.getElementById('enlaceHoja').href = d.urlHoja;
+  TODAS = d.filas;
+
+  var coberturaTxt = d.cobertura.porcentaje == null
+    ? (d.total + ' consultados')
+    : (d.cobertura.porcentaje + '%');
+  var coberturaNota = d.cobertura.pendientes == null
+    ? null
+    : (d.cobertura.pendientes + ' proveedor' + (d.cobertura.pendientes === 1 ? '' : 'es') + ' sin consultar todavía');
+
+  document.getElementById('cifras').innerHTML = [
+    tarjeta(d.total, 'RUC consultados', null),
+    tarjeta(coberturaTxt, 'cobertura del registro', coberturaNota),
+    tarjeta(d.categorias[0].pct + '%', 'Buen Contribuyente', d.categorias[0].cuenta + ' de ' + d.total, 'bueno'),
+    tarjeta(d.categorias[1].pct + '%', 'Agente de Retención', d.categorias[1].cuenta + ' de ' + d.total),
+    tarjeta(d.noHabido, 'RUC "No Habido"', 'riesgo de crédito fiscal', d.noHabido > 0 ? 'critico' : null)
+  ].join('');
+
+  document.getElementById('barras').innerHTML = d.categorias.map(function (c) {
+    return '<div class="fila-barra">' +
+      '<span class="etq">' + esc(c.nombre) + '</span>' +
+      '<span class="pista"><span class="lleno" style="width:' + c.pct + '%"></span></span>' +
+      '<span class="val mono">' + c.pct + '%</span>' +
+      '</div>';
+  }).join('');
+
+  document.getElementById('pie').textContent =
+    'Actualizado al abrir esta página, ' + new Date(d.actualizadoEl).toLocaleString('es-PE') + '.';
+
+  pintarFilas(TODAS);
+  document.getElementById('buscar').oninput = function () {
+    var q = this.value.trim().toLowerCase();
+    if (!q) { pintarFilas(TODAS); return; }
+    pintarFilas(TODAS.filter(function (f) {
+      return (f.ruc || '').toLowerCase().indexOf(q) >= 0 ||
+        (f.razonSocial || '').toLowerCase().indexOf(q) >= 0;
+    }));
+  };
+}
+
+function pintarFilas(filas) {
+  var cuerpo = document.getElementById('filas');
+  if (!filas.length) {
+    cuerpo.innerHTML = '<tr><td colspan="6" class="vacio">Sin resultados.</td></tr>';
+    return;
+  }
+  cuerpo.innerHTML = filas.map(function (f) {
+    var esNoHabido = f.condicion && f.condicion.toUpperCase().indexOf('NO HABIDO') >= 0;
+    return '<tr>' +
+      '<td class="prov">' + esc(f.razonSocial || '(sin nombre)') + '<span class="sec mono">' + esc(f.ruc) + '</span></td>' +
+      '<td>' + (esNoHabido ? '<span class="marca riesgo">' + esc(f.condicion) + '</span>' : esc(f.condicion || '—')) + '</td>' +
+      '<td class="n">' + marca(f.buenContribuyente) + '</td>' +
+      '<td class="n">' + marca(f.agenteRetencion) + '</td>' +
+      '<td class="n">' + marca(f.agentePercepcion) + '</td>' +
+      '<td>' + fechaCorta(f.consultadoEl) + '</td>' +
+      '</tr>';
+  }).join('');
+}
+
+function tarjeta(valor, rotulo, nota, tono) {
+  return '<div class="tarjeta cifra"><p class="v' + (tono ? ' ' + tono : '') + '">' + valor + '</p>' +
+    '<p class="rotulo">' + rotulo + '</p>' +
+    (nota ? '<p class="n">' + esc(nota) + '</p>' : '') + '</div>';
+}
+
+pedir();
+</script>
+</body>
+</html>
