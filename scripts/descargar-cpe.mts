@@ -450,11 +450,30 @@ async function consultarUnTipo(page: Page, tipo: string): Promise<FilaBajada[]> 
     // Se llama directo a la función de SUNAT por índice de fila: no depende
     // de que esa fila esté pintada ni de cómo se llame su enlace (distinto
     // entre FE y NC/ND).
+    //
+    // La grilla trae los datos del servidor en tandas de 25: al cruzar a una
+    // tanda nueva (fila 26, 51, 76…), la PRIMERA lectura de esa tanda puede
+    // llegar antes de que SUNAT termine de traerla —se vio en un run real,
+    // "Cannot read properties of null (reading 'nroRucEmisor')" justo en
+    // esos índices, y nunca en los de en medio—. Un reintento corto alcanza:
+    // para cuando se reintenta, la tanda ya cargó.
     for (let i = 0; i < descargas; i++) {
       let xmlArchivo: ArchivoBajado | null = null;
       let pdfArchivo: ArchivoBajado | null = null;
-      try { xmlArchivo = await bajar(page, () => descargarPorIndice(res, i, "descargar")); } catch (e) { console.log(`  · XML fila ${i + 1} [${tipo}]: ${e instanceof Error ? e.message : e}`); }
-      try { pdfArchivo = await bajar(page, () => descargarPorIndice(res, i, "descargarComprobantePdf")); } catch (e) { console.log(`  · PDF fila ${i + 1} [${tipo}]: ${e instanceof Error ? e.message : e}`); }
+      try {
+        xmlArchivo = await bajar(page, () => descargarPorIndice(res, i, "descargar"));
+      } catch (e) {
+        console.log(`  · XML fila ${i + 1} [${tipo}]: ${e instanceof Error ? e.message : e} — reintentando…`);
+        await page.waitForTimeout(1500);
+        try { xmlArchivo = await bajar(page, () => descargarPorIndice(res, i, "descargar")); } catch (e2) { console.log(`  · XML fila ${i + 1} [${tipo}]: ${e2 instanceof Error ? e2.message : e2}`); }
+      }
+      try {
+        pdfArchivo = await bajar(page, () => descargarPorIndice(res, i, "descargarComprobantePdf"));
+      } catch (e) {
+        console.log(`  · PDF fila ${i + 1} [${tipo}]: ${e instanceof Error ? e.message : e} — reintentando…`);
+        await page.waitForTimeout(1500);
+        try { pdfArchivo = await bajar(page, () => descargarPorIndice(res, i, "descargarComprobantePdf")); } catch (e2) { console.log(`  · PDF fila ${i + 1} [${tipo}]: ${e2 instanceof Error ? e2.message : e2}`); }
+      }
       salida.push({ xml: xmlArchivo, pdf: pdfArchivo });
     }
   } else {
