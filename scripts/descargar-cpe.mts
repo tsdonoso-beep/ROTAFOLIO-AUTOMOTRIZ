@@ -78,6 +78,17 @@ const FECHA_INICIO = process.env.FECHA_INICIO?.trim()
 const CAPTURAS = join(process.cwd(), "capturas");
 mkdirSync(CAPTURAS, { recursive: true });
 
+/**
+ * Prueba puntual, apagada por omisión: ¿el "imprimirListado" de SUNAT
+ * re-consulta según el rango que lleva en la URL, o solo reimprime lo último
+ * que se corrió con Aceptar? Si pide un rango distinto al que se consultó de
+ * verdad y el HTML que devuelve trae el rango NUEVO, es una consulta aparte
+ * —y esa vista, al ser una tabla plana (no la grilla dojox), no tiene el
+ * problema de las tandas de 25 ni la carrera al cruzar de una a otra—.
+ */
+const PROBAR_IMPRIMIR = process.env.PROBAR_IMPRIMIR === "1";
+const RANGO_PRUEBA_IMPRIMIR = process.env.RANGO_PRUEBA_IMPRIMIR?.trim() || null;
+
 let paso = 0;
 async function evidencia(page: Page, nombre: string) {
   paso++;
@@ -436,6 +447,22 @@ async function consultarUnTipo(page: Page, tipo: string): Promise<FilaBajada[]> 
   if (descargas === 0) {
     // Si no hay nada, radiografiar para ver dónde quedó la tabla.
     await radiografia(page);
+  }
+
+  if (PROBAR_IMPRIMIR && RANGO_PRUEBA_IMPRIMIR) {
+    try {
+      const codigoTipo = await leer("tipoConsulta");
+      const url = "https://ww1.sunat.gob.pe/ol-ti-itconscpemype/consultar.do?action=imprimirListado"
+        + `&periodoDesc=${encodeURIComponent(RANGO_PRUEBA_IMPRIMIR)}&tipoConsulta=${encodeURIComponent(codigoTipo)}`;
+      const html = await res.evaluate((u) => fetch(u, { credentials: "include" }).then((r) => r.text()), url);
+      writeFileSync(join(CAPTURAS, `zz-imprimir-${slug(tipo)}.html`), html);
+      const periodoEnHtml = html.match(/del\s*Periodo\s*<\/?[^>]*>?\s*([\d/ -]+)/i)?.[1]?.trim()
+        ?? html.match(/(\d{2}\/\d{2}\/\d{4}\s*-\s*\d{2}\/\d{2}\/\d{4})/)?.[1];
+      const filas = (html.match(/<tr[ >]/gi) ?? []).length;
+      console.log(`  · PRUEBA imprimirListado [${tipo}]: se consultó "${FECHA_INICIO} - ${FECHA_FIN}", se pidió el listado con "${RANGO_PRUEBA_IMPRIMIR}" → el HTML dice periodo "${periodoEnHtml}", ${filas} filas <tr>.`);
+    } catch (e) {
+      console.log(`  · PRUEBA imprimirListado [${tipo}] falló: ${e instanceof Error ? e.message : e}`);
+    }
   }
 
   if (DEBUG) {

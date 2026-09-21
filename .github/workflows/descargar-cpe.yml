@@ -39,6 +39,16 @@ on:
           misma sesión, sin volver a loguearse por cada una.
         required: false
         default: "FE Emitidas,FE Recibidas,NC Emitidas,NC Recibidas,ND Emitidas,ND Recibidas"
+      rango_prueba_imprimir:
+        description: >-
+          Prueba puntual, apagada si se deja vacía: además de la consulta
+          normal (con el rango de arriba), pide el "imprimirListado" de
+          SUNAT con ESTE otro rango (dd/mm/yyyy - dd/mm/yyyy) y compara qué
+          periodo trae el HTML de vuelta —para saber si esa vista re-consulta
+          de verdad o solo reimprime lo último corrido con Aceptar—. No baja
+          ni guarda nada por su cuenta.
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -90,6 +100,8 @@ jobs:
           FECHA_INICIO: ${{ inputs.fecha_inicio }}
           FECHA_FIN: ${{ inputs.fecha_fin }}
           TIPOS_CONSULTA: ${{ inputs.tipo_consulta }}
+          PROBAR_IMPRIMIR: ${{ inputs.rango_prueba_imprimir && '1' || '0' }}
+          RANGO_PRUEBA_IMPRIMIR: ${{ inputs.rango_prueba_imprimir }}
         run: node --experimental-strip-types scripts/descargar-cpe.mts
 
       # Las capturas y el HTML de cada paso, para ver el portal real y fijar
