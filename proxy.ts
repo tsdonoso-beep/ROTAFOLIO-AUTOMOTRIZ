@@ -9,7 +9,7 @@ import { NextResponse, type NextRequest } from "next/server";
  * por su cuenta y la base tiene sus políticas de fila. Que el middleware
  * deje pasar no autoriza nada por sí mismo.
  */
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   let respuesta = NextResponse.next({ request: req });
 
   const sb = createServerClient(

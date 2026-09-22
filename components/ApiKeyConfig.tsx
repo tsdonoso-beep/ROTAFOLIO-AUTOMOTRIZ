@@ -13,7 +13,10 @@ export default function ApiKeyConfig({ onChange }: { onChange?: (k: string) => v
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // Lectura de localStorage: solo existe tras montar en el cliente, así que
+    // no puede ser el estado inicial (rompería la hidratación del SSR).
     const k = getApiKey();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSaved(k);
     setInput(k);
   }, []);
