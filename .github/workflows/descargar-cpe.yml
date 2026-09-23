@@ -11,10 +11,23 @@
 # Arranca en modo depuración (debug=true): entra, llega a la pantalla y sube
 # capturas y HTML como artefacto, sin bajar nada. Con eso se fijan los
 # selectores. Cuando estén, se corre con debug=false para bajar de verdad.
+#
+# La corrida programada (cron) es aparte de la manual: pide solo ayer y hoy,
+# nunca el mes completo. El script no sabe qué ya bajó antes de pedirlo a
+# SUNAT —el "ya estaba" se detecta recién al subir a Drive—, así que un rango
+# ancho todos los días repetiría cientos de descargas a diario y chocaría con
+# el límite de solicitudes de SUNAT (visto de verdad: "User rate limit
+# exceeded" al rellenar meses viejos con rangos de un mes completo). Una
+# ventana de dos días es chica de sobra para mantener el mes en curso al día
+# sin gastar esa cuota, y repetir un día ya bajado no duplica nada (Drive y la
+# base detectan "ya estaba").
 
 name: SUNAT descargar XML
 
 on:
+  schedule:
+    # 08:00 en Lima (UTC-5 todo el año), igual que SUNAT diario.
+    - cron: "0 13 * * *"
   workflow_dispatch:
     inputs:
       debug:
@@ -74,6 +87,16 @@ jobs:
       # sistema. Evita bajar los otros navegadores.
       - run: npx playwright install --with-deps chromium
 
+      # Solo aplica al cron: la corrida manual sigue mandando sus propias
+      # fechas (o las por omisión del script, 30 días, pensadas para rellenar
+      # meses viejos a mano). El cron nunca debe heredar ese rango ancho.
+      - name: Calcular el rango de la corrida programada (ayer y hoy)
+        id: rango
+        if: github.event_name == 'schedule'
+        run: |
+          echo "desde=$(date -d 'yesterday' +%d/%m/%Y)" >> "$GITHUB_OUTPUT"
+          echo "hasta=$(date +%d/%m/%Y)" >> "$GITHUB_OUTPUT"
+
       - name: Entrar a SOL y (si no es depuración) bajar los XML
         env:
           SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
@@ -96,10 +119,12 @@ jobs:
           ANON_KEY: ${{ secrets.ANON_KEY }}
           ROBOT_CORREO: ${{ secrets.ROBOT_CORREO }}
           ROBOT_CLAVE: ${{ secrets.ROBOT_CLAVE }}
-          DEBUG: ${{ inputs.debug && '1' || '0' }}
-          FECHA_INICIO: ${{ inputs.fecha_inicio }}
-          FECHA_FIN: ${{ inputs.fecha_fin }}
-          TIPOS_CONSULTA: ${{ inputs.tipo_consulta }}
+          # El cron nunca es depuración: si algo falla, que falle de verdad
+          # (se ve en el resumen del workflow) en vez de fingir éxito sin bajar nada.
+          DEBUG: ${{ github.event_name == 'schedule' && '0' || (inputs.debug && '1' || '0') }}
+          FECHA_INICIO: ${{ github.event_name == 'schedule' && steps.rango.outputs.desde || inputs.fecha_inicio }}
+          FECHA_FIN: ${{ github.event_name == 'schedule' && steps.rango.outputs.hasta || inputs.fecha_fin }}
+          TIPOS_CONSULTA: ${{ inputs.tipo_consulta || 'FE Emitidas,FE Recibidas,NC Emitidas,NC Recibidas,ND Emitidas,ND Recibidas' }}
           PROBAR_IMPRIMIR: ${{ inputs.rango_prueba_imprimir && '1' || '0' }}
           RANGO_PRUEBA_IMPRIMIR: ${{ inputs.rango_prueba_imprimir }}
         run: node --experimental-strip-types scripts/descargar-cpe.mts
