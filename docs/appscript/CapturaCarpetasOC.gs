@@ -141,9 +141,9 @@ function armarListaDeCarpetas() {
 function revisarSiguienteTanda() {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) return; // ya hay una tanda corriendo
+  var libro = SpreadsheetApp.getActiveSpreadsheet();
   try {
     var inicio = Date.now();
-    var libro = SpreadsheetApp.getActiveSpreadsheet();
     var hojaC = libro.getSheetByName('CARPETAS');
     var hojaA = libro.getSheetByName('ARCHIVOS');
     if (!hojaC || hojaC.getLastRow() < 2) throw new Error('Primero «1. Armar lista de carpetas».');
@@ -189,8 +189,14 @@ function revisarSiguienteTanda() {
       return c[COL_ESTADO - 1] === 'PENDIENTE' && !estados[i];
     }).length;
     if (pendientes === 0) detenerAutomatico_();
-    libro.toast(hechas + ' carpetas revisadas en esta tanda, ' + archivos.length +
-      ' archivos. Faltan ' + pendientes + '.', 'Carpetas OC', 10);
+    var resultado = hechas + ' carpetas revisadas en esta tanda, ' + archivos.length +
+      ' archivos. Faltan ' + pendientes + (pendientes === 0 ? ' — TERMINADO.' : '.');
+    anotarEstado_(libro, resultado);
+    libro.toast(resultado, 'Carpetas OC', 10);
+  } catch (e) {
+    // Cuando corre sola no hay pantalla donde mostrar el error: queda en RESUMEN.
+    anotarEstado_(libro, 'ERROR: ' + (e.message || e));
+    throw e;
   } finally {
     lock.releaseLock();
   }
@@ -325,10 +331,20 @@ function datosDeArchivo_(f, ubicacion, donde, pistaCarpeta) {
 // ── Revisión automática ──
 
 function activarAutomatico() {
+  var libro = SpreadsheetApp.getActiveSpreadsheet();
+  var hojaC = libro.getSheetByName('CARPETAS');
+  if (!hojaC || hojaC.getLastRow() < 2) {
+    SpreadsheetApp.getUi().alert('Falta un paso', 'Primero usa «1. Armar lista de carpetas».',
+      SpreadsheetApp.getUi().ButtonSet.OK);
+    return;
+  }
   detenerAutomatico_();
   ScriptApp.newTrigger('revisarSiguienteTanda').timeBased().everyMinutes(10).create();
-  SpreadsheetApp.getActiveSpreadsheet().toast(
-    'Revisará una tanda cada 10 minutos y se detendrá solo al terminar.', 'Carpetas OC', 8);
+  // Google recién dispara el automático a los ~10 minutos: la primera tanda
+  // se corre ahora para que se vea avanzar desde ya.
+  libro.toast('Empieza la primera tanda (unos 5 minutos). Después sigue sola cada 10 minutos ' +
+    'y se detiene al terminar. El avance se ve en la pestaña RESUMEN.', 'Carpetas OC', 15);
+  revisarSiguienteTanda();
 }
 
 function detenerAutomatico() {
@@ -580,6 +596,11 @@ function prepararHoja_(libro, nombre, cabeceras) {
 }
 
 /** El resumen son fórmulas sobre CARPETAS: se actualiza solo con cada tanda. */
+function anotarEstado_(libro, texto) {
+  var h = libro.getSheetByName('RESUMEN');
+  if (h) h.getRange('B16:B17').setValues([[new Date()], [texto]]);
+}
+
 function armarResumen_(libro, sinEnlace) {
   var h = libro.getSheetByName('RESUMEN') || libro.insertSheet('RESUMEN');
   h.clear();
@@ -597,7 +618,10 @@ function armarResumen_(libro, sinEnlace) {
     ['Carpetas vacías', '=COUNTIF(CARPETAS!G2:G,"VACÍA")'],
     ['Sin acceso', '=COUNTIF(CARPETAS!G2:G,"SIN ACCESO")'],
     ['', ''],
-    ['Filas de la base sin enlace de carpeta', sinEnlace]
+    ['Filas de la base sin enlace de carpeta', sinEnlace],
+    ['', ''],
+    ['Última tanda', ''],
+    ['Resultado de la última tanda', '']
   ];
   h.getRange(1, 1, filas.length, 2).setValues(filas);
   h.getRange('A1').setFontWeight('bold').setFontSize(14);
