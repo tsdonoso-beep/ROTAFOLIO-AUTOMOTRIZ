@@ -41,6 +41,7 @@ var EMPRESAS = ['INROPRIN'];     // vacío [] = todas
 var ANIOS = [2026];              // vacío [] = todos
 var BUSCAR_FUERA = false;        // true = si no hay factura adentro, buscarla afuera (lento; en la 1.ª corrida aportó poco)
 var MINUTOS_POR_TANDA = 4.5;     // Apps Script corta a los 6
+var LIMITE_ARCHIVOS = 800;       // más que esto: el enlace apunta a una carpeta general, no a la de una OC
 
 var CAB_CARPETAS = ['ID carpeta', 'Enlace carpeta', 'OC', 'RUC', 'Proveedor',
   'Filas en la base', 'Estado', 'Archivos dentro', '¿Factura dentro?',
@@ -157,7 +158,12 @@ function revisarSiguienteTanda() {
       if ((Date.now() - inicio) / 60000 > MINUTOS_POR_TANDA) break;
 
       var c = lista[i];
-      var res = revisarCarpeta_(String(c[0]));
+      // Lo que le queda a esta tanda: una carpeta enorme no puede comerse los
+      // 6 minutos, porque Google corta sin dejar escribir nada y la siguiente
+      // tanda se volvería a trabar en la misma carpeta.
+      var limite = inicio + (MINUTOS_POR_TANDA + 0.5) * 60000;
+      var res = revisarCarpeta_(String(c[0]), limite);
+      if (res.estado === 'SIN TERMINAR' && hechas > 0) break; // se reintenta sola en la próxima tanda
       var dentro = res.archivos;
       var facturasDentro = dentro.filter(esFactura_).length;
       var xmlDentro = dentro.filter(function (a) { return a.parece === 'XML'; }).length;
@@ -203,7 +209,7 @@ function revisarSiguienteTanda() {
 }
 
 /** Los archivos de una carpeta y todas sus subcarpetas. Nunca lanza: el problema va en `estado`. */
-function revisarCarpeta_(id) {
+function revisarCarpeta_(id, limite) {
   var archivos = [];
   var carpeta;
   try {
@@ -220,9 +226,19 @@ function revisarCarpeta_(id) {
     }
   }
   try {
-    recorrer_(carpeta, carpeta.getName(), '', {}, archivos);
+    recorrer_(carpeta, carpeta.getName(), '', {}, archivos, limite || Infinity);
     return { estado: archivos.length ? 'OK' : 'VACÍA', archivos: archivos, carpeta: carpeta, detalle: '' };
   } catch (e) {
+    if (e === DEMASIADO_GRANDE) {
+      return { estado: 'MUY GRANDE', archivos: archivos, carpeta: carpeta,
+        detalle: 'Más de ' + LIMITE_ARCHIVOS + ' archivos: el enlace parece ser de una carpeta general, no de la OC. Se anotaron los primeros.' };
+    }
+    if (e === SIN_TIEMPO) {
+      // Si fue la primera de la tanda, ni una tanda entera le alcanza: se
+      // marca y se sigue. Si no, se deja PENDIENTE para la próxima.
+      return { estado: 'SIN TERMINAR', archivos: archivos, carpeta: carpeta,
+        detalle: 'No alcanzó el tiempo de una tanda. Se anotó lo que se alcanzó a ver (' + archivos.length + ' archivos).' };
+    }
     return { estado: 'ERROR A MEDIAS', archivos: archivos, carpeta: carpeta, detalle: String(e.message || e) };
   }
 }
@@ -232,16 +248,24 @@ function revisarCarpeta_(id) {
  * carpeta principal («OC 2026 - 0115 …») no sirve de pista, porque diría
  * «orden de compra» de todo lo que tiene adentro.
  */
-function recorrer_(carpeta, ruta, sub, vistas, salida) {
+var DEMASIADO_GRANDE = { motivo: 'demasiado grande' };
+var SIN_TIEMPO = { motivo: 'sin tiempo' };
+
+function recorrer_(carpeta, ruta, sub, vistas, salida, limite) {
+  if (Date.now() > limite) throw SIN_TIEMPO;
   var id = carpeta.getId();
   if (vistas[id]) return; // una carpeta puede colgar de dos lados
   vistas[id] = true;
   var fs = carpeta.getFiles();
-  while (fs.hasNext()) salida.push(datosDeArchivo_(fs.next(), ruta, DENTRO, sub));
+  while (fs.hasNext()) {
+    if (salida.length >= LIMITE_ARCHIVOS) throw DEMASIADO_GRANDE;
+    if (Date.now() > limite) throw SIN_TIEMPO;
+    salida.push(datosDeArchivo_(fs.next(), ruta, DENTRO, sub));
+  }
   var subs = carpeta.getFolders();
   while (subs.hasNext()) {
     var s = subs.next();
-    recorrer_(s, ruta + ' / ' + s.getName(), (sub ? sub + ' / ' : '') + s.getName(), vistas, salida);
+    recorrer_(s, ruta + ' / ' + s.getName(), (sub ? sub + ' / ' : '') + s.getName(), vistas, salida, limite);
   }
 }
 
