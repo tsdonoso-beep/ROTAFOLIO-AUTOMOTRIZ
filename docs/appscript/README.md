@@ -289,6 +289,42 @@ compartido lo refleje: **Implementar** → **Gestionar implementaciones** →
 el lápiz sobre la implementación activa → **Versión: Nueva versión** →
 **Implementar**. La URL no cambia.
 
+## Captura de archivos en las carpetas de OC
+
+`CapturaCarpetasOC.gs` recorre el **LINK DE CARPETA** de cada OC de la base
+de Control de Gestión («Bd ventas, costo y gastos», pestaña **3. Registro
+Compras Grupo**) y anota cada archivo que encuentra: dónde está, cómo se
+llama, su enlace y qué parece ser (factura, guía, pago, OC…). Es el primer
+paso para unir cada factura de SUNAT con su OC y, por la OC, con su centro de
+costo. **No abre los archivos**: solo mira nombres.
+
+La base original **solo se lee**. El script va en una hoja aparte, de tu
+unidad, y escribe ahí tres pestañas: **CARPETAS** (una fila por OC),
+**ARCHIVOS** (una fila por archivo) y **RESUMEN**.
+
+Busca a fondo:
+
+- **Todas las subcarpetas**, a cualquier profundidad.
+- **Palabras parecidas**: FACTURA, FACT, FT, `F001-…`, `E001-…`, y errores de
+  tipeo (FATURA, FACTRUA, FACUTAS).
+- **Por la carpeta**: un `scan001.pdf` dentro de una subcarpeta «Facturas»
+  (o «Facutas») cuenta como factura.
+- **Fuera de la carpeta**: si una OC no tiene nada que parezca factura
+  adentro, busca archivos con su número de OC en la carpeta superior y en todo
+  el Drive. Esos quedan marcados «(confirmar)», porque el número de OC puede
+  repetirse entre empresas.
+
+### Cómo se usa
+
+1. Crea una hoja nueva en tu unidad → **Extensiones · Apps Script** → pega
+   `CapturaCarpetasOC.gs` → guarda.
+2. Revisa la **Configuración** al inicio: `EMPRESAS` (por omisión INROPRIN)
+   y `ANIOS` (por omisión 2026).
+3. Recarga la hoja → menú **Carpetas OC** → **1. Armar lista de carpetas**.
+4. **2. Revisar siguiente tanda**, o **Revisar solo cada 10 minutos** para que
+   avance solo por tandas de ~5 minutos (Apps Script corta a los 6). Se
+   detiene al terminar.
+
 ## Si algo falla
 
 **«La hoja no trae estas columnas…»** — cambiaron los títulos en la fuente. El
