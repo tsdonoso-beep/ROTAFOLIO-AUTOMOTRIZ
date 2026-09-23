@@ -128,7 +128,7 @@ function armarListaDeCarpetas() {
     hojaC.getRange(2, 1, filas.length, 1).setNumberFormat('@');
     hojaC.getRange(2, 1, filas.length, CAB_CARPETAS.length).setValues(filas);
   }
-  armarResumen_(libro, sinEnlace);
+  actualizarResumen_(libro, 'Lista armada. Todavía no se revisa ninguna carpeta.', sinEnlace);
 
   ui.alert('Lista armada',
     filas.length + ' carpetas por revisar.\n' + sinEnlace +
@@ -191,11 +191,11 @@ function revisarSiguienteTanda() {
     if (pendientes === 0) detenerAutomatico_();
     var resultado = hechas + ' carpetas revisadas en esta tanda, ' + archivos.length +
       ' archivos. Faltan ' + pendientes + (pendientes === 0 ? ' — TERMINADO.' : '.');
-    anotarEstado_(libro, resultado);
+    actualizarResumen_(libro, resultado);
     libro.toast(resultado, 'Carpetas OC', 10);
   } catch (e) {
     // Cuando corre sola no hay pantalla donde mostrar el error: queda en RESUMEN.
-    anotarEstado_(libro, 'ERROR: ' + (e.message || e));
+    anotarError_(libro, 'ERROR: ' + (e.message || e));
     throw e;
   } finally {
     lock.releaseLock();
@@ -596,34 +596,65 @@ function prepararHoja_(libro, nombre, cabeceras) {
 }
 
 /** El resumen son fórmulas sobre CARPETAS: se actualiza solo con cada tanda. */
-function anotarEstado_(libro, texto) {
-  var h = libro.getSheetByName('RESUMEN');
-  if (h) h.getRange('B16:B17').setValues([[new Date()], [texto]]);
-}
-
-function armarResumen_(libro, sinEnlace) {
+/**
+ * El resumen se escribe como números calculados aquí, no como fórmulas: una
+ * fórmula con comas da #ERROR! en una hoja en español (que separa con «;»).
+ * Se rehace entero al final de cada tanda.
+ */
+function actualizarResumen_(libro, resultado, sinEnlace) {
   var h = libro.getSheetByName('RESUMEN') || libro.insertSheet('RESUMEN');
-  h.clear();
+  var previo = h.getLastRow() >= 14 ? h.getRange('B14').getValue() : '';
+  if (sinEnlace == null) sinEnlace = typeof previo === 'number' ? previo : '';
+
+  var n = { total: 0, revisadas: 0, pendientes: 0, dentro: 0, fuera: 0, ninguna: 0, xml: 0, vacias: 0, sinAcceso: 0 };
+  var hojaC = libro.getSheetByName('CARPETAS');
+  if (hojaC && hojaC.getLastRow() > 1) {
+    hojaC.getRange(2, COL_ESTADO, hojaC.getLastRow() - 1, 6).getValues().forEach(function (f) {
+      var estado = f[0], factDentro = f[2], xml = Number(f[4]) || 0, fuera = Number(f[5]) || 0;
+      n.total++;
+      if (estado === 'PENDIENTE') { n.pendientes++; return; }
+      n.revisadas++;
+      if (factDentro === 'SÍ') n.dentro++;
+      else if (fuera > 0) n.fuera++;
+      else n.ninguna++;
+      if (xml > 0) n.xml++;
+      if (estado === 'VACÍA') n.vacias++;
+      if (estado === 'SIN ACCESO') n.sinAcceso++;
+    });
+  }
+
   var filas = [
     ['Resumen de la captura', ''],
     ['', ''],
-    ['Carpetas en la lista', '=COUNTA(CARPETAS!A2:A)'],
-    ['Ya revisadas', '=COUNTIF(CARPETAS!G2:G,"<>PENDIENTE")-COUNTBLANK(CARPETAS!G2:G)'],
-    ['Pendientes', '=COUNTIF(CARPETAS!G2:G,"PENDIENTE")'],
+    ['Carpetas en la lista', n.total],
+    ['Ya revisadas', n.revisadas],
+    ['Pendientes', n.pendientes],
     ['', ''],
-    ['Con factura dentro de la carpeta', '=COUNTIF(CARPETAS!I2:I,"SÍ")'],
-    ['Sin factura dentro, pero encontrada fuera', '=COUNTIFS(CARPETAS!I2:I,"NO",CARPETAS!L2:L,">0")'],
-    ['Sin factura en ningún lado', '=COUNTIFS(CARPETAS!I2:I,"NO",CARPETAS!L2:L,0)'],
-    ['Con XML dentro', '=COUNTIF(CARPETAS!K2:K,">0")'],
-    ['Carpetas vacías', '=COUNTIF(CARPETAS!G2:G,"VACÍA")'],
-    ['Sin acceso', '=COUNTIF(CARPETAS!G2:G,"SIN ACCESO")'],
+    ['Con factura dentro de la carpeta', n.dentro],
+    ['Sin factura dentro, pero encontrada fuera', n.fuera],
+    ['Sin factura en ningún lado', n.ninguna],
+    ['Con XML dentro', n.xml],
+    ['Carpetas vacías', n.vacias],
+    ['Sin acceso', n.sinAcceso],
     ['', ''],
     ['Filas de la base sin enlace de carpeta', sinEnlace],
     ['', ''],
-    ['Última tanda', ''],
-    ['Resultado de la última tanda', '']
+    ['Última tanda', new Date()],
+    ['Resultado de la última tanda', resultado]
   ];
+  h.clear();
   h.getRange(1, 1, filas.length, 2).setValues(filas);
   h.getRange('A1').setFontWeight('bold').setFontSize(14);
+  h.getRange('B16').setNumberFormat('dd/mm/yyyy hh:mm');
   h.setColumnWidth(1, 320);
+}
+
+/** Para los errores: solo la hora y el mensaje, sin tocar el resto. */
+function anotarError_(libro, texto) {
+  try {
+    var h = libro.getSheetByName('RESUMEN');
+    if (h) h.getRange('A16:B17').setValues([['Última tanda', new Date()], ['Resultado de la última tanda', texto]]);
+  } catch (e) {
+    // si ni esto se puede escribir, el error igual queda en «Ejecuciones»
+  }
 }
