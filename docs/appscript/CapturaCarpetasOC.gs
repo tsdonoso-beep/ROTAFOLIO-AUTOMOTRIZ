@@ -79,6 +79,24 @@ function armarListaDeCarpetas() {
     if (r !== ui.Button.YES) return;
   }
 
+  // Si una tanda sigue corriendo, escribiría sus resultados ENCIMA de la
+  // lista nueva al terminar. Se detiene el automático y se espera a que
+  // acabe (una tanda dura como mucho ~5 minutos).
+  detenerAutomatico_();
+  var lock = LockService.getScriptLock();
+  libro.toast('Si hay una tanda corriendo, espero a que termine (hasta 5 minutos)…', 'Carpetas OC', 10);
+  if (!lock.tryLock(330000)) {
+    ui.alert('Hay una tanda ocupada', 'No terminó a tiempo. Espera unos minutos y vuelve a intentarlo.', ui.ButtonSet.OK);
+    return;
+  }
+  try {
+    armarLista_(libro, ui);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function armarLista_(libro, ui) {
   var hoja = pestanaDeOrigen_(SpreadsheetApp.openById(ORIGEN_ID));
   var valores = hoja.getDataRange().getValues();
 
@@ -123,7 +141,7 @@ function armarListaDeCarpetas() {
       c.filas, 'PENDIENTE', '', '', '', '', '', '', ''];
   });
 
-  hojaC = prepararHoja_(libro, 'CARPETAS', CAB_CARPETAS);
+  var hojaC = prepararHoja_(libro, 'CARPETAS', CAB_CARPETAS);
   prepararHoja_(libro, 'ARCHIVOS', CAB_ARCHIVOS);
   if (filas.length) {
     hojaC.getRange(2, 1, filas.length, 1).setNumberFormat('@');
@@ -133,7 +151,7 @@ function armarListaDeCarpetas() {
 
   ui.alert('Lista armada',
     filas.length + ' carpetas por revisar.\n' + sinEnlace +
-    ' filas de la base no tienen enlace de carpeta y no entran.\n\nSigue con «2. Revisar siguiente tanda».',
+    ' filas de la base no tienen enlace de carpeta y no entran.\n\nSigue con «Revisar solo cada 10 minutos».',
     ui.ButtonSet.OK);
 }
 
@@ -141,8 +159,12 @@ function armarListaDeCarpetas() {
 
 function revisarSiguienteTanda() {
   var lock = LockService.getScriptLock();
-  if (!lock.tryLock(1000)) return; // ya hay una tanda corriendo
   var libro = SpreadsheetApp.getActiveSpreadsheet();
+  if (!lock.tryLock(1000)) {
+    // Desde el menú se avisa; desde el automático no hay pantalla y da igual.
+    try { libro.toast('Ya hay una tanda corriendo. Sigue sola: revisa RESUMEN en unos minutos.', 'Carpetas OC', 10); } catch (e) {}
+    return;
+  }
   try {
     var inicio = Date.now();
     var hojaC = libro.getSheetByName('CARPETAS');
