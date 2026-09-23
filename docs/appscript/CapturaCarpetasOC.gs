@@ -390,8 +390,14 @@ function clasificar_(nombre, ubicacion, mime) {
   var pistas = pistasEn_(n);
 
   var parece = '';
-  if (ext === 'XML' || /xml/.test(mime || '')) parece = /^R-/i.test(nombre) ? 'CDR (constancia SUNAT)' : 'XML';
+  // Solo el XML de verdad: el tipo interno de un Excel o un Word también
+  // contiene «xml» (…openxmlformats…) y no es un comprobante.
+  var esXml = ext === 'XML' || mime === 'text/xml' || mime === 'application/xml';
+  if (esXml) parece = /^R-/i.test(nombre) ? 'CDR (constancia SUNAT)' : 'XML';
   else if (ext === 'ZIP' && /^R-/i.test(nombre)) parece = 'CDR (constancia SUNAT)';
+  // Nombre como lo baja SUNAT, RUC-TIPO-SERIE-NÚMERO: el tipo lo dice todo.
+  var sunat = TIPO_SUNAT[(/(?:^|\D)[12]\d{10}[-_ ](01|03|07|08|09|R01)[-_ ]/.exec(String(nombre).toUpperCase()) || [])[1]];
+  if (!parece && sunat) { parece = sunat; pistas.unshift({ parece: sunat, palabra: 'tipo SUNAT en el nombre' }); }
   if (!parece && pistas.length) parece = pistas[0].parece;
   if (!parece && serie) {
     parece = /^F/.test(serie) ? 'FACTURA' : /^B/.test(serie) ? 'BOLETA' : 'FACTURA o RH (serie E)';
@@ -429,11 +435,26 @@ function pistasEn_(texto) {
 }
 
 /** F001-00018178, E001 179, FA01_123 → «F001-18178». Vacío si el nombre no trae una. */
+var TIPO_SUNAT = { '01': 'FACTURA', '03': 'BOLETA', '07': 'NOTA DE CRÉDITO', '08': 'NOTA DE DÉBITO',
+  '09': 'GUÍA', 'R01': 'RECIBO POR HONORARIOS' };
+
+/**
+ * F001-00018178, E001 179, FE010001380 → «F001-18178». Vacío si no trae una.
+ * En «PDF-DOC-E001-37320547523939» SUNAT pega el RUC del emisor al número:
+ * se le quitan esos 11 dígitos del final.
+ */
 function serieEnNombre_(nombre) {
   var t = String(nombre || '').toUpperCase().replace(/\.[A-Z0-9]{2,5}$/, '');
-  var m = /(?:^|[^A-Z0-9])([FBE][A-Z0-9]{3})\s*[-_ ]\s*0*(\d{1,8})(?!\d)/.exec(t);
+  var m = /(?:^|[^A-Z0-9])([FBE][A-Z0-9]{3})(\s*[-_ ]?\s*)(\d{1,19})(?!\d)/.exec(t);
   if (!m || !/\d/.test(m[1])) return '';
-  return m[1] + '-' + m[2];
+  // Sin guion, solo si la serie tiene forma de SUNAT (F001, FE01): así un
+  // RUT extranjero como B88442140 no pasa por factura.
+  if (!/[-_ ]/.test(m[2]) && !/^[FBE][A-Z]?0\d{1,2}$/.test(m[1])) return '';
+  var num = m[3];
+  if (num.length > 11 && /[12]\d{10}$/.test(num)) num = num.slice(0, -11);
+  num = num.replace(/^0+(?=\d)/, '');
+  if (num.length > 8) return '';
+  return m[1] + '-' + num;
 }
 
 function esFactura_(a) {
