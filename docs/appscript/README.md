@@ -309,10 +309,11 @@ Busca a fondo:
   tipeo (FATURA, FACTRUA, FACUTAS).
 - **Por la carpeta**: un `scan001.pdf` dentro de una subcarpeta «Facturas»
   (o «Facutas») cuenta como factura.
-- **Fuera de la carpeta**: si una OC no tiene nada que parezca factura
-  adentro, busca archivos con su número de OC en la carpeta superior y en todo
-  el Drive. Esos quedan marcados «(confirmar)», porque el número de OC puede
-  repetirse entre empresas.
+- **Fuera de la carpeta** (apagado por omisión, `BUSCAR_FUERA`): si una OC
+  no tiene nada que parezca factura adentro, busca archivos con su número de
+  OC en la carpeta superior y en todo el Drive. Esos quedan marcados
+  «(confirmar)», porque el número de OC puede repetirse entre empresas. En la
+  primera corrida aportó poco y hace la revisión más lenta.
 
 ### Cómo se usa
 

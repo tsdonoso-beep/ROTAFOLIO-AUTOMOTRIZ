@@ -39,7 +39,7 @@ var ORIGEN_ID = '1tsu4HEA_o_yWdvvJCF5zhlrW_ffzMXiqtzMiRzMlxCY';
 var ORIGEN_PESTANA = '3. Registro Compras Grupo';
 var EMPRESAS = ['INROPRIN'];     // vacío [] = todas
 var ANIOS = [2026];              // vacío [] = todos
-var BUSCAR_FUERA = true;         // si no hay factura adentro, buscar afuera
+var BUSCAR_FUERA = false;        // true = si no hay factura adentro, buscarla afuera (lento; en la 1.ª corrida aportó poco)
 var MINUTOS_POR_TANDA = 4.5;     // Apps Script corta a los 6
 
 var CAB_CARPETAS = ['ID carpeta', 'Enlace carpeta', 'OC', 'RUC', 'Proveedor',
