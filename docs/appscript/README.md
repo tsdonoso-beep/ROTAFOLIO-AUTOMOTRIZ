@@ -326,6 +326,28 @@ Busca a fondo:
    avance solo por tandas de ~5 minutos (Apps Script corta a los 6). Se
    detiene al terminar.
 
+## Lectura de facturas (segundo paso de la captura)
+
+`LecturaFacturas.gs` va **en el mismo proyecto** que `CapturaCarpetasOC.gs`
+(usa sus funciones y su pestaña ARCHIVOS). Abre los archivos que parecen
+factura pero no traen el número en el nombre («FACTURA OC 0115-2026.pdf») y,
+en las carpetas sin factura, hasta 5 archivos «OTRO» por si alguno lo es.
+Anota en una pestaña nueva, **LECTURA**, lo que dice el documento: RUC del
+emisor, tipo, serie-número, fecha, total y la OC si aparece escrita.
+
+Lee con la conversión de Drive (la misma lectura OCR que hace Drive con PDF e
+imágenes): hace una copia temporal como documento de Google en la carpeta
+`_lectura_facturas_temporal`, saca el texto y la borra. El original no se
+toca.
+
+### Cómo se usa
+
+1. En el proyecto de la captura: **+ · Script** → `LecturaFacturas` → pega
+   el archivo → guarda.
+2. **Servicios (+) · Drive API · Agregar.**
+3. Recarga la hoja → menú **Leer facturas** → **1. Preparar lista de
+   facturas a leer** → **Leer solo cada 10 minutos**.
+
 ## Si algo falla
 
 **«La hoja no trae estas columnas…»** — cambiaron los títulos en la fuente. El
