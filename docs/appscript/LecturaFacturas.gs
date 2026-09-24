@@ -201,8 +201,7 @@ function leerArchivo_(id, temporal) {
           { convert: true, ocr: true, ocrLanguage: 'es', supportsAllDrives: true })
       : Drive.Files.copy({ name: 'lectura ' + id, mimeType: 'application/vnd.google-apps.document', parents: [temporal] }, id,
           { ocrLanguage: 'es', supportsAllDrives: true });
-    var texto = DocumentApp.openById(copia.id).getBody().getText();
-    return { texto: texto };
+    return { texto: textoDeDocumento_(copia.id) };
   } catch (e) {
     return { error: String(e.message || e).slice(0, 200) };
   } finally {
@@ -211,6 +210,28 @@ function leerArchivo_(id, temporal) {
         try { DriveApp.getFileById(copia.id).setTrashed(true); } catch (e2) {}
       }
     }
+  }
+}
+
+/**
+ * El texto de la copia. Primero con DocumentApp; si Google no dio el permiso
+ * de Documentos, se intenta exportar como texto con Drive (que ya tiene
+ * permiso). Si ninguno sirve, sale el error de permiso original.
+ */
+function textoDeDocumento_(idDoc) {
+  try {
+    return DocumentApp.openById(idDoc).getBody().getText();
+  } catch (e) {
+    if (!/permiso|permission|autoriza|authoriz/i.test(String(e.message || e))) throw e;
+    try {
+      var r = Drive.Files.export(idDoc, 'text/plain', { alt: 'media' });
+      if (typeof r === 'string' && r) return r;
+      if (r && typeof r.getDataAsString === 'function') return r.getDataAsString();
+      if (r && r.length) return Utilities.newBlob(r).getDataAsString();
+    } catch (e2) {
+      // no hubo segundo camino: vale el error de permiso de arriba
+    }
+    throw e;
   }
 }
 
