@@ -414,7 +414,11 @@ async function consultarUnTipo(page: Page, tipo: string): Promise<FilaBajada[]> 
   let res: Frame = marco;
   let descargas = 0;
   let usandoRowCount = false;
-  for (let i = 0; i < 10; i++) {
+  // 30 intentos × 2s = 60s. Un mes chico arma la grilla casi al toque, pero
+  // uno cargado (julio: FE Recibidas tardó 51s en aparecer) puede tardar más
+  // que los 20s de antes —y con eso caía al respaldo viejo (tope ~25) aunque
+  // la grilla sí existiera, solo que tarde—.
+  for (let i = 0; i < 30; i++) {
     for (const f of page.frames()) {
       const rc = await rowCountDeGrid(f);
       if (rc != null) { descargas = rc; res = f; usandoRowCount = true; break; }
@@ -502,6 +506,13 @@ async function consultarUnTipo(page: Page, tipo: string): Promise<FilaBajada[]> 
         try { pdfArchivo = await bajar(page, () => descargarPorIndice(res, i, "descargarComprobantePdf")); } catch (e2) { console.log(`  · PDF fila ${i + 1} [${tipo}]: ${e2 instanceof Error ? e2.message : e2}`); }
       }
       salida.push({ xml: xmlArchivo, pdf: pdfArchivo });
+
+      // Espaciar las solicitudes: un mes cargado (400+ comprobantes) pidiendo
+      // XML+PDF fila tras fila sin pausa parece ser lo que dispara el
+      // "User rate limit exceeded" de SUNAT a mitad de descarga (visto real
+      // en julio, cortado en la fila 401 de 410). Una pausa corta baja el
+      // ritmo sin alargar demasiado la corrida.
+      await page.waitForTimeout(400);
     }
   } else {
     // Respaldo: el clic por enlace de antes, para cuando no hubo grilla que leer.
