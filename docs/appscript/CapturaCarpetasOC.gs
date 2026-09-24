@@ -414,7 +414,9 @@ function detenerAutomatico_() {
 var CATEGORIAS = [
   { parece: 'NOTA DE CRÉDITO', frases: ['NOTA DE CREDITO', 'NOTA CREDITO'], palabras: ['NC'] },
   { parece: 'NOTA DE DÉBITO', frases: ['NOTA DE DEBITO', 'NOTA DEBITO'], palabras: ['ND'] },
-  { parece: 'FACTURA', frases: ['FACTURA ELECTRONICA'], palabras: ['FACTURA', 'FACTURAS', 'FACT', 'FAC', 'FACTU', 'FACTS', 'FT', 'FTS', 'FE'], parecidas: ['FACTURA', 'FACTURAS', 'FACTURACION'] },
+  { parece: 'FACTURA', frases: ['FACTURA ELECTRONICA'], palabras: ['FACTURA', 'FACTURAS', 'FACT', 'FAC', 'FACTU', 'FACTS', 'FE'], parecidas: ['FACTURA', 'FACTURAS', 'FACTURACION'] },
+  // «FT_…» resultó ser ficha técnica, no factura (así las nombran los proveedores).
+  { parece: 'FICHA TÉCNICA', frases: ['FICHA TECNICA', 'FICHAS TECNICAS'], palabras: ['FT', 'FTS'] },
   { parece: 'BOLETA', frases: [], palabras: ['BOLETA', 'BOLETAS', 'BV'], parecidas: ['BOLETA'] },
   { parece: 'RECIBO POR HONORARIOS', frases: ['RECIBO POR HONORARIOS', 'RECIBO HONORARIOS'], palabras: ['RH', 'RHE', 'HONORARIOS'], parecidas: ['HONORARIOS'] },
   { parece: 'COMPROBANTE (revisar)', frases: [], palabras: ['COMPROBANTE', 'COMPROBANTES', 'CPE'], parecidas: ['COMPROBANTE'] },
@@ -448,6 +450,7 @@ function clasificar_(nombre, ubicacion, mime) {
   var sunat = TIPO_SUNAT[(/(?:^|\D)[12]\d{10}[-_ ](01|03|07|08|09|R01)[-_ ]/.exec(String(nombre).toUpperCase()) || [])[1]];
   if (!parece && sunat) { parece = sunat; pistas.unshift({ parece: sunat, palabra: 'tipo SUNAT en el nombre' }); }
   if (!parece && pistas.length) parece = pistas[0].parece;
+  if (parece === 'FICHA TÉCNICA' && serie && !/^EG/.test(serie)) parece = 'FACTURA'; // «FT F001-123» sí es factura
   if (!parece && serie) {
     parece = /^F/.test(serie) ? 'FACTURA' : /^B/.test(serie) ? 'BOLETA' : 'FACTURA o RH (serie E)';
     pistas.push({ parece: parece, palabra: serie });

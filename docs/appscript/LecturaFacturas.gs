@@ -319,7 +319,8 @@ function serieDelDocumento_(T) {
   while ((m = re.exec(T))) {
     var serie = m[1];
     if (!/\d/.test(serie) || /^EG/.test(serie)) continue;
-    return serie + '-' + m[2];
+    // El OCR confunde la O con el cero dentro de la serie: FO01 → F001.
+    return serie[0] + serie.slice(1).replace(/O/g, '0') + '-' + m[2];
   }
   return '';
 }
