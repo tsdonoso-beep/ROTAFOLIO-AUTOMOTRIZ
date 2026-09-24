@@ -41,7 +41,35 @@ function menuLecturaFacturas_() {
     .addSeparator()
     .addItem('Leer solo cada 10 minutos', 'activarLecturaAutomatica')
     .addItem('Detener lectura automática', 'detenerLecturaAutomatica')
+    .addSeparator()
+    .addItem('Reintentar las que no se pudieron leer', 'reintentarLectura')
     .addToUi();
+}
+
+/**
+ * Para correr UNA vez desde el editor de Apps Script (elegirla arriba y
+ * «Ejecutar»): hace que Google vuelva a pedir todos los permisos. En la
+ * pantalla de permisos hay que marcar TODAS las casillas —en especial
+ * «Documentos de Google»—, o la lectura dice «No tienes permiso para llamar…».
+ */
+function autorizarLectura() {
+  DriveApp.getRootFolder().getName();
+  DocumentApp.getActiveDocument(); // solo para que Google incluya el permiso de Documentos
+  Logger.log('Permisos listos. Vuelve a la hoja y usa «Reintentar las que no se pudieron leer».');
+}
+
+/** Vuelve a PENDIENTE lo que quedó «NO SE PUDO LEER», para leerlo otra vez. */
+function reintentarLectura() {
+  var hojaL = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('LECTURA');
+  if (!hojaL || hojaL.getLastRow() < 2) return;
+  var rango = hojaL.getRange(2, COL_ESTADO_LECTURA, hojaL.getLastRow() - 1, 1);
+  var n = 0;
+  rango.setValues(rango.getValues().map(function (f) {
+    if (f[0] === 'NO SE PUDO LEER') { n++; return ['PENDIENTE']; }
+    return f;
+  }));
+  SpreadsheetApp.getActiveSpreadsheet().toast(n + ' archivos vuelven a PENDIENTE. Sigue con «Leer solo cada 10 minutos».',
+    'Leer facturas', 10);
 }
 
 // ── 1. Qué leer, sacado de ARCHIVOS ──
@@ -134,6 +162,13 @@ function leerSiguienteTanda() {
       if (lista[k][COL_ESTADO_LECTURA - 1] !== 'PENDIENTE') continue;
       if ((Date.now() - inicio) / 60000 > MINUTOS_POR_TANDA_LECTURA) break;
       var res = leerArchivo_(String(lista[k][0]), temporal);
+      // Sin permiso no es culpa del archivo: fallarían TODOS. Se para aquí,
+      // sin marcar la fila, y se avisa qué hacer.
+      if (res.error && /permiso|permission|autoriza|authoriz/i.test(res.error)) {
+        detenerLecturaAutomatica_();
+        throw new Error('Falta un permiso de Google (' + res.error.slice(0, 120) + '). En Apps Script, ' +
+          'elige la función «autorizarLectura», dale Ejecutar y marca TODAS las casillas de permisos.');
+      }
       var d = res.texto ? leerDatosDeFactura_(res.texto) : {};
       var estado = res.error ? 'NO SE PUDO LEER' : (!res.texto ? 'SIN TEXTO' : (d.serie ? 'LEÍDO' : 'LEÍDO SIN NÚMERO'));
       if (d.serie) leidas++;
