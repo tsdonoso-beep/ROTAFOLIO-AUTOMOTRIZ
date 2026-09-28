@@ -279,7 +279,59 @@ pasar el diario a la cuenta nueva es agregarle dos líneas de `env`.
 
 ---
 
-## 6. Lo que sigue sin resolver
+## 6. La trampa de «ÚLTIMOS ACCESOS»
+
+Vale documentarlo porque cuesta un run entero y el síntoma miente.
+
+El 28/09/2026 una corrida de agosto+setiembre con los cuatro tipos de boleta
+terminó **en verde sin haber bajado nada**. Las ocho consultas fallaron igual:
+
+```
+· evidencia: menu-boleta-de-venta-electronica
+⚠ no encontré «Consultar Boleta de Venta y Nota» en el menú de este acceso.
+```
+
+Pero el volcado del menú, en esa misma corrida, la mostraba:
+
+```
+– ÚLTIMOS ACCESOS
+– Consultar Boleta de Venta y Nota      ← ahí está
+...
+– Boleta de Venta Electrónica           ← y el submenú de acá no se desplegó
+```
+
+**Qué pasaba.** Tras entrar una vez a esa opción, SOL la agrega a su panel
+«ÚLTIMOS ACCESOS», arriba de la página. Ese panel está plegado: la entrada
+existe en el documento pero no se puede clicar. Y como aparece ANTES en el
+documento que la del árbol del menú, el `.first()` del buscador de clics caía
+siempre en ella; Playwright esperaba a que se volviera clicable, no pasaba, y
+a los 20 s se rendía — **sin haber probado nunca la del árbol, que sí
+funciona**.
+
+Tres cosas lo hacen especialmente feo:
+
+1. **El síntoma miente**: dice «no encontré el texto» y el texto está ahí.
+2. **Aparece solo después del primer uso exitoso.** El run que funciona es el
+   que rompe el siguiente. Por eso la simulación de un solo tipo pasó y la
+   corrida grande, al día siguiente, falló entera.
+3. **Terminaba en verde.** Desde la lista de Actions era idéntico a «no había
+   comprobantes en ese rango».
+
+**Los tres arreglos**, que van juntos:
+
+- `clicEnAlgunMarco` prueba **todas** las coincidencias de cada marco y se
+  queda con la primera que se pueda clicar, en vez de apostar a la primera del
+  documento.
+- `marcoConsulta` devuelve `null` cuando el formulario no aparece, en vez de
+  caer al marco con más campos de texto. Ese respaldo parecía prudente y era lo
+  contrario: devolvía el marco del MENÚ, y después cada escritura de fecha
+  agotaba sus 30 s contra un campo inexistente — minuto y medio por consulta
+  diciendo «no se pudo escribir la fecha» en lugar de «el módulo no abrió».
+- Una corrida donde **ninguna** consulta llega a la tabla de resultados ahora
+  **falla** (rojo en Actions). Se distingue `null` («no se pudo consultar») de
+  `[]` («se consultó y no había nada»), que es un resultado legítimo.
+
+## 7. Lo que sigue sin resolver
 
 - **Las boletas que el técnico pidió a su nombre siguen sin aparecer.** `BVE
   Recibidas` trae las boletas donde el **RUC de la empresa** es el adquiriente
