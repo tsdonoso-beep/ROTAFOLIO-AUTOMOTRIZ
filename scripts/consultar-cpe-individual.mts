@@ -299,6 +299,16 @@ function etiquetaTipoConsulta(tipoComprobante: string): string {
  * de SUNAT y se guarda en la base; acá la lista sale de la base (el SIRE ya
  * la tiene completa) y se usa para preguntarle a SUNAT, comprobante por
  * comprobante, si esta otra pantalla lo puede confirmar.
+ *
+ * Solo factura, NC y ND (01/07/08): son los únicos tipos que esta pantalla
+ * ofrece en «Tipo de Consulta» (`etiquetaTipoConsulta`). El run #5
+ * (28/09/2026) mostró por qué hace falta filtrar, no solo mapear: los tres
+ * primeros pendientes de setiembre por fecha resultaron ser tipo «53» —diez
+ * en total ese mes—, con `proveedor_ruc = "0"` y `proveedor_nombre` igual al
+ * nombre de la propia empresa: basura del SIRE, no facturas de un proveedor
+ * de verdad. Sin este filtro, esas filas se cuelan primero (van ordenadas
+ * por fecha) y la consulta las manda con un RUC que nunca va a encontrar
+ * nada.
  */
 async function pendientes(periodo: string): Promise<Pendiente[]> {
   const url = process.env.SUPABASE_URL || process.env.PROJECT_URL;
@@ -317,6 +327,8 @@ async function pendientes(periodo: string): Promise<Pendiente[]> {
     .eq("empresa_ruc", RUC)
     .eq("periodo", periodo)
     .not("serie", "ilike", "E%")
+    .in("tipo_comprobante", ["01", "07", "08"])
+    .neq("proveedor_ruc", "0")
     .order("fecha_emision");
   if (e1) { console.error("✗ No se pudo leer comprobantes_sunat:", e1.message); process.exit(1); }
 
