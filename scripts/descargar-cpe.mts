@@ -422,11 +422,30 @@ async function elegirTipo(marco: Frame, consulta: Consulta): Promise<boolean> {
     return false;
   }
 
-  // Los códigos de boleta todavía no están en el catálogo. Éste es el momento
-  // en que se pueden ver: se imprime para poder anotarlos.
+  // Para un tipo SIN código conocido queda un agujero que hay que tapar aparte.
+  //
+  // El run del 28/09/2026 mostró que en este portal la opción casi nunca se
+  // encuentra en la lista, así que lo normal es entrar por el respaldo: teclear
+  // la etiqueta y pulsar Enter. Y entonces la comprobación de arriba —campo
+  // visible contra etiqueta— se vuelve VACÍA: acabamos de escribir esa etiqueta
+  // ahí nosotros, así que siempre coincide. Una verificación que no verifica.
+  //
+  // Lo que sí dice la verdad es el campo oculto. No sabemos qué código le toca
+  // a este tipo, pero sí sabemos los de los demás: si quedó puesto el de OTRO,
+  // el combobox no resolvió lo que tecleamos y estaríamos por bajar ese otro
+  // tipo con el nombre de este.
   if (!consulta.codigo) {
     const oculto = await marco.locator('input[name="tipoConsulta"]').first().inputValue().catch(() => "");
-    if (oculto) console.log(`  · «${consulta.nombre}» → tipoConsulta=${oculto}  ← anotá este código en lib/sunat/cpe-consulta.ts`);
+    const ajeno = CATALOGO.find(c => c.codigo !== null && c.codigo === oculto);
+    if (ajeno) {
+      console.log(`  ✗ pedí «${consulta.nombre}» y el formulario quedó con tipoConsulta=${oculto}, que es el de «${ajeno.nombre}». No se consulta.`);
+      return false;
+    }
+    if (!oculto) {
+      console.log(`  ✗ pedí «${consulta.nombre}» y el formulario quedó sin tipo puesto. No se consulta.`);
+      return false;
+    }
+    console.log(`  · «${consulta.nombre}» → tipoConsulta=${oculto}  ← anotá este código en lib/sunat/cpe-consulta.ts`);
   }
   return true;
 }
