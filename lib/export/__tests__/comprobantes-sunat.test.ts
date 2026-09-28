@@ -2,7 +2,7 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
   filasComprobantesSunat, nombreDeTipo, fechaCorta, nombreArchivoSunat,
-  mapaPadronPorRuc, CABECERAS_SUNAT, type ComprobanteHistorico,
+  mapaPadronPorRuc, CABECERAS_SUNAT, TIPOS_SUNAT, type ComprobanteHistorico,
 } from "../comprobantes-sunat.ts";
 import { aCsv } from "../csv.ts";
 
@@ -142,7 +142,7 @@ describe("las columnas de impuestos", () => {
 
   test("siguen calzando las celdas con los títulos", () => {
     const f = filasComprobantesSunat([c()]);
-    assert.equal(f[0].length, 25);
+    assert.equal(f[0].length, 29);
     assert.equal(f[1].length, f[0].length);
     assert.equal(f[0][9], "Base imponible");
     assert.equal(f[0][10], "IGV");
@@ -155,7 +155,7 @@ describe("las columnas de impuestos", () => {
 describe("la condición del RUC, al final de la hoja", () => {
   test("un proveedor sin consultar todavía deja esas columnas vacías, no en 'No'", () => {
     const f = filasComprobantesSunat([c()])[1];
-    assert.deepEqual(f.slice(21), ["", "", "", ""]);
+    assert.deepEqual(f.slice(21, 25), ["", "", "", ""]);
   });
 
   test("un proveedor consultado muestra su condición real", () => {
@@ -164,13 +164,41 @@ describe("la condición del RUC, al final de la hoja", () => {
       buen_contribuyente: true, agente_retencion: false, agente_percepcion: false,
     }]);
     const f = filasComprobantesSunat([c()], padron)[1];
-    assert.deepEqual(f.slice(21), ["HABIDO", "Sí", "No", "No"]);
+    assert.deepEqual(f.slice(21, 25), ["HABIDO", "Sí", "No", "No"]);
   });
 
   test("un comprobante sin RUC de proveedor no revienta el cruce", () => {
     const padron = mapaPadronPorRuc([{ ruc: "20100055237", condicion: "HABIDO", buen_contribuyente: true }]);
     const f = filasComprobantesSunat([c({ proveedorRuc: null })], padron)[1];
-    assert.deepEqual(f.slice(21), ["", "", "", ""]);
+    assert.deepEqual(f.slice(21, 25), ["", "", "", ""]);
+  });
+});
+
+// La OC en cuya carpeta de Drive está la factura, y su centro de costo.
+describe("la OC y el centro de costo, al final de la hoja", () => {
+  test("sin vínculo con una OC, las cuatro columnas quedan vacías", () => {
+    const f = filasComprobantesSunat([c()])[1];
+    assert.deepEqual(f.slice(25), ["", "", "", ""]);
+  });
+
+  test("con vínculo muestra la OC, el centro de costo, el código CONCAR y las alertas", () => {
+    const f = filasComprobantesSunat([c({
+      ocCarpeta: "0115-2026", centroCostoCg: "PROY-2025-079-5 PRONIED - TALLERES ESPECIALIZADO",
+      codigoConcar: "30016", alertasOc: "factura anterior a la OC",
+    })])[1];
+    assert.deepEqual(f.slice(25), [
+      "0115-2026", "PROY-2025-079-5 PRONIED - TALLERES ESPECIALIZADO", "30016", "factura anterior a la OC",
+    ]);
+  });
+
+  test("un código CONCAR sin confirmar llega vacío y la hoja no lo inventa", () => {
+    const f = filasComprobantesSunat([c({ ocCarpeta: "0024-2026", centroCostoCg: "ÁREA ADMINISTRATIVA", codigoConcar: null })])[1];
+    assert.equal(f[27], "");
+  });
+
+  test("cabeceras y tipos siguen del mismo largo", () => {
+    assert.equal(CABECERAS_SUNAT.length, TIPOS_SUNAT.length);
+    assert.deepEqual(CABECERAS_SUNAT.slice(25), ["OC (carpeta)", "Centro de costo (CG)", "Código CONCAR", "Revisar vínculo OC"]);
   });
 });
 

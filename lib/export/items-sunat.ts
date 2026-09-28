@@ -47,6 +47,12 @@ export interface FilaDetalleCpe {
   detraccionCuentaBanco: string | null;
   /** El código del bien/servicio detraído, catálogo 54 de SUNAT. */
   detraccionCodigoBienServicio: string | null;
+  /** La OC en cuya carpeta de Drive está la factura (varias, con « / »). */
+  ocCarpeta?: string | null;
+  /** El centro de costo de esa OC en la base de Control de Gestión. */
+  centroCostoCg?: string | null;
+  /** El código de CONCAR, solo si la equivalencia está confirmada. */
+  codigoConcar?: string | null;
 }
 
 // El orden importa: lo que se busca primero —de qué comprobante es, qué se
@@ -60,6 +66,8 @@ export const CABECERAS_ITEMS = [
   "% Detracción", "Detracción", "Cuenta detracción", "Código bien/servicio detracción",
   "Línea", "Descripción", "Cantidad", "Unidad", "Precio unitario", "Importe",
   "Total del comprobante", "PDF", "XML",
+  // Al final, para no correr lo que alguien ya tenga armado encima.
+  "OC (carpeta)", "Centro de costo (CG)", "Código CONCAR",
 ];
 
 export const TIPOS_ITEMS: TipoColumna[] = [
@@ -91,6 +99,9 @@ export const TIPOS_ITEMS: TipoColumna[] = [
   "numero", // Total del comprobante
   "texto",  // PDF
   "texto",  // XML
+  "texto",  // OC (carpeta)
+  "texto",  // Centro de costo (CG)
+  "texto",  // Código CONCAR
 ];
 
 /** Lo mínimo de un `SupabaseClient` que hace falta para paginar un RPC. */
@@ -167,6 +178,9 @@ export function filaDetalleDesdeRpc(d: Record<string, unknown>): FilaDetalleCpe 
     detraccionMonto: aNum(d.detraccion_monto),
     detraccionCuentaBanco: (d.detraccion_cuenta_banco as string) ?? null,
     detraccionCodigoBienServicio: (d.detraccion_codigo_bien_servicio as string) ?? null,
+    ocCarpeta: (d.oc_carpeta as string) ?? null,
+    centroCostoCg: (d.centro_costo_cg as string) ?? null,
+    codigoConcar: (d.codigo_concar as string) ?? null,
   };
 }
 
@@ -210,6 +224,9 @@ export function filasItemsSunat(filas: FilaDetalleCpe[]): string[][] {
       num(f.totalComprobante, 2),
       f.enlacePdf ?? "",
       f.enlaceXml ?? "",
+      f.ocCarpeta ?? "",
+      f.centroCostoCg ?? "",
+      f.codigoConcar ?? "",
     ]),
   ];
 }

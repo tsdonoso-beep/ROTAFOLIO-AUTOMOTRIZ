@@ -348,6 +348,29 @@ toca.
 3. Recarga la hoja → menú **Leer facturas** → **1. Preparar lista de
    facturas a leer** → **Leer solo cada 10 minutos**.
 
+## Subir la captura a la base (tercer paso)
+
+`SubirCapturaOC.gs` va en el mismo proyecto que los dos anteriores. Manda a
+la base de la aplicación la pestaña ARCHIVOS (con lo leído en LECTURA) y el
+centro de costo de cada OC según Control de Gestión (tablas `oc_archivo` y
+`oc_base_cg`, migración `039_la_oc_de_cada_comprobante.sql`). Cada subida
+reemplaza a la anterior.
+
+El cruce con SUNAT lo hace la base, en vivo, con `vinculos_oc()`: una factura
+que SUNAT reporta después de capturada se une sola. Las hojas COMPROBANTES
+SUNAT y DETALLE suman al final **OC (carpeta)**, **Centro de costo (CG)** y
+**Código CONCAR** (y COMPROBANTES SUNAT, **Revisar vínculo OC**). El código
+CONCAR sale **solo si la equivalencia está confirmada** en
+`equivalencia_centro_costo`; si hay duda, queda en blanco.
+
+### Cómo se usa
+
+1. **+ · Script** → `SubirCapturaOC` → pega el archivo → guarda.
+2. **Engranaje · Propiedades del script**: `SUPABASE_URL`,
+   `SUPABASE_ANON_KEY`, `ROBOT_CORREO`, `ROBOT_CLAVE` (los mismos de
+   `OrdenarCPE.gs`).
+3. Recarga la hoja → menú **Base de datos** → **Subir captura a la base**.
+
 ## Si algo falla
 
 **«La hoja no trae estas columnas…»** — cambiaron los títulos en la fuente. El

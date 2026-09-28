@@ -37,6 +37,14 @@ export interface ComprobanteHistorico {
   rendidoPor: string | null;
   /** Si el comprobante cambió desde que lo vimos por primera vez. */
   cambios: number;
+  /** La OC en cuya carpeta de Drive está la factura (varias, con « / »). */
+  ocCarpeta?: string | null;
+  /** El centro de costo de esa OC en la base de Control de Gestión. */
+  centroCostoCg?: string | null;
+  /** El código de CONCAR, solo si la equivalencia está confirmada. */
+  codigoConcar?: string | null;
+  /** Lo que conviene revisar del vínculo con la OC. */
+  alertasOc?: string | null;
 }
 
 /**
@@ -76,7 +84,8 @@ export function mapaPadronPorRuc(filas: Array<Record<string, unknown>>): Map<str
 // lo técnico al final. Cambiarlo después rompe lo que alguien haya armado
 // encima, así que se decide una vez. Las de la condición del RUC se
 // agregaron después: van al final, no intercaladas, para no correr las
-// columnas que alguien ya tenga referenciadas.
+// columnas que alguien ya tenga referenciadas. Lo mismo las de la OC (la
+// carpeta de Drive donde está la factura), que vienen de `vinculos_oc()`.
 export const CABECERAS_SUNAT = [
   "Período", "RUC proveedor", "Proveedor", "Tipo", "Serie", "Número",
   "Fecha de emisión", "Moneda", "Tipo de cambio",
@@ -84,6 +93,7 @@ export const CABECERAS_SUNAT = [
   "Estado", "Es nota de", "Corrige a", "Lo rindió", "Cambios detectados",
   "Visto por primera vez", "Visto por última vez", "CAR SUNAT",
   "Condición SUNAT", "Buen Contribuyente", "Agente de Retención", "Agente de Percepción",
+  "OC (carpeta)", "Centro de costo (CG)", "Código CONCAR", "Revisar vínculo OC",
 ];
 
 /**
@@ -131,6 +141,10 @@ export const TIPOS_SUNAT: TipoColumna[] = [
   "texto",  // Buen Contribuyente
   "texto",  // Agente de Retención
   "texto",  // Agente de Percepción
+  "texto",  // OC (carpeta)
+  "texto",  // Centro de costo (CG)
+  "texto",  // Código CONCAR
+  "texto",  // Revisar vínculo OC
 ];
 
 const NOMBRE_TIPO: Record<string, string> = {
@@ -204,6 +218,11 @@ export function filasComprobantesSunat(
       padron ? siNo(padron.buenContribuyente) : "",
       padron ? siNo(padron.agenteRetencion) : "",
       padron ? siNo(padron.agentePercepcion) : "",
+      c.ocCarpeta ?? "",
+      c.centroCostoCg ?? "",
+      // En blanco si la equivalencia no está confirmada: mejor vacío que dudoso.
+      c.codigoConcar ?? "",
+      c.alertasOc ?? "",
       ];
     }),
   ];

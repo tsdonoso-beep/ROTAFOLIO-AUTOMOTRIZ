@@ -1,7 +1,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
-  filasItemsSunat, CABECERAS_ITEMS, nombreArchivoItems, detalleCpeCompleto, type FilaDetalleCpe,
+  filasItemsSunat, filaDetalleDesdeRpc, CABECERAS_ITEMS, TIPOS_ITEMS, nombreArchivoItems, detalleCpeCompleto, type FilaDetalleCpe,
 } from "../items-sunat.ts";
 
 function fila(over: Partial<FilaDetalleCpe> = {}): FilaDetalleCpe {
@@ -56,6 +56,24 @@ describe("filasItemsSunat", () => {
     const r = filas[1];
     assert.equal(r[26], "https://drive.google.com/file/d/pdf/view");
     assert.equal(r[27], "https://drive.google.com/file/d/xml/view");
+  });
+
+  test("la OC de la carpeta, el centro de costo y el código CONCAR van después del XML", () => {
+    const r = filasItemsSunat([fila({ ocCarpeta: "0115-2026", centroCostoCg: "PROY-2025-079-5", codigoConcar: "30016" })])[1];
+    assert.deepEqual(r.slice(28), ["0115-2026", "PROY-2025-079-5", "30016"]);
+    assert.equal(r.length, CABECERAS_ITEMS.length);
+    assert.equal(CABECERAS_ITEMS.length, TIPOS_ITEMS.length);
+  });
+
+  test("sin OC vinculada, esas tres columnas quedan vacías", () => {
+    assert.deepEqual(filasItemsSunat([fila()])[1].slice(28), ["", "", ""]);
+  });
+
+  test("la fila cruda de detalle_cpe trae la OC en snake_case", () => {
+    const f = filaDetalleDesdeRpc({ oc_carpeta: "0115-2026", centro_costo_cg: "PROY-2025-079-5", codigo_concar: null });
+    assert.equal(f.ocCarpeta, "0115-2026");
+    assert.equal(f.centroCostoCg, "PROY-2025-079-5");
+    assert.equal(f.codigoConcar, null);
   });
 
   test("sin enlace archivado queda vacío, no como texto 'null'", () => {

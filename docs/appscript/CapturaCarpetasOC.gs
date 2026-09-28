@@ -67,6 +67,7 @@ function onOpen() {
   // Apps Script admite un solo onOpen por proyecto: si LecturaFacturas.gs
   // está en el mismo proyecto, su menú se crea desde aquí.
   if (typeof menuLecturaFacturas_ === 'function') menuLecturaFacturas_();
+  if (typeof menuSubirCaptura_ === 'function') menuSubirCaptura_();
 }
 
 // ── 1. La lista de carpetas, sacada de la base ──
