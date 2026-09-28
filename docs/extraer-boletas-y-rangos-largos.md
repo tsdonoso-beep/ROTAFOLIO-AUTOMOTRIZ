@@ -40,52 +40,75 @@ agregarlas por simetría serían dos consultas condenadas a fallar.
 Las boletas no llevan código porque su pantalla usa un `<select>` de verdad: lo
 que se verifica ahí es el **texto de la opción elegida**, no un campo oculto.
 
-## Las dos pantallas no se parecen
+## 2. Las dos pantallas SÍ se parecen — y esto se creyó al revés
 
-Esto es lo que más sorprendió al mirar el portal. No es el mismo formulario con
-opciones nuevas: está armado distinto de arriba abajo.
+Vale la pena dejarlo escrito, porque el error costó código de más.
+
+Mirando las capturas del portal, las dos pantallas se ven distintas: la de
+boletas parece tener un `<select>` de HTML común donde la de facturas tiene un
+combobox, y su tabla de resultados parece una tabla simple donde la otra tiene
+la grilla dojox. De ahí se concluyó que estaban armadas distinto de arriba
+abajo, y se escribió un **motor aparte** para boletas.
+
+La radiografía del primer run (28/09/2026) lo desmintió:
+
+```
+▚ FRAME https://ww1.sunat.gob.pe/ol-ti-itconscpemypebve/consultar.do
+   inputs=36 selects=0
+     · input#criterio.fec_desde[name=fec_desde type=text]
+     · input#criterio.fec_hasta[name=fec_hasta type=text]
+     · input#criterio.tipoConsulta[name=- type=text]
+     · input#-[name=tipoConsulta type=hidden]
+```
+
+**Cero `<select>`**, y exactamente los mismos nombres de campo que la pantalla
+de facturas. Es la misma aplicación desplegada dos veces:
+`ol-ti-itconscpemype` y `ol-ti-itconscpemype`**`bve`**. El motor aparte sobraba
+entero y se borró — 169 líneas menos.
+
+Lo único que cambia de verdad:
 
 | | facturas y notas | boletas |
 |---|---|---|
 | menú | acceso directo, dos clics | el árbol entero, cinco clics |
-| campos de fecha | `fec_desde` / `fec_hasta` | «Fecha de Inicio» / «Fecha de Fin» (nombres desconocidos) |
-| Tipo de Consulta | combobox de jQuery (`#criterio.tipoConsulta` + campo oculto) | `<select>` de HTML |
-| resultados | grilla dojox, **virtualizada** | tabla HTML común |
-| descargar | `consultaFactura.descargar(i)` | clic en el enlace |
+| módulo | `ol-ti-itconscpemype` | `ol-ti-itconscpemypebve` |
+| etiquetas | FE / NC / ND | BVE / NC-BVE / ND-BVE |
+| formulario | **idéntico** | **idéntico** |
 
-La última fila es la que más importa. El arreglo que costó media docena de
-commits —bajar por índice de fila porque la grilla dojox solo pinta ~25 filas y
-recicla el DOM al scrollear— **no hace falta acá**: una tabla HTML común trae
-todas las filas en el documento, así que contar los enlaces y clicarlos (el
-camino viejo, el que en la grilla se quedaba en 25 de 400) es exactamente lo
-correcto.
+Y el camino del menú ya lo dice el catálogo, así que el código no necesita
+preguntarse en cuál de las dos está.
 
-Por eso en el script son **dos motores separados** (`consultarFacturas` y
-`consultarBoletas`), no una función con `if`s: no comparten casi nada, y
-enredarlos pondría en riesgo el camino de facturas, que ya está probado contra
-datos reales.
-
-### Lo único que sigue sin saberse
-
-**Cómo se llaman los campos de fecha de la pantalla de boletas.** El portal
-solo muestra las etiquetas; un atributo `name` no se ve en una captura. El
-script los busca en dos pasos y **dice en el registro cuál funcionó**:
-
-1. por la etiqueta de su fila (`tr` que contiene «Fecha de Inicio»), que es lo
-   que sí se ve y no cambia aunque SUNAT renombre el campo;
-2. por posición entre los campos de texto, que es como está armado ese
-   formulario de tres filas.
-
-Si ninguno lo encuentra, **abandona esa consulta**. Aceptar con el rango que
-estuviera puesto traería otro período y quedaría archivado como si fuera el
-pedido.
+**La moraleja para la próxima:** una captura muestra cómo se VE una pantalla,
+no cómo está construida. Para eso está la radiografía del modo depuración, y
+conviene correrla ANTES de escribir código que dependa de la estructura.
 
 ### El enlace dice «Factura» aunque sea una boleta
 
 En la tabla de boletas el enlace de descarga se rotula **«Descargar Factura
-(XML)»**. Es del portal, no un error de lectura. Por eso el script busca el
-enlace por **`(XML)`** y no por la palabra «Factura»: el rótulo puede corregirse
-cualquier día, pero lo que distingue el XML del PDF es el formato.
+(XML)»**. Es del portal, no un error de lectura.
+
+Por eso el script busca el enlace por **`(XML)`** y no por «Descargar Factura»,
+que era lo que buscaba antes. Ese cambio arregla de paso un problema viejo: con
+«Descargar Factura», el respaldo por enlaces **nunca veía las notas de crédito
+ni de débito** —se rotulan «Descargar NC (XML)»— y contaba cero aunque hubiera
+filas.
+
+### La sonda antes de bajar por índice
+
+El arreglo que costó media docena de commits —bajar llamando
+`consultaFactura.descargar(i)` en vez de clicar, porque la grilla dojox solo
+pinta ~25 filas y recicla el DOM— depende de que esa función exista en la
+página. Con un módulo más en juego, eso dejó de estar garantizado.
+
+Y falla de la peor manera: `descargar(i)` no devuelve nada, así que si el objeto
+no está **no pasa NADA** —ni error ni descarga— y el que espera el archivo
+agota sus 60 segundos. Con 400 filas son casi siete horas sin hacer nada antes
+de rendirse.
+
+Ahora se comprueba que la función exista **antes** de comprometerse con ese
+camino. Si no está, se baja clicando los enlaces; y si además la tabla está
+virtualizada, el registro dice cuántas filas quedarían fuera en vez de cortarse
+en silencio.
 
 ### La red de seguridad: no bajar un tipo por otro
 
@@ -94,17 +117,24 @@ queda con lo que tenía y la consulta baja **otra cosa**. El registro diría «B
 Recibidas: 112 comprobantes» y se archivarían facturas bajo el nombre de
 boletas. Nadie lo notaría.
 
-Por eso se **verifica antes de bajar**, en las dos pantallas:
+Por eso se **verifica antes de bajar**, y con qué se compara depende de lo que
+se sepa del tipo:
 
-- **facturas**: se compara el campo oculto `tipoConsulta` contra el código
-  conocido del tipo (`10`, `11`, `13`…) y se abandona si no coincide;
-- **boletas**: se lee el texto de la opción que quedó elegida en el `<select>` y
-  se compara con la pedida.
+- **con código conocido** (los de factura): contra el campo oculto
+  `tipoConsulta`, que es el dato que de verdad viaja a SUNAT. Se abandona si no
+  coincide con `10`, `11`, `13`…
+- **sin código** (los de boleta, todavía): contra lo que muestra el campo
+  visible. Es más flojo, pero atrapa el caso que importa — que el combobox se
+  haya quedado en otra cosa.
 
-La comparación de boletas es **exacta**, no «que contenga», y eso importa:
-`NC-BVE Emitidas` **contiene** `BVE Emitidas`. Con una comparación floja, pedir
-la nota de crédito podría elegir la boleta — justo el error que no se nota
-mirando el resultado.
+La comparación es **exacta**, no «que contenga», y eso importa: `NC-BVE
+Emitidas` **contiene** `BVE Emitidas`. Con una comparación floja, pedir la nota
+de crédito podría elegir la boleta — justo el error que no se nota mirando el
+resultado.
+
+La verificación **insiste** antes de rendirse: los campos se actualizan por un
+evento del combobox, no en el mismo tic del clic, y abandonar por medio segundo
+de desfase rompería consultas que iban bien.
 
 Es la diferencia entre un run que falla claro y un run que miente.
 
@@ -145,7 +175,7 @@ eso se ve igual en una consulta que en seis.
 
 ---
 
-## 2. Las credenciales: dos secretos nuevos, no reemplazar los viejos
+## 3. Las credenciales: dos secretos nuevos, no reemplazar los viejos
 
 El scraper busca primero `SUNAT_SOL_USUARIO` / `SUNAT_SOL_CLAVE` y **cae** a los
 del SIRE (`SUNAT_INROPRIN_USUARIO` / `SUNAT_INROPRIN_CLAVE`) si los primeros no
@@ -164,7 +194,7 @@ como antes** (y sin boletas, claro).
 
 ---
 
-## 3. El orden de las cosas
+## 4. El orden de las cosas
 
 > **El botón «Run workflow» solo aparece si el archivo está en la rama
 > principal.** Es una regla de GitHub para los workflows manuales. Mientras
@@ -177,20 +207,19 @@ Actions → **SUNAT extraer rango (hoja aparte)** → Run workflow, con
 `debug = true` (es lo que viene marcado). No baja nada. Entra, recorre el menú y
 deja en el registro:
 
-- los campos reales del formulario de boletas (`▚ FRAME …`, con el `name` de
-  cada uno) — que es lo que falta saber;
-- cuál de los dos caminos encontró cada fecha
-  (`· «Fecha de Inicio» = … (por la etiqueta de la fila)`);
-- las opciones del desplegable (`· opciones del desplegable nº 1: …`);
+- los campos reales del formulario (`▚ FRAME …`, con el `name` de cada uno);
+- las opciones que ofrece el «Tipo de Consulta» con este acceso;
+- el código que quedó puesto (`tipo(hidden)=…`);
 - cuántas filas ve en la tabla de resultados.
 
 Más las capturas y el HTML de cada paso como artefacto `capturas-sunat-rango`.
 
-### Paso 2 — ajustar si hizo falta
+### Paso 2 — anotar los códigos de boleta
 
-Si el registro muestra que las fechas se encontraron **por posición** y no por
-la etiqueta, conviene anotar en `cpe-consulta.ts` los `name` reales que salgan
-en la radiografía y buscarlos directo, que es más firme.
+Si el registro imprimió `· «BVE Recibidas» → tipoConsulta=XX`, conviene anotar
+ese código en `cpe-consulta.ts`. Con el código puesto, la verificación pasa a
+comparar contra el dato que de verdad viaja a SUNAT, en vez de contra el texto
+que muestra el campo visible.
 
 Si SUNAT renombra una entrada del menú, el input `menu_boletas` permite probar
 otro camino sin tocar código: los textos separados por `>`.
@@ -202,7 +231,7 @@ estaba» y la base actualiza en vez de duplicar.
 
 ---
 
-## 4. Qué NO cambió
+## 5. Qué NO cambió
 
 El workflow diario `descargar-cpe.yml` usa el mismo script, pero **no cambia de
 comportamiento**: sigue con sus seis tipos, su ventana de dos días y la cuenta
@@ -214,7 +243,7 @@ pasar el diario a la cuenta nueva es agregarle dos líneas de `env`.
 
 ---
 
-## 5. Lo que sigue sin resolver
+## 6. Lo que sigue sin resolver
 
 - **Las boletas que el técnico pidió a su nombre siguen sin aparecer.** `BVE
   Recibidas` trae las boletas donde el **RUC de la empresa** es el adquiriente
@@ -228,7 +257,12 @@ pasar el diario a la cuenta nueva es agregarle dos líneas de `env`.
   (§4 de `docs/scraper-cpe-hallazgos-tecnicos.md`). No se está leyendo todavía
   —habría que decidir antes si un anulado se guarda y se marca, o se excluye
   del detalle—, pero por primera vez el dato está a la vista.
-- **El PDF de las boletas.** La columna de descarga del PDF quedó cortada en la
-  captura, así que el script busca el enlace de forma flexible y, si no lo
-  encuentra, **baja solo el XML y lo dice**. El XML es el que trae el detalle de
-  ítems; el PDF es un extra.
+- **Los códigos de `tipoConsulta` de las boletas.** Los de facturas están
+  confirmados (`10`, `11`, `13`, `14`, `15`, `16`); los de boleta todavía no se
+  vieron, porque el primer run se cortó antes de elegir el tipo. Mientras sean
+  desconocidos, lo que se verifica es que el combobox quede mostrando la
+  etiqueta pedida: más flojo que comparar el código, pero atrapa el caso que
+  importa. El próximo run los imprime.
+- **La tabla de resultados de boletas.** Todavía no se llegó a verla desde el
+  script. Puede ser la grilla dojox o una tabla común; el código se adapta a
+  las dos y dice en el registro cuál encontró.
