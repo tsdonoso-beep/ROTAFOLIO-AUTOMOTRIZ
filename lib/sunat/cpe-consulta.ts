@@ -11,6 +11,27 @@
 // dentro del script, lo que servía mientras todos los tipos vivieran en la
 // MISMA pantalla. Las boletas no tienen por qué vivir ahí.
 
+/**
+ * En cuál de las dos pantallas de consulta vive un tipo.
+ *
+ * NO son la misma pantalla con opciones distintas: están armadas distinto de
+ * arriba abajo, y por eso esto existe como dato en vez de como un `if` suelto.
+ * Confirmado contra el portal real (capturas del 27/09/2026):
+ *
+ *                     | facturas                  | boletas
+ *   ------------------|---------------------------|---------------------------
+ *   campos de fecha   | fec_desde / fec_hasta      | «Fecha de Inicio» / «Fin»
+ *   Tipo de Consulta  | combobox jQuery            | <select> de HTML
+ *   resultados        | grilla dojox (virtualiza)  | tabla HTML común
+ *   descargar         | consultaFactura.descargar(i) | clic en el enlace
+ *
+ * La diferencia de los resultados es la que más pesa: la grilla dojox solo
+ * pinta ~25 filas y recicla el DOM al scrollear —de ahí el fix de bajar por
+ * índice—, mientras que una tabla común las trae todas, y ahí contar y clicar
+ * enlaces (el camino viejo) es lo correcto.
+ */
+export type Pantalla = "facturas" | "boletas";
+
 /** Un tipo de consulta del portal, con cómo llegar a él. */
 export interface Consulta {
   /** El nombre corto con el que se pide (lo que va en TIPOS_CONSULTA). */
@@ -22,15 +43,20 @@ export interface Consulta {
    * abrir la pantalla donde vive este tipo.
    */
   menu: string[];
+  /** Cuál de las dos pantallas, que se manejan distinto de punta a punta. */
+  pantalla: Pantalla;
   /**
    * El código interno de SUNAT (el `input[name=tipoConsulta]` oculto), cuando
    * está confirmado contra el portal real. Solo sirve para verificar en el
    * log que quedó puesto el tipo correcto; nunca se escribe a mano.
+   *
+   * Solo lo tiene la pantalla de facturas: la de boletas usa un `<select>` de
+   * verdad, donde lo que se verifica es el texto de la opción elegida.
    */
   codigo: string | null;
   /**
    * false mientras la etiqueta y el menú sean una suposición: el script avisa
-   * en el log y —si la opción no está en el combobox— salta el tipo en vez de
+   * en el log y —si la opción no está en la lista— salta el tipo en vez de
    * bajar otra cosa creyendo que es esta.
    */
   confirmado: boolean;
@@ -40,23 +66,19 @@ export interface Consulta {
 const MENU_FACTURAS_Y_NOTAS = ["Empresas", "Consulta de Facturas y Notas Electrónicas"];
 
 /**
- * La pantalla de boletas.
+ * La pantalla de boletas: «Consultar Boleta de Venta y Nota».
  *
- * SIN CONFIRMAR. El módulo que se usa hoy es «Consulta de Facturas y Notas
- * Electrónicas», que por diseño no lista boletas: sus seis tipos son FE, NC y
- * ND (códigos 10, 11, 13, 14, 15, 16 confirmados en
- * `docs/scraper-cpe-hallazgos-tecnicos.md`). Con el acceso ampliado de SOL las
- * boletas pueden aparecer de dos formas, y desde acá no se puede saber cuál:
- *
- *   a) como opciones nuevas del MISMO combobox —entonces basta que la
- *      etiqueta sea la correcta y este menú no se usa—, o
- *   b) en una entrada de menú aparte.
- *
- * Por eso el menú se deja sobreescribible por entorno (MENU_BOLETAS) y la
- * corrida en modo depuración imprime el menú real y las opciones reales del
- * combobox: con esa evidencia se corrige acá, en un solo sitio.
+ * Confirmado contra el portal real. No tiene acceso directo como la de
+ * facturas: hay que bajar el árbol entero del menú, que es por lo que el
+ * camino es una lista y no dos clics.
  */
-const MENU_BOLETAS = ["Empresas", "Consulta Integrada de Comprobantes de Pago"];
+const MENU_BOLETAS = [
+  "Empresas",
+  "Comprobantes de pago",
+  "SEE - SOL",
+  "Boleta de Venta Electrónica",
+  "Consultar Boleta de Venta y Nota",
+];
 
 /**
  * Los tipos que el scraper sabe pedir.
@@ -66,16 +88,23 @@ const MENU_BOLETAS = ["Empresas", "Consulta Integrada de Comprobantes de Pago"];
  * boletas al final, para que un run que las falle no arrastre a las demás.
  */
 export const CATALOGO: Consulta[] = [
-  { nombre: "FE Emitidas",  etiqueta: "FE Emitidas",  menu: MENU_FACTURAS_Y_NOTAS, codigo: "10", confirmado: true },
-  { nombre: "FE Recibidas", etiqueta: "FE Recibidas", menu: MENU_FACTURAS_Y_NOTAS, codigo: "11", confirmado: true },
-  { nombre: "NC Emitidas",  etiqueta: "NC Emitidas",  menu: MENU_FACTURAS_Y_NOTAS, codigo: "13", confirmado: true },
-  { nombre: "NC Recibidas", etiqueta: "NC Recibidas", menu: MENU_FACTURAS_Y_NOTAS, codigo: "14", confirmado: true },
-  { nombre: "ND Emitidas",  etiqueta: "ND Emitidas",  menu: MENU_FACTURAS_Y_NOTAS, codigo: "15", confirmado: true },
-  { nombre: "ND Recibidas", etiqueta: "ND Recibidas", menu: MENU_FACTURAS_Y_NOTAS, codigo: "16", confirmado: true },
-  // Las boletas, con el acceso ampliado. Etiqueta y menú SIN CONFIRMAR: ver
-  // el comentario de MENU_BOLETAS.
-  { nombre: "BE Emitidas",  etiqueta: "BE Emitidas",  menu: MENU_BOLETAS, codigo: null, confirmado: false },
-  { nombre: "BE Recibidas", etiqueta: "BE Recibidas", menu: MENU_BOLETAS, codigo: null, confirmado: false },
+  { nombre: "FE Emitidas",  etiqueta: "FE Emitidas",  menu: MENU_FACTURAS_Y_NOTAS, pantalla: "facturas", codigo: "10", confirmado: true },
+  { nombre: "FE Recibidas", etiqueta: "FE Recibidas", menu: MENU_FACTURAS_Y_NOTAS, pantalla: "facturas", codigo: "11", confirmado: true },
+  { nombre: "NC Emitidas",  etiqueta: "NC Emitidas",  menu: MENU_FACTURAS_Y_NOTAS, pantalla: "facturas", codigo: "13", confirmado: true },
+  { nombre: "NC Recibidas", etiqueta: "NC Recibidas", menu: MENU_FACTURAS_Y_NOTAS, pantalla: "facturas", codigo: "14", confirmado: true },
+  { nombre: "ND Emitidas",  etiqueta: "ND Emitidas",  menu: MENU_FACTURAS_Y_NOTAS, pantalla: "facturas", codigo: "15", confirmado: true },
+  { nombre: "ND Recibidas", etiqueta: "ND Recibidas", menu: MENU_FACTURAS_Y_NOTAS, pantalla: "facturas", codigo: "16", confirmado: true },
+
+  // Las boletas. Las cuatro etiquetas son las que ofrece el desplegable de
+  // verdad, leídas de la captura del portal: ni una más ni una menos.
+  //
+  // Que las notas de boleta solo existan EMITIDAS no es un olvido: el portal
+  // no ofrece «NC-BVE Recibidas» ni «ND-BVE Recibidas», y agregarlas «por
+  // simetría» sería inventar dos consultas que van a fallar siempre.
+  { nombre: "BVE Emitidas",    etiqueta: "BVE Emitidas",    menu: MENU_BOLETAS, pantalla: "boletas", codigo: null, confirmado: true },
+  { nombre: "BVE Recibidas",   etiqueta: "BVE Recibidas",   menu: MENU_BOLETAS, pantalla: "boletas", codigo: null, confirmado: true },
+  { nombre: "NC-BVE Emitidas", etiqueta: "NC-BVE Emitidas", menu: MENU_BOLETAS, pantalla: "boletas", codigo: null, confirmado: true },
+  { nombre: "ND-BVE Emitidas", etiqueta: "ND-BVE Emitidas", menu: MENU_BOLETAS, pantalla: "boletas", codigo: null, confirmado: true },
 ];
 
 /** Sin acentos, sin mayúsculas y sin espacios de más: para comparar nombres. */
@@ -112,7 +141,7 @@ export function consultaDe(nombre: string, catalogo: Consulta[] = CATALOGO): Con
  */
 export function conMenuDeBoletas(menu: string[]): Consulta[] {
   if (menu.length === 0) return CATALOGO;
-  return CATALOGO.map(c => (c.codigo === null ? { ...c, menu } : c));
+  return CATALOGO.map(c => (c.pantalla === "boletas" ? { ...c, menu } : c));
 }
 
 // ── Fechas: dd/mm/yyyy, que es lo que habla el portal ──────────────

@@ -25,16 +25,50 @@ describe("el catálogo de tipos de consulta", () => {
     assert.equal(consultaDe("ND Recibidas")!.codigo, "16");
   });
 
-  test("agrega las boletas, y las declara sin confirmar", () => {
-    const be = consultaDe("BE Recibidas");
-    assert.ok(be);
-    assert.equal(be!.confirmado, false, "mientras no se vea el portal real, no se da por buena");
-    assert.equal(be!.codigo, null);
+  // Las cuatro etiquetas son las que ofrece el desplegable del portal, leídas
+  // de la captura real. Si alguien las "arregla" de memoria, esto avisa.
+  test("trae las cuatro boletas con las etiquetas del portal real", () => {
+    const boletas = CATALOGO.filter(c => c.pantalla === "boletas").map(c => c.nombre);
+    assert.deepEqual(boletas, ["BVE Emitidas", "BVE Recibidas", "NC-BVE Emitidas", "ND-BVE Emitidas"]);
+  });
+
+  // No es un olvido: el portal no ofrece esas dos. Inventarlas «por simetría»
+  // serían dos consultas que fallan siempre.
+  test("no inventa notas de boleta recibidas, que el portal no tiene", () => {
+    assert.equal(consultaDe("NC-BVE Recibidas"), null);
+    assert.equal(consultaDe("ND-BVE Recibidas"), null);
+  });
+
+  test("las boletas no llevan código: su pantalla usa un <select>, no el campo oculto", () => {
+    for (const c of CATALOGO.filter(x => x.pantalla === "boletas")) assert.equal(c.codigo, null);
+  });
+
+  test("cada tipo sabe en qué pantalla vive", () => {
+    assert.equal(consultaDe("FE Recibidas")!.pantalla, "facturas");
+    assert.equal(consultaDe("BVE Recibidas")!.pantalla, "boletas");
+  });
+
+  // El camino de menú de las boletas no tiene acceso directo: es el árbol
+  // entero, y cada texto tiene que ser el del portal.
+  test("las boletas llevan el camino completo del menú", () => {
+    assert.deepEqual(consultaDe("BVE Recibidas")!.menu, [
+      "Empresas", "Comprobantes de pago", "SEE - SOL",
+      "Boleta de Venta Electrónica", "Consultar Boleta de Venta y Nota",
+    ]);
   });
 
   test("encuentra el tipo aunque venga con otra caja o con acentos raros", () => {
     assert.equal(consultaDe("fe recibidas")!.nombre, "FE Recibidas");
-    assert.equal(consultaDe("  BE EMITIDAS  ")!.nombre, "BE Emitidas");
+    assert.equal(consultaDe("  BVE EMITIDAS  ")!.nombre, "BVE Emitidas");
+  });
+
+  // El error que no se ve mirando el resultado: "NC-BVE Emitidas" CONTIENE
+  // "BVE Emitidas". Con una comparación floja, pedir la nota de crédito
+  // elegiría la boleta y nadie lo notaría.
+  test("no confunde una nota de boleta con la boleta, aunque una contenga a la otra", () => {
+    assert.equal(consultaDe("BVE Emitidas")!.nombre, "BVE Emitidas");
+    assert.equal(consultaDe("NC-BVE Emitidas")!.nombre, "NC-BVE Emitidas");
+    assert.notEqual(consultaDe("NC-BVE Emitidas")!.nombre, consultaDe("BVE Emitidas")!.nombre);
   });
 
   // El punto que más importa de todo el módulo: un nombre mal escrito en el
@@ -42,6 +76,7 @@ describe("el catálogo de tipos de consulta", () => {
   test("un nombre que no existe da null, no un tipo parecido", () => {
     assert.equal(consultaDe("Boletas"), null);
     assert.equal(consultaDe("FE"), null);
+    assert.equal(consultaDe("BE Recibidas"), null, "la etiqueta que se había adivinado antes de ver el portal");
     assert.equal(consultaDe(""), null);
   });
 
@@ -55,7 +90,7 @@ describe("el menú de las boletas, sobreescribible", () => {
   test("cambia solo el de las boletas y deja intacto el de facturas y notas", () => {
     const c = conMenuDeBoletas(["Empresas", "Otra pantalla"]);
     const fe = c.find(x => x.nombre === "FE Recibidas")!;
-    const be = c.find(x => x.nombre === "BE Recibidas")!;
+    const be = c.find(x => x.nombre === "BVE Recibidas")!;
     assert.deepEqual(be.menu, ["Empresas", "Otra pantalla"]);
     assert.deepEqual(fe.menu, consultaDe("FE Recibidas")!.menu);
   });
@@ -64,10 +99,17 @@ describe("el menú de las boletas, sobreescribible", () => {
     assert.equal(conMenuDeBoletas([]), CATALOGO);
   });
 
+  test("alcanza a las cuatro boletas, no solo a una", () => {
+    const c = conMenuDeBoletas(["Empresas", "Otra pantalla"]);
+    for (const b of c.filter(x => x.pantalla === "boletas")) {
+      assert.deepEqual(b.menu, ["Empresas", "Otra pantalla"]);
+    }
+  });
+
   test("no muta el catálogo original", () => {
-    const antes = consultaDe("BE Recibidas")!.menu.join("/");
+    const antes = consultaDe("BVE Recibidas")!.menu.join("/");
     conMenuDeBoletas(["Empresas", "Pantalla distinta"]);
-    assert.equal(consultaDe("BE Recibidas")!.menu.join("/"), antes);
+    assert.equal(consultaDe("BVE Recibidas")!.menu.join("/"), antes);
   });
 });
 

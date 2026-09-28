@@ -23,26 +23,29 @@
 #      actualizando igual; esta es además de esa, no en vez de esa.
 #   3. Puede pedir BOLETAS, con el acceso ampliado de SOL.
 #
-# ANTES DE LA PRIMERA CORRIDA DE VERDAD, LEER ESTO
+# LAS BOLETAS SON OTRA PANTALLA, NO UNA OPCIÓN MÁS
 #
-# La pantalla que el scraper usa hoy —«Consulta de Facturas y Notas
-# Electrónicas»— no lista boletas: sus seis tipos son FE, NC y ND. Dónde
-# aparecen las boletas con el acceso nuevo es algo que NO se puede saber sin
-# entrar: pueden ser opciones nuevas del mismo combobox «Tipo de Consulta», o
-# una entrada de menú aparte. Así que:
+# Confirmado contra el portal (capturas del 27/09/2026). «Consultar Boleta de
+# Venta y Nota» no se parece a la pantalla de facturas: otro camino de menú
+# (sin acceso directo, hay que bajar todo el árbol), un `<select>` de HTML en
+# vez del combobox de jQuery, y una tabla HTML común en vez de la grilla dojox.
+# El script las maneja como dos motores separados; lo de facturas no se tocó.
 #
-#   PASO 1 — correr con debug = true (lo que viene marcado). No baja nada:
-#            entra, recorre el menú y deja en el registro la lista de lo que
-#            este acceso ofrece de verdad (las entradas del menú y las opciones
-#            del «Tipo de Consulta»), más las capturas como artefacto.
-#   PASO 2 — con esa lista, corregir en `lib/sunat/cpe-consulta.ts` la etiqueta
-#            y el menú de «BE Emitidas» / «BE Recibidas». Para probar un camino
-#            sin tocar código, está el input `menu_boletas`.
-#   PASO 3 — recién entonces correr con debug = false.
+# Sus cuatro tipos, tal como los ofrece el desplegable: BVE Emitidas, BVE
+# Recibidas, NC-BVE Emitidas, ND-BVE Emitidas. Las notas de boleta SOLO existen
+# emitidas: el portal no ofrece recibidas y no hay que inventarlas.
 #
-# Si la etiqueta de las boletas no existe en el portal, el script SALTA ese
-# tipo y lo dice. No baja lo que haya quedado en el formulario: eso archivaría
-# facturas bajo el nombre de boletas, y nadie lo notaría.
+# LO QUE TODAVÍA NO SE SABE: cómo se llaman de verdad los campos de fecha de
+# esa pantalla. El portal solo muestra las etiquetas «Fecha de Inicio» y «Fecha
+# de Fin», y un `name` no se ve en una captura. El script los busca por la
+# etiqueta de su fila y, si no, por posición, y DICE EN EL REGISTRO cuál de los
+# dos funcionó. Si ninguno los encuentra, abandona esa consulta en vez de
+# aceptar con el rango que estuviera puesto.
+#
+# Por eso conviene la primera corrida con debug = true (lo que viene marcado):
+# no baja nada, recorre el menú y deja en el registro los campos reales del
+# formulario y las opciones reales del desplegable, más las capturas como
+# artefacto.
 
 name: SUNAT extraer rango (hoja aparte)
 
@@ -65,20 +68,21 @@ on:
         default: "30/09/2026"
       tipos_consulta:
         description: >-
-          Los tipos a consultar, separados por coma. Los nombres válidos están
-          en el catálogo de lib/sunat/cpe-consulta.ts: FE Emitidas, FE
-          Recibidas, NC Emitidas, NC Recibidas, ND Emitidas, ND Recibidas, BE
-          Emitidas, BE Recibidas. Un nombre que no esté en la lista corta la
-          corrida antes del login, diciendo cuáles hay.
+          Los tipos a consultar, separados por coma. Los válidos son los diez
+          del catálogo de lib/sunat/cpe-consulta.ts: FE Emitidas, FE Recibidas,
+          NC Emitidas, NC Recibidas, ND Emitidas, ND Recibidas (pantalla de
+          facturas) y BVE Emitidas, BVE Recibidas, NC-BVE Emitidas, ND-BVE
+          Emitidas (pantalla de boletas). Un nombre que no esté en la lista
+          corta la corrida antes del login, diciendo cuáles hay.
         required: false
-        default: "FE Emitidas,FE Recibidas,NC Emitidas,NC Recibidas,ND Emitidas,ND Recibidas,BE Emitidas,BE Recibidas"
+        default: "FE Emitidas,FE Recibidas,NC Emitidas,NC Recibidas,ND Emitidas,ND Recibidas,BVE Emitidas,BVE Recibidas,NC-BVE Emitidas,ND-BVE Emitidas"
       menu_boletas:
         description: >-
-          Para probar por dónde se entra a las boletas sin tocar código: los
-          textos del menú separados por «>», por ejemplo «Empresas >
-          Comprobantes de pago > Consultar Boleta». Vacío = el camino que dice
-          el catálogo. Cuando uno funcione, escribirlo en cpe-consulta.ts y
-          dejar esto vacío de nuevo.
+          Normalmente VACÍO: el camino del menú de las boletas ya está
+          confirmado en el catálogo (Empresas > Comprobantes de pago > SEE -
+          SOL > Boleta de Venta Electrónica > Consultar Boleta de Venta y
+          Nota). Queda por si SUNAT renombra alguna entrada y hace falta
+          probar otro camino sin tocar código: los textos separados por «>».
         required: false
         default: ""
 
@@ -89,7 +93,7 @@ permissions:
 jobs:
   extraer:
     runs-on: ubuntu-latest
-    # Ocho tipos por dos meses son dieciséis consultas en la misma sesión, y un
+    # Diez tipos por dos meses son veinte consultas en la misma sesión, y un
     # mes cargado con seis tipos ya rondaba la hora. El tope de un job de
     # GitHub son 6 horas; se deja algo de margen debajo para que el fallo, si
     # llega, sea del script y no un corte a mitad de descarga.
