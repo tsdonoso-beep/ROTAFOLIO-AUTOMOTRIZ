@@ -53,12 +53,12 @@ export interface Consulta {
    * está confirmado contra el portal real. Solo sirve para verificar en el
    * log que quedó puesto el tipo correcto; nunca se escribe a mano.
    *
-   * Confirmados: los seis de factura (10, 11, 13, 14, 15, 16) y tres de los
-   * cuatro de boleta (17, 18, 20). Falta el de ND-BVE Emitidas.
+   * Los diez están confirmados contra el portal: 10, 11, 13, 14, 15, 16 las de
+   * factura; 17, 18, 20, 22 las de boleta.
    *
-   * Mientras alguno sea null, lo que se verifica de ese tipo es que el combobox
-   * quede mostrando la etiqueta pedida, y el script imprime el código en cuanto
-   * lo vea para poder anotarlo acá.
+   * Si alguna vez se agrega un tipo nuevo sin código, se deja en null: entonces
+   * se verifica que el campo oculto no quede con el código de OTRO tipo, y el
+   * script imprime el que encuentre para poder anotarlo acá.
    */
   codigo: string | null;
   /**
@@ -114,14 +114,14 @@ export const CATALOGO: Consulta[] = [
   //   …/ol-ti-itconscpemypebve/consultar.do?action=imprimirListado
   //      &periodoDesc=22/09/2026 - 25/09/2026&tipoConsulta=18
   //
-  // El de ND-BVE Emitidas todavía no apareció. Queda en null a propósito: con
-  // null se verifica contra la etiqueta que muestra el combobox —más flojo,
-  // pero cierto— y el script IMPRIME el código en cuanto lo vea. Poner acá una
-  // suposición sería peor que no poner nada.
+  // El de ND-BVE Emitidas no estaba en esos enlaces y quedó en null a
+  // propósito, con el script imprimiéndolo en cuanto lo viera. Lo vio en el run
+  // del 28/09/2026 y era 22 —el hueco en 19 y el 21 quedan sin identificar, y
+  // así se quedan: no se anota lo que no se vio—.
   { nombre: "BVE Emitidas",    etiqueta: "BVE Emitidas",    menu: MENU_BOLETAS, pantalla: "boletas", codigo: "17", confirmado: true },
   { nombre: "BVE Recibidas",   etiqueta: "BVE Recibidas",   menu: MENU_BOLETAS, pantalla: "boletas", codigo: "18", confirmado: true },
   { nombre: "NC-BVE Emitidas", etiqueta: "NC-BVE Emitidas", menu: MENU_BOLETAS, pantalla: "boletas", codigo: "20", confirmado: true },
-  { nombre: "ND-BVE Emitidas", etiqueta: "ND-BVE Emitidas", menu: MENU_BOLETAS, pantalla: "boletas", codigo: null, confirmado: true },
+  { nombre: "ND-BVE Emitidas", etiqueta: "ND-BVE Emitidas", menu: MENU_BOLETAS, pantalla: "boletas", codigo: "22", confirmado: true },
 ];
 
 /** Sin acentos, sin mayúsculas y sin espacios de más: para comparar nombres. */

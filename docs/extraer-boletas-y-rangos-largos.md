@@ -30,7 +30,7 @@ no tienen por qué vivir ahí, así que ahora cada tipo dice por dónde se llega
 | BVE Emitidas | BVE Emitidas | `17` | Empresas › Comprobantes de pago › SEE - SOL › Boleta de Venta Electrónica › Consultar Boleta de Venta y Nota | sí |
 | BVE Recibidas | BVE Recibidas | `18` | ídem | sí |
 | NC-BVE Emitidas | NC-BVE Emitidas | `20` | ídem | sí |
-| ND-BVE Emitidas | ND-BVE Emitidas | *(sin ver)* | ídem | sí |
+| ND-BVE Emitidas | ND-BVE Emitidas | `22` | ídem | sí |
 
 Las cuatro etiquetas de boleta son **las que ofrece el desplegable**, leídas de
 la captura del portal. Que las notas de boleta solo existan **Emitidas** no es
@@ -48,17 +48,21 @@ enlace que lleva el código en la URL.
 ```
 
 Así se confirmaron `17` (BVE Emitidas), `18` (BVE Recibidas) y `20` (NC-BVE
-Emitidas). **El de ND-BVE Emitidas todavía no apareció**, y queda en `null` a
-propósito: con `null` la verificación compara contra la etiqueta que muestra el
-combobox —más flojo, pero cierto— y el script imprime el código en cuanto lo
-vea. Una suposición en esa celda sería peor que la celda vacía.
+Emitidas). El de **ND-BVE Emitidas** no estaba en esos enlaces, así que quedó
+en `null` —con el script imprimiéndolo en cuanto lo viera— en vez de anotar la
+conjetura. El run del 28/09/2026 lo mostró:
 
-Sobre la numeración, para quien la retome: los seis de factura van `10`, `11`
-(FE), `13`, `14` (NC), `15`, `16` (ND), con un hueco en `12`. Los de boleta
-arrancan en `17` y tienen un hueco parecido en `19`. Si el patrón se repitiera,
-ND-BVE Emitidas caería en `22` — pero eso es una conjetura, no un dato, y se
-comprueba en un segundo abriendo ese mismo enlace con `tipoConsulta=22` y
-mirando qué título trae el listado.
+```
+· «ND-BVE Emitidas» → tipoConsulta=22  ← anotá este código
+· form [ND-BVE Emitidas]: fec_desde=01/09/2026 fec_hasta=30/09/2026 tipo(hidden)=22
+```
+
+Era `22`. Los diez tipos quedan con código confirmado.
+
+Lo que **no** se anota es lo que no se vio: el hueco en `19` y el `21` siguen
+sin identificar, igual que el `12` del bloque de facturas. La conjetura que
+acertó con el `22` se escribió como conjetura, y solo pasó al catálogo cuando
+el portal la confirmó.
 
 ## 2. Las dos pantallas SÍ se parecen — y esto se creyó al revés
 
@@ -331,7 +335,46 @@ Tres cosas lo hacen especialmente feo:
   **falla** (rojo en Actions). Se distingue `null` («no se pudo consultar») de
   `[]` («se consultó y no había nada»), que es un resultado legítimo.
 
-## 7. Lo que sigue sin resolver
+## 7. El resultado de la primera extracción completa
+
+Run del 28/09/2026, agosto y setiembre, los cuatro tipos de boleta. 25 minutos,
+8 consultas, ninguna fallida.
+
+| Tipo | Agosto | Setiembre |
+|---|---|---|
+| BVE Emitidas | 0 | 0 |
+| BVE Recibidas | **66** | **39** |
+| NC-BVE Emitidas | 0 | 0 |
+| ND-BVE Emitidas | 0 | 0 |
+
+```
+Archivados en Drive: 186 nuevos, 24 ya estaban.
+Detalle guardado: 93 nuevos, 12 actualizados, 135 ítems.
+Hoja «COMPROBANTES SUNAT - DETALLE 2026-08 a 2026-09»: 716 ítems
+  · ítems por tipo de comprobante: 01=506 03=135 07=75
+```
+
+Los números cierran entre sí: 66 + 39 = 105 boletas, de las que 12 ya estaban
+(la prueba del 22 al 25 de setiembre) y 93 eran nuevas; 93 × 2 archivos = los
+186 de Drive.
+
+**Dos cosas que conviene mirar:**
+
+- **`BVE Emitidas` dio 0 en los dos meses.** Puede ser cierto —que la empresa
+  no emita boletas electrónicas— o puede ser un cero silencioso. Se comprueba
+  en un segundo abriendo el enlace de Imprimir del portal con
+  `tipoConsulta=17` para ese rango y viendo si trae filas.
+- **La carrera de las tandas de 25 apareció, y el reintento la resolvió:**
+  `Cannot read properties of null (reading 'nroRucEmisor')` en las filas 26 y
+  51, exactamente los bordes de tanda descritos en
+  `docs/scraper-cpe-hallazgos-tecnicos.md` §3. Ninguna descarga se perdió.
+
+Una consulta que devuelve 0 tarda ~90 s en concluirlo: espera a que aparezca la
+grilla (que en un mes cargado puede tardar 51 s) antes de caer al conteo de
+enlaces. Son 6 de los 25 minutos. Es el precio de no confundir «vacío» con
+«todavía cargando», y por ahora se paga.
+
+## 8. Lo que sigue sin resolver
 
 - **Las boletas que el técnico pidió a su nombre siguen sin aparecer.** `BVE
   Recibidas` trae las boletas donde el **RUC de la empresa** es el adquiriente
