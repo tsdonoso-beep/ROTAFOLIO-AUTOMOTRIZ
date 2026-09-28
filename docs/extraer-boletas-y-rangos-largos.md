@@ -273,13 +273,47 @@ estaba» y la base actualiza en vez de duplicar.
 
 ## 5. Qué NO cambió
 
-El workflow diario `descargar-cpe.yml` usa el mismo script, pero **no cambia de
-comportamiento**: sigue con sus seis tipos, su ventana de dos días y la cuenta
-del SIRE. Lo nuevo se prende con variables que solo pone el workflow nuevo
-(`PARTIR_POR_MES`, `HOJA_DEL_RANGO`, `MENU_BOLETAS`, `SUNAT_SOL_*`).
+*(Esto valía mientras la cuenta nueva no estuviera probada. Ya lo está — ver
+abajo.)*
 
-Conviene dejarlo así hasta que la cuenta nueva esté probada. Cuando lo esté,
-pasar el diario a la cuenta nueva es agregarle dos líneas de `env`.
+El workflow diario `descargar-cpe.yml` usa el mismo script. Durante el
+desarrollo se lo dejó a propósito con sus seis tipos, su ventana de dos días y
+la cuenta del SIRE, y lo nuevo se prendía solo con variables que ponía el
+workflow nuevo (`PARTIR_POR_MES`, `HOJA_DEL_RANGO`, `MENU_BOLETAS`,
+`SUNAT_SOL_*`).
+
+### Desde el 28/09/2026 el diario también pide boletas
+
+Se hizo el cambio recién con la cuenta nueva probada, que era la condición:
+
+- «SUNAT extraer rango» bajó agosto y setiembre con ella, 8 consultas sin una
+  falla;
+- y el volcado del menú de esas corridas confirmó que esa misma cuenta **ve
+  también la pantalla de facturas** («Consultar Factura y Nota» y «Consulta de
+  Facturas y Notas Electrónicas» aparecen en su menú). Sin esa confirmación,
+  pasarle el diario habría arriesgado lo que ya funcionaba.
+
+Qué cambió, concretamente:
+
+| | antes | ahora |
+|---|---|---|
+| tipos | 6 (FE/NC/ND) | **10** (+ BVE/NC-BVE/ND-BVE) |
+| acceso | el del SIRE | `SUNAT_SOL_*`, con respaldo en el del SIRE |
+| tope de tiempo | 90 min | **120 min** |
+
+El tope sube porque una consulta que devuelve **cero** igual tarda ~90 s en
+concluirlo: espera a que aparezca la grilla —que en un mes cargado puede
+demorar 51 s— antes de caer al conteo de enlaces. Con diez tipos son ~15
+minutos de esperas aunque no se baje nada.
+
+Lo que **sigue sin cambiar**: la ventana de dos días, que es lo que evita
+repetir cientos de descargas a diario y chocar con el límite de SUNAT; y que el
+diario no publica la hoja del rango (`HOJA_DEL_RANGO` sigue apagado), solo la
+histórica.
+
+Si los secretos `SUNAT_SOL_*` se borraran, el diario **no se rompe**: el script
+cae a los del SIRE y las cuatro consultas de boleta se saltan solas, diciéndolo
+en el registro.
 
 ---
 
