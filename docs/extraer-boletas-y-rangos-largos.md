@@ -143,9 +143,26 @@ se sepa del tipo:
 - **con código conocido** (nueve de los diez): contra el campo oculto
   `tipoConsulta`, que es el dato que de verdad viaja a SUNAT. Se abandona si no
   coincide con `10`, `11`, `13`, `17`, `18`, `20`…
-- **sin código** (hoy solo ND-BVE Emitidas): contra lo que muestra el campo
-  visible. Es más flojo, pero atrapa el caso que importa — que el combobox se
-  haya quedado en otra cosa.
+- **sin código** (hoy solo ND-BVE Emitidas): se comprueba que el campo oculto
+  **no haya quedado con el código de OTRO tipo** del catálogo. No sabemos cuál
+  le toca a este, pero sí los de los otros nueve: si quedó puesto uno de esos,
+  el combobox no resolvió lo que se tecleó y estaríamos por bajar ese otro tipo
+  con el nombre de este.
+
+Esa segunda regla nació de una lección del run del 28/09/2026. Ahí se vio que
+en este portal la opción **casi nunca se encuentra en la lista**, y que lo
+normal es entrar por el respaldo —teclear la etiqueta y pulsar Enter—:
+
+```
+⚠ no vi la opción «BVE Recibidas» en la lista; se teclea y se verifica.
+· form [BVE Recibidas]: fec_desde=22/09/2026 fec_hasta=25/09/2026 tipo(hidden)=18
+```
+
+Para un tipo con código eso da igual: se verifica contra el `18` y listo. Pero
+para uno sin código, comparar el campo visible contra la etiqueta sería
+**vacío**: la etiqueta la acabamos de escribir nosotros en ese campo, así que
+siempre coincidiría. Una verificación que no verifica es peor que ninguna,
+porque da confianza.
 
 La comparación es **exacta**, no «que contenga», y eso importa: `NC-BVE
 Emitidas` **contiene** `BVE Emitidas`. Con una comparación floja, pedir la nota
@@ -279,6 +296,7 @@ pasar el diario a la cuenta nueva es agregarle dos líneas de `env`.
 - **El código de `tipoConsulta` de ND-BVE Emitidas.** Los otros nueve están
   confirmados. Mientras falte, ese tipo se verifica contra la etiqueta del
   combobox y el script imprime su código en cuanto lo vea.
-- **La tabla de resultados de boletas.** Todavía no se llegó a verla desde el
-  script. Puede ser la grilla dojox o una tabla común; el código se adapta a
-  las dos y dice en el registro cuál encontró.
+- ~~**La tabla de resultados de boletas.**~~ Resuelto: el run del 28/09/2026
+  dice `12 comprobantes (rowCount de la grilla)`. Es la **misma grilla dojox**
+  que la de facturas, así que todo el mecanismo de descarga por índice aplica
+  igual. El conteo coincidió con lo que muestra el portal para ese rango.
