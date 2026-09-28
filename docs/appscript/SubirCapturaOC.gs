@@ -158,12 +158,17 @@ function filasDeBaseCg_() {
 
 function configuracionBase_() {
   var p = PropertiesService.getScriptProperties();
+  // Al pegar a mano se cuelan espacios, saltos de línea o comillas: con uno
+  // solo, la base responde 401 y no dice por qué.
+  var limpio = function (k) {
+    return String(p.getProperty(k) || '').trim().replace(/^["'«“]+|["'»”]+$/g, '').trim();
+  };
   return {
-    supabaseUrl: p.getProperty('SUPABASE_URL'),
-    anonKey: p.getProperty('SUPABASE_ANON_KEY'),
-    robotCorreo: p.getProperty('ROBOT_CORREO'),
-    robotClave: p.getProperty('ROBOT_CLAVE'),
-    rucEmpresa: p.getProperty('RUC_EMPRESA') || RUC_EMPRESA_SUBIDA
+    supabaseUrl: limpio('SUPABASE_URL').replace(/\/+$/, ''),
+    anonKey: limpio('SUPABASE_ANON_KEY'),
+    robotCorreo: limpio('ROBOT_CORREO'),
+    robotClave: limpio('ROBOT_CLAVE'),
+    rucEmpresa: limpio('RUC_EMPRESA') || RUC_EMPRESA_SUBIDA
   };
 }
 
@@ -172,8 +177,17 @@ function iniciarSesionRobotSubida_(cfg) {
     method: 'post', contentType: 'application/json', headers: { apikey: cfg.anonKey },
     payload: JSON.stringify({ email: cfg.robotCorreo, password: cfg.robotClave }), muteHttpExceptions: true
   });
-  if (resp.getResponseCode() >= 300) {
-    throw new Error('No se pudo iniciar sesión con la cuenta ROBOT: ' + resp.getContentText().slice(0, 200));
+  var codigo = resp.getResponseCode();
+  if (codigo === 401 || codigo === 403) {
+    throw new Error('La base rechazó la clave SUPABASE_ANON_KEY (error ' + codigo + '). Vuelve a copiarla exacta, ' +
+      'sin espacios ni comillas: debe empezar con «sb_publishable_».');
+  }
+  if (codigo === 400) {
+    throw new Error('La base rechazó ROBOT_CORREO o ROBOT_CLAVE (correo o clave incorrectos). Cópialos de nuevo del proyecto ' +
+      'de OrdenarCPE / PadronRuc.');
+  }
+  if (codigo >= 300) {
+    throw new Error('No se pudo iniciar sesión con la cuenta ROBOT (error ' + codigo + '): ' + resp.getContentText().slice(0, 200));
   }
   return JSON.parse(resp.getContentText()).access_token;
 }
