@@ -9,21 +9,29 @@
 // es un bug del scraper ni de la cuenta de SOL que se usa: es la pantalla
 // misma la que no ve esa serie, con cualquier usuario.
 //
-// La pantalla «Consultar Factura, Boletas y Notas» (menú Empresas →
-// Comprobantes de pago → Factura Electrónica) SÍ ve otras series, pero al
-// revés: no hay forma de pedirle "todo el mes", pide UN comprobante a la
-// vez —RUC del emisor, tipo, serie y número—. Por eso este script no le
-// pregunta a SUNAT qué existe: eso ya lo sabe el SIRE, que trae RUC+serie+
-// número de cada comprobante de compra. Lo que hace este script es RECORRER
-// esa lista y confirmar cada uno, uno por uno, contra esta pantalla.
+// SÍ hay pantallas que ven otras series, pero al revés: no hay forma de
+// pedirles "todo el mes", piden UN comprobante a la vez —RUC del emisor,
+// tipo, serie y número—. Por eso este script no le pregunta a SUNAT qué
+// existe: eso ya lo sabe el SIRE, que trae RUC+serie+número de cada
+// comprobante de compra. Lo que hace este script es RECORRER esa lista y
+// confirmar cada uno, uno por uno, contra la pantalla que corresponda.
 //
-// FASE 1 (esta versión): depuración. Todavía no se sabe qué trae la
-// pantalla de resultado —¿un enlace de XML? ¿solo texto en pantalla?—, así
-// que en DEBUG (por omisión) el script entra, llena el formulario con los
-// primeros pendientes (LIMITE de ellos) y sube capturas + HTML de cada
-// resultado, sin guardar nada todavía. Con esa evidencia se escribe la
-// FASE 2 —leer el resultado de verdad y guardarlo en `cpe_comprobante`—,
-// igual que se hizo con boletas en `descargar-cpe.mts`.
+// CUÁL pantalla cambió una vez ya (28/09/2026): «Consultar Factura, Boletas
+// y Notas» (Empresas → Comprobantes de pago → Factura Electrónica) sí trae
+// el comprobante, pero solo como un reporte HTML de cabecera+ítems, sin XML
+// para bajar —«no tiene la validez de una REPRESENTACIÓN IMPRESA»—. La que
+// de verdad sirve es «Nueva Consulta de comprobantes de pago» (Empresas →
+// Comprobantes de pago → Comprobantes de Pago → Consulta de Comprobantes de
+// Pago → …), que abre un modal con export a PDF y XML de verdad. El menú que
+// usa este script apunta a esta segunda desde ese cambio de rumbo.
+//
+// FASE 1 (esta versión): depuración. Todavía no se conoce la estructura real
+// de esa pantalla nueva —parece una app aparte (Angular o similar), no las
+// de siempre—, así que en DEBUG (por omisión) el script entra, radiografía
+// el formulario y sube capturas + HTML de cada paso, sin guardar nada
+// todavía. Con esa evidencia se escribe la FASE 2 —llenarlo de verdad, leer
+// el resultado y guardarlo en `cpe_comprobante`—, igual que se hizo con
+// boletas en `descargar-cpe.mts`.
 
 import { chromium, type Page, type Frame } from "playwright";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -51,28 +59,50 @@ const LIMITE = Number(process.env.LIMITE?.trim() || (DEBUG ? "3" : "0"));
 
 const LOGIN_URL = "https://e-menu.sunat.gob.pe/cl-ti-itmenu/MenuInternet.htm";
 
-// El camino de verdad son los cinco pasos de la captura original. El HTML
-// del segundo run trajo, en un <script>, el catálogo completo del menú
-// (`var opciones=...`) con la URL de cada programa —ahí se ve que
-// «Consultar Factura, Boletas y Notas» (11.9.5.1.1) abre
-// `/ol-ti-itconscpegem/consultar.do`, una aplicación DISTINTA de las dos que
-// ya usa `descargar-cpe.mts` (`...itconscpemype` para facturas,
-// `...itconscpemypebve` para boletas)—.
+/** Un paso del menú: qué texto clicar y, si hace falta, en qué posición. */
+interface PasoMenu { texto: string; posicion?: "primera" | "ultima" }
+
+// CAMBIO DE RUMBO (28/09/2026, tras el run #6): «Consultar Factura, Boletas
+// y Notas» (`ol-ti-itconscpegem`, el camino de abajo hasta ahora) SÍ trae el
+// comprobante, pero solo como un reporte HTML de cabecera+ítems —«no tiene
+// la validez de una REPRESENTACIÓN IMPRESA», sin XML para bajar—. El usuario
+// encontró a mano una SEGUNDA pantalla, «Nueva Consulta de comprobantes de
+// pago» (otra app: `/app/contribuyentems/servicio/consultacpe/consulta/
+// loader/nuevaconsulta.html`, confirmada en el catálogo del menú), cuyo
+// resultado abre un modal con cinco íconos —PDF, XML, texto, imprimir,
+// correo— y cada uno baja de verdad. Esa es la que hace falta: sin el XML no
+// hay detalle de ítems, que es el punto de todo este script.
 //
-// El primer run sacó el paso de «Factura Electrónica» creyendo que no era
-// clicable; el segundo, sin ese paso, tampoco encontró «Consultar Factura,
-// Boletas y Notas». La razón real, que el mismo HTML delató: «Factura
-// Electrónica» aparece DOS VECES en el árbol —una dentro de «SEE - SOL» (una
-// rama muerta, sin nada debajo) y otra como categoría propia, la que sí
-// lleva a lo que buscamos—. `clicEnAlgunMarco` tomaba «la primera que
-// encuentra» sin mirar si está visible, y agarraba la copia muerta. La
-// arregla eso, no el camino: el camino correcto siempre fue este de cinco.
-const MENU_INDIVIDUAL = [
-  "Empresas",
-  "Comprobantes de pago",
-  "Factura Electrónica",
-  "Consultar Factura, Boletas y Notas",
-  "Consultar Factura, Boletas y Notas",
+// El camino, sacado del mismo catálogo (`var opciones`) que reveló
+// `ol-ti-itconscpegem`: Empresas → Comprobantes de pago (11, tal cual) →
+// Comprobantes de Pago (11.38, agrup) → Consulta de Comprobantes de Pago
+// (11.38.1, sis) → Nueva Consulta de comprobantes de pago (11.38.1.1.1, el
+// programa de verdad).
+//
+// Dos cosas que ya rompieron el camino anterior y seguramente rompen este
+// también si no se las nombra:
+//   • «Comprobantes de Pago» (con P mayúscula, el paso 3) es una entrada
+//     DISTINTA de «Comprobantes de pago» (el paso 2, p minúscula) —el menú
+//     tiene las dos—, pero el buscador de texto no distingue mayúsculas: la
+//     búsqueda encuentra las dos a la vez, y la de recién (ya clickeada,
+//     todavía visible) aparece antes en el documento. Se pide la ÚLTIMA a
+//     propósito, no la que el detector automático de repetidos elegiría —ese
+//     detector compara los textos tal cual, y "Comprobantes de pago" ≠
+//     "Comprobantes de Pago" como texto, así que no lo vería como repetido—.
+//   • «Nueva Consulta de comprobantes de pago» se repite iguaLITO dos veces
+//     seguidas (la captura del sidebar del usuario lo muestra así), el mismo
+//     patrón categoría-y-enlace-con-el-mismo-nombre que ya se vio con
+//     «Consultar Factura, Boletas y Notas»: acá sí lo agarra el detector
+//     automático.
+//
+// AFINAR: no confirmado todavía contra el portal real —hace falta una
+// corrida de depuración para saberlo—.
+const MENU_INDIVIDUAL: PasoMenu[] = [
+  { texto: "Empresas" },
+  { texto: "Comprobantes de pago" },
+  { texto: "Comprobantes de Pago", posicion: "ultima" },
+  { texto: "Nueva Consulta de comprobantes de pago" },
+  { texto: "Nueva Consulta de comprobantes de pago" },
 ];
 
 const CAPTURAS = join(process.cwd(), "capturas");
@@ -274,22 +304,24 @@ async function radiografiaResultado(page: Page, nombreArchivo: string): Promise<
 }
 
 async function abrirFormularioIndividual(page: Page) {
-  console.log(`Menú → ${MENU_INDIVIDUAL.join(" → ")}…`);
+  console.log(`Menú → ${MENU_INDIVIDUAL.map(p => p.texto).join(" → ")}…`);
   await irConReintento(page, LOGIN_URL);
   await page.waitForLoadState("networkidle", { timeout: 30000 }).catch(() => {});
   await evidencia(page, "menu-inicio");
 
-  for (const [i, texto] of MENU_INDIVIDUAL.entries()) {
+  for (const [i, paso] of MENU_INDIVIDUAL.entries()) {
+    const { texto } = paso;
     const ultimo = i === MENU_INDIVIDUAL.length - 1;
-    // Si este paso repite el texto del anterior —el caso de «Consultar
-    // Factura, Boletas y Notas» dos veces seguidas—, la categoría ya quedó
-    // visible con el clic previo: el enlace de adentro es el que hace falta
-    // ahora, y ese es el que aparece último, no el primero.
-    const posicion = i > 0 && MENU_INDIVIDUAL[i - 1] === texto ? "ultima" : "primera";
+    // La posición la puede fijar el paso mismo (dos textos distintos que se
+    // confunden por mayúsculas, como «Comprobantes de Pago»); si no, el
+    // detector automático: si este paso repite EL MISMO texto del anterior
+    // —el enlace de adentro con el nombre de su propia categoría—, se pide
+    // la última coincidencia visible, no la primera.
+    const posicion = paso.posicion ?? (i > 0 && MENU_INDIVIDUAL[i - 1].texto === texto ? "ultima" : "primera");
     // El siguiente paso repite este mismo texto: hay que dejar tiempo de
     // sobra para que el enlace de adentro termine de aparecer antes de
     // buscarlo, no los 1200ms de siempre.
-    const siguienteRepite = MENU_INDIVIDUAL[i + 1] === texto;
+    const siguienteRepite = MENU_INDIVIDUAL[i + 1]?.texto === texto;
     if (await clicEnAlgunMarco(page, texto, posicion)) {
       await page.waitForTimeout(ultimo ? 3000 : siguienteRepite ? 2500 : 1200);
       if (!ultimo) await evidencia(page, `menu-${i}`);
@@ -299,9 +331,9 @@ async function abrirFormularioIndividual(page: Page) {
     await radiografiaMenu(page);
     throw new Error(`No se llegó al formulario: falta «${texto}» en el menú.`);
   }
-  // Confirma en el log que se aterrizó en /ol-ti-itconscpegem —la aplicación
-  // que el catálogo del menú (visto en el HTML del segundo run) dice que le
-  // corresponde a esta consulta— y no en alguna otra por error de camino.
+  // Confirma en el log a qué aplicación se llegó —para el camino nuevo
+  // debería ser /app/contribuyentems/.../nuevaconsulta.html, no
+  // ol-ti-itconscpegem— y no otra por error de camino.
   console.log(`  · frames: ${page.frames().map(f => f.url() || "(vacío)").join(" | ")}`);
   await evidencia(page, "formulario-abierto");
 }
@@ -437,15 +469,19 @@ async function elegirTipoConsulta(marco: Frame, etiqueta: string): Promise<void>
 }
 
 /**
- * Llena el formulario de «Consultar Factura, Boletas y Notas» con un
- * pendiente.
+ * Llena el formulario con un pendiente.
  *
- * Los ids son los que confirmó la radiografía del run #4 (28/09/2026) contra
- * el portal real. Antes de esto hubo un intento por `name*="ruc"` que cayó
- * en el campo OCULTO `formArchivo.ruc` —esta pantalla tiene dos campos
- * llamados «ruc»: uno oculto para el POST y el visible de verdad,
- * `criterio.ruc` (con `name=rucEmisor`)—, y el genérico lo encontraba
- * primero por aparecer antes en el documento.
+ * DESACTUALIZADO a propósito, por ahora: los ids de acá (`criterio.ruc`,
+ * `criterio.serie`, `criterio.numero`) son los de la pantalla VIEJA
+ * («Consultar Factura, Boletas y Notas», confirmados en el run #4), no los
+ * de «Nueva Consulta de comprobantes de pago» —la que de verdad da PDF y
+ * XML, a la que apunta `MENU_INDIVIDUAL` desde el cambio de rumbo del
+ * 28/09/2026—. Esta función va a fallar sola («no encontré el campo de RUC
+ * en ningún frame») y eso está bien: en DEBUG, `radiografiaFormulario`
+ * corre ANTES y esa es la evidencia que hace falta para reescribir esto con
+ * los ids reales de la pantalla nueva, que es una app distinta (Angular o
+ * similar, a juzgar por la URL `/app/contribuyentems/...`) y seguramente no
+ * comparte nombres de campo con las pantallas JSP de siempre.
  */
 async function llenarFormulario(page: Page, p: Pendiente): Promise<Frame | null> {
   for (const f of page.frames()) {
