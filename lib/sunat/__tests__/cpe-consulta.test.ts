@@ -47,10 +47,14 @@ describe("el catálogo de tipos de consulta", () => {
     assert.equal(consultaDe("NC-BVE Emitidas")!.codigo, "20");
   });
 
-  // Queda en null a propósito hasta verlo: con null se verifica contra la
-  // etiqueta del combobox, que es flojo pero cierto. Una suposición sería peor.
-  test("el código que todavía no se vio queda en null, no adivinado", () => {
-    assert.equal(consultaDe("ND-BVE Emitidas")!.codigo, null);
+  // El último que faltaba. Se dejó en null hasta verlo de verdad en el portal,
+  // en vez de anotar la conjetura; el run del 28/09/2026 lo confirmó.
+  test("ND-BVE Emitidas ya tiene su código, visto en el portal", () => {
+    assert.equal(consultaDe("ND-BVE Emitidas")!.codigo, "22");
+  });
+
+  test("los diez tipos tienen código", () => {
+    for (const c of CATALOGO) assert.ok(c.codigo, `${c.nombre} sin código`);
   });
 
   test("ningún código se repite: dos tipos con el mismo bajarían lo mismo", () => {
