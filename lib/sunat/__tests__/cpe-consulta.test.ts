@@ -39,8 +39,23 @@ describe("el catálogo de tipos de consulta", () => {
     assert.equal(consultaDe("ND-BVE Recibidas"), null);
   });
 
-  test("las boletas no llevan código: su pantalla usa un <select>, no el campo oculto", () => {
-    for (const c of CATALOGO.filter(x => x.pantalla === "boletas")) assert.equal(c.codigo, null);
+  // Salieron de los enlaces «Imprimir» del portal, que llevan tipoConsulta en
+  // la URL. Si alguien los cambia de memoria, esto avisa.
+  test("conserva los códigos de boleta leídos del portal", () => {
+    assert.equal(consultaDe("BVE Emitidas")!.codigo, "17");
+    assert.equal(consultaDe("BVE Recibidas")!.codigo, "18");
+    assert.equal(consultaDe("NC-BVE Emitidas")!.codigo, "20");
+  });
+
+  // Queda en null a propósito hasta verlo: con null se verifica contra la
+  // etiqueta del combobox, que es flojo pero cierto. Una suposición sería peor.
+  test("el código que todavía no se vio queda en null, no adivinado", () => {
+    assert.equal(consultaDe("ND-BVE Emitidas")!.codigo, null);
+  });
+
+  test("ningún código se repite: dos tipos con el mismo bajarían lo mismo", () => {
+    const codigos = CATALOGO.map(c => c.codigo).filter(c => c !== null);
+    assert.equal(new Set(codigos).size, codigos.length);
   });
 
   test("cada tipo sabe en qué pantalla vive", () => {

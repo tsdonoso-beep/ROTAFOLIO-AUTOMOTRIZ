@@ -12,23 +12,26 @@
 // MISMA pantalla. Las boletas no tienen por qué vivir ahí.
 
 /**
- * En cuál de las dos pantallas de consulta vive un tipo.
+ * En cuál de los dos módulos del portal vive un tipo.
  *
- * NO son la misma pantalla con opciones distintas: están armadas distinto de
- * arriba abajo, y por eso esto existe como dato en vez de como un `if` suelto.
- * Confirmado contra el portal real (capturas del 27/09/2026):
+ * Las dos pantallas SE VEN distintas, y mirando capturas se concluyó que
+ * estaban armadas distinto —otro tipo de desplegable, otros campos—. La
+ * radiografía del run del 28/09/2026 mostró que eso era falso:
  *
- *                     | facturas                  | boletas
- *   ------------------|---------------------------|---------------------------
- *   campos de fecha   | fec_desde / fec_hasta      | «Fecha de Inicio» / «Fin»
- *   Tipo de Consulta  | combobox jQuery            | <select> de HTML
- *   resultados        | grilla dojox (virtualiza)  | tabla HTML común
- *   descargar         | consultaFactura.descargar(i) | clic en el enlace
+ *   ▚ FRAME https://ww1.sunat.gob.pe/ol-ti-itconscpemypebve/consultar.do
+ *      inputs=36 selects=0
+ *        · input#criterio.fec_desde[name=fec_desde type=text]
+ *        · input#criterio.fec_hasta[name=fec_hasta type=text]
+ *        · input#criterio.tipoConsulta[name=- type=text]
+ *        · input#-[name=tipoConsulta type=hidden]
  *
- * La diferencia de los resultados es la que más pesa: la grilla dojox solo
- * pinta ~25 filas y recicla el DOM al scrollear —de ahí el fix de bajar por
- * índice—, mientras que una tabla común las trae todas, y ahí contar y clicar
- * enlaces (el camino viejo) es lo correcto.
+ * Cero `<select>`, y los mismos nombres de campo que la pantalla de facturas:
+ * es la misma aplicación (`ol-ti-itconscpemype` y `...bve`) con el mismo
+ * formulario. Así que el formulario se maneja IGUAL en las dos, y lo único
+ * que de verdad cambia es el camino del menú y las etiquetas de los tipos.
+ *
+ * Queda como dato porque nombra el módulo de verdad —el de la URL— y es por
+ * donde `conMenuDeBoletas` sabe a quiénes alcanzar.
  */
 export type Pantalla = "facturas" | "boletas";
 
@@ -43,15 +46,19 @@ export interface Consulta {
    * abrir la pantalla donde vive este tipo.
    */
   menu: string[];
-  /** Cuál de las dos pantallas, que se manejan distinto de punta a punta. */
+  /** En qué módulo del portal vive: `ol-ti-itconscpemype` o el `...bve`. */
   pantalla: Pantalla;
   /**
    * El código interno de SUNAT (el `input[name=tipoConsulta]` oculto), cuando
    * está confirmado contra el portal real. Solo sirve para verificar en el
    * log que quedó puesto el tipo correcto; nunca se escribe a mano.
    *
-   * Solo lo tiene la pantalla de facturas: la de boletas usa un `<select>` de
-   * verdad, donde lo que se verifica es el texto de la opción elegida.
+   * Confirmados: los seis de factura (10, 11, 13, 14, 15, 16) y tres de los
+   * cuatro de boleta (17, 18, 20). Falta el de ND-BVE Emitidas.
+   *
+   * Mientras alguno sea null, lo que se verifica de ese tipo es que el combobox
+   * quede mostrando la etiqueta pedida, y el script imprime el código en cuanto
+   * lo vea para poder anotarlo acá.
    */
   codigo: string | null;
   /**
@@ -68,9 +75,9 @@ const MENU_FACTURAS_Y_NOTAS = ["Empresas", "Consulta de Facturas y Notas Electr�
 /**
  * La pantalla de boletas: «Consultar Boleta de Venta y Nota».
  *
- * Confirmado contra el portal real. No tiene acceso directo como la de
- * facturas: hay que bajar el árbol entero del menú, que es por lo que el
- * camino es una lista y no dos clics.
+ * Confirmado contra el portal real: el run del 28/09/2026 hizo los cinco clics
+ * sin un solo aviso y aterrizó en `ol-ti-itconscpemypebve`. No tiene acceso
+ * directo como la de facturas —por eso el camino es una lista y no dos clics—.
  */
 const MENU_BOLETAS = [
   "Empresas",
@@ -101,9 +108,19 @@ export const CATALOGO: Consulta[] = [
   // Que las notas de boleta solo existan EMITIDAS no es un olvido: el portal
   // no ofrece «NC-BVE Recibidas» ni «ND-BVE Recibidas», y agregarlas «por
   // simetría» sería inventar dos consultas que van a fallar siempre.
-  { nombre: "BVE Emitidas",    etiqueta: "BVE Emitidas",    menu: MENU_BOLETAS, pantalla: "boletas", codigo: null, confirmado: true },
-  { nombre: "BVE Recibidas",   etiqueta: "BVE Recibidas",   menu: MENU_BOLETAS, pantalla: "boletas", codigo: null, confirmado: true },
-  { nombre: "NC-BVE Emitidas", etiqueta: "NC-BVE Emitidas", menu: MENU_BOLETAS, pantalla: "boletas", codigo: null, confirmado: true },
+  //
+  // Los códigos salieron de los enlaces «Imprimir» del propio portal, que los
+  // llevan en la URL:
+  //   …/ol-ti-itconscpemypebve/consultar.do?action=imprimirListado
+  //      &periodoDesc=22/09/2026 - 25/09/2026&tipoConsulta=18
+  //
+  // El de ND-BVE Emitidas todavía no apareció. Queda en null a propósito: con
+  // null se verifica contra la etiqueta que muestra el combobox —más flojo,
+  // pero cierto— y el script IMPRIME el código en cuanto lo vea. Poner acá una
+  // suposición sería peor que no poner nada.
+  { nombre: "BVE Emitidas",    etiqueta: "BVE Emitidas",    menu: MENU_BOLETAS, pantalla: "boletas", codigo: "17", confirmado: true },
+  { nombre: "BVE Recibidas",   etiqueta: "BVE Recibidas",   menu: MENU_BOLETAS, pantalla: "boletas", codigo: "18", confirmado: true },
+  { nombre: "NC-BVE Emitidas", etiqueta: "NC-BVE Emitidas", menu: MENU_BOLETAS, pantalla: "boletas", codigo: "20", confirmado: true },
   { nombre: "ND-BVE Emitidas", etiqueta: "ND-BVE Emitidas", menu: MENU_BOLETAS, pantalla: "boletas", codigo: null, confirmado: true },
 ];
 
