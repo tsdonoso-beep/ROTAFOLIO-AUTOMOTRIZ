@@ -225,6 +225,54 @@ async function radiografiaFormulario(page: Page) {
   console.log("");
 }
 
+/**
+ * Guarda el HTML del frame de RESULTADO (no el de la página principal) y
+ * lista sus enlaces/botones con la acción real (`onclick`/`href`).
+ *
+ * `evidencia()` guarda `page.content()`, que es solo el documento de arriba
+ * —el menú—: el resultado vive en un iframe de otro dominio
+ * (`ol-ti-itconscpegem`), y `page.content()` no lo trae. El run #6
+ * (28/09/2026) mostró la tabla «Factura electrónica recibida» con un ícono
+ * «Visualizar» por fila —la pista de cómo se llega al detalle del
+ * comprobante—, pero sin el HTML de ESE frame no se puede saber qué hace
+ * ese ícono al hacer clic.
+ */
+async function radiografiaResultado(page: Page, nombreArchivo: string): Promise<void> {
+  for (const f of page.frames()) {
+    let esResultado = false;
+    try {
+      esResultado = (await f.locator("text=Visualizar").count()) > 0
+        || (await f.locator("text=Factura electrónica").count()) > 0
+        || (await f.locator("text=Boleta electrónica").count()) > 0;
+    } catch { continue; }
+    if (!esResultado) continue;
+
+    try {
+      writeFileSync(join(CAPTURAS, `${nombreArchivo}.html`), await f.content());
+      console.log(`  · HTML del frame de resultado guardado: ${nombreArchivo}.html`);
+    } catch (e) {
+      console.log(`  · no pude guardar el HTML del resultado: ${e instanceof Error ? e.message : e}`);
+    }
+
+    try {
+      const acciones = await f.locator("a, img, button, [onclick]").evaluateAll(els =>
+        els.slice(0, 30).map(e => {
+          const el = e as HTMLElement;
+          const texto = (el.textContent || el.getAttribute("alt") || el.getAttribute("title") || "").replace(/\s+/g, " ").trim().slice(0, 40);
+          const onclick = el.getAttribute("onclick") || "";
+          const href = el.getAttribute("href") || "";
+          return `${el.tagName.toLowerCase()} "${texto}" onclick="${onclick}" href="${href}"`;
+        }).filter(s => !/onclick=""\s+href=""$/.test(s)));
+      console.log("  · elementos con acción en el resultado:");
+      acciones.forEach(a => console.log(`     ↓ ${a}`));
+    } catch (e) {
+      console.log(`  · no pude listar los enlaces del resultado: ${e instanceof Error ? e.message : e}`);
+    }
+    return;
+  }
+  console.log("  · no encontré un frame con el resultado (¿no encontró el comprobante?).");
+}
+
 async function abrirFormularioIndividual(page: Page) {
   console.log(`Menú → ${MENU_INDIVIDUAL.join(" → ")}…`);
   await irConReintento(page, LOGIN_URL);
@@ -465,7 +513,7 @@ try {
       await clicConsultar(marco);
       await page.waitForTimeout(2000);
       await evidencia(page, `resultado-${p.serie}-${p.numero}`);
-      if (DEBUG) await radiografiaFormulario(page);
+      if (DEBUG) await radiografiaResultado(page, `resultado-html-${p.serie}-${p.numero}`);
     }
 
     if (!DEBUG) {
