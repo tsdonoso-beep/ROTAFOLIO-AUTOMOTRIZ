@@ -248,15 +248,42 @@ async function entrar(page: Page) {
  * El menú de SOL se dibuja dentro de un iframe; buscar el texto solo en el
  * documento principal no lo encuentra y el clic expira. Esto recorre todos los
  * frames —el principal incluido— hasta hallarlo.
+ *
+ * Y prueba TODAS las coincidencias de cada marco, no solo la primera. Esa
+ * diferencia es lo que costó un run entero:
+ *
+ * Después de entrar una vez a «Consultar Boleta de Venta y Nota», SOL la
+ * agrega a su panel «ÚLTIMOS ACCESOS», arriba de la página. Ese panel está
+ * plegado, así que su entrada existe en el documento pero NO se puede clicar.
+ * Como aparece antes en el documento que la del árbol del menú, `.first()`
+ * caía siempre en ella, Playwright esperaba a que se volviera clicable, no
+ * pasaba, y a los 20 s se daba por vencido —sin haber probado nunca la del
+ * árbol, que sí funciona—.
+ *
+ * Lo peor es que el síntoma es «no encontré el texto» cuando el texto está
+ * ahí. Y solo aparece DESPUÉS del primer uso exitoso: el run que funciona
+ * rompe el siguiente.
  */
 async function clicEnAlgunMarco(page: Page, texto: string, timeoutMs = 20000): Promise<boolean> {
   const fin = Date.now() + timeoutMs;
+  let avisado = false;
   while (Date.now() < fin) {
     for (const f of page.frames()) {
-      try {
-        const loc = f.locator(`text=${texto}`).first();
-        if (await loc.count()) { await loc.click({ timeout: 5000 }); return true; }
-      } catch { /* el marco puede estar navegando; se reintenta */ }
+      const loc = f.locator(`text=${texto}`);
+      let cuantas = 0;
+      try { cuantas = await loc.count(); } catch { continue; }
+      if (cuantas > 1 && !avisado) {
+        console.log(`  · «${texto}» aparece ${cuantas} veces; se prueba la primera que se pueda clicar.`);
+        avisado = true;
+      }
+      for (let i = 0; i < cuantas; i++) {
+        try {
+          const uno = loc.nth(i);
+          if (!await uno.isVisible()) continue;
+          await uno.click({ timeout: 5000 });
+          return true;
+        } catch { /* esta no se pudo; se prueba la siguiente */ }
+      }
     }
     await page.waitForTimeout(500);
   }
@@ -264,11 +291,6 @@ async function clicEnAlgunMarco(page: Page, texto: string, timeoutMs = 20000): P
 }
 
 // ── Navegar a la consulta y bajar ─────────────────────────────────
-
-// Los campos de texto de SUNAT no siempre traen type="text": muchos son
-// <input> a secas, que `input[type="text"]` no captura. Se toma todo input que
-// no sea de los tipos que claramente no son de texto.
-const SEL_TEXTO = 'input:not([type="hidden"]):not([type="button"]):not([type="submit"]):not([type="image"]):not([type="checkbox"]):not([type="radio"]):not([type="password"])';
 
 // Los enlaces de descarga de una tabla de resultados.
 //
@@ -288,25 +310,27 @@ const SEL_PDF = 'a:has-text("PDF")';
  * formulario en sí vive en un iframe ANIDADO dentro de ese: el frame externo
  * matchea la URL pero no tiene campos. Por eso no basta con la URL —así se
  * eligió un frame vacío y salieron «0 comprobantes»—: se busca el frame que de
- * verdad tiene el `select` de tipo y los campos de fecha, y se espera a que
- * cargue.
+ * verdad tiene los campos de fecha, y se espera a que cargue.
+ *
+ * Devuelve `null` si no aparece, en vez de caer al marco con más campos de
+ * texto como hacía antes. Ese respaldo parecía prudente y resultó ser lo
+ * contrario: cuando el módulo no llegaba a abrirse, devolvía el marco del
+ * MENÚ, y después cada escritura de fecha agotaba sus 30 s contra un campo
+ * inexistente. Un run entero se fue en eso, minuto y medio por consulta,
+ * diciendo «no se pudo escribir la fecha» en vez de «el módulo no abrió».
  */
-async function marcoConsulta(page: Page, intentos = 30): Promise<Frame> {
-  let respaldo: Frame | null = null;
-  let maxInputs = -1;
+async function marcoConsulta(page: Page, intentos = 30): Promise<Frame | null> {
   for (let i = 0; i < intentos; i++) {
     for (const f of page.frames()) {
       try {
         // «fec_desde» es la marca segura, y resultó ser la misma en las dos
         // pantallas: son la misma aplicación.
         if (await f.locator('input[name="fec_desde"]').count()) return f;
-        const inputs = await f.locator(SEL_TEXTO).count();
-        if (inputs > maxInputs) { maxInputs = inputs; respaldo = f; }
       } catch { /* el marco puede estar navegando */ }
     }
     await page.waitForTimeout(1000);
   }
-  return respaldo ?? page.mainFrame();
+  return null;
 }
 
 /**
@@ -518,13 +542,14 @@ async function opcionesDelMenu(page: Page) {
  * cero —la sesión sigue viva, no vuelve a pedir clave— para cerrar cualquier
  * pestaña del módulo que haya quedado abierta.
  */
-async function abrirModuloConsulta(page: Page, menu: string[]) {
+async function abrirModuloConsulta(page: Page, menu: string[]): Promise<boolean> {
   console.log(`Menú → ${menu.join(" → ")}…`);
   await irConReintento(page, LOGIN_URL);
   await page.waitForLoadState("networkidle", { timeout: 30000 }).catch(() => {});
   await evidencia(page, "menu-inicio");
   console.log(`  · frames: ${page.frames().map(f => f.url() || "(vacío)").join(" | ")}`);
 
+  let completo = true;
   for (const [i, texto] of menu.entries()) {
     const ultimo = i === menu.length - 1;
     if (await clicEnAlgunMarco(page, texto)) {
@@ -532,6 +557,7 @@ async function abrirModuloConsulta(page: Page, menu: string[]) {
       if (!ultimo) await evidencia(page, `menu-${slug(texto)}`);
       continue;
     }
+    completo = false;
 
     // Un texto del menú que no está es lo que hay que saber con nombre y
     // apellido: se dice cuál, y se lista lo que el menú sí ofrece.
@@ -543,11 +569,12 @@ async function abrirModuloConsulta(page: Page, menu: string[]) {
     if (texto === "Consulta de Facturas y Notas Electrónicas") {
       await clicEnAlgunMarco(page, "Comprobantes de pago");
       await page.waitForTimeout(1000);
-      await clicEnAlgunMarco(page, "Consultar Factura y Nota");
+      if (await clicEnAlgunMarco(page, "Consultar Factura y Nota")) completo = true;
       await page.waitForTimeout(3000);
     }
   }
   await evidencia(page, "consulta-abierta");
+  return completo;
 }
 
 /** Un nombre de archivo seguro para las capturas, a partir del tipo de consulta. */
@@ -635,9 +662,14 @@ function descargarPorIndice(f: Frame, indice: number, metodo: "descargar" | "des
  * Es la misma aplicación (`ol-ti-itconscpemype` y `...bve`). Lo único que
  * cambia de verdad es el camino del menú, y eso ya lo dice el catálogo.
  */
-async function consultarUnTipo(page: Page, consulta: Consulta, desde: string, hasta: string): Promise<FilaBajada[]> {
+async function consultarUnTipo(page: Page, consulta: Consulta, desde: string, hasta: string): Promise<FilaBajada[] | null> {
   const tipo = consulta.nombre;
   const marco = await marcoConsulta(page);
+  if (!marco) {
+    console.log(`  ✗ ${tipo}: no se abrió el formulario de consulta. Revisa la captura «consulta-abierta».`);
+    await evidencia(page, `sin-formulario-${slug(tipo)}`);
+    return null;
+  }
   console.log(`  · marco de la consulta: ${marco.url() || "(principal)"}`);
 
   // Radiografía: qué hay de verdad en cada frame, para fijar los selectores
@@ -657,7 +689,7 @@ async function consultarUnTipo(page: Page, consulta: Consulta, desde: string, ha
   // formulario sería archivarlo bajo un nombre que no le corresponde.
   if (!await elegirTipo(marco, consulta)) {
     await evidencia(page, `sin-tipo-${slug(tipo)}`);
-    return [];
+    return null;
   }
 
   // Confirmar qué quedó puesto de verdad en el formulario.
@@ -1137,6 +1169,7 @@ try {
   // Tipo por tipo y, dentro de cada uno, tanda por tanda. Son
   // TIPOS × TANDAS consultas dentro del MISMO login.
   let consultas = 0;
+  let logradas = 0;
   for (const consulta of TIPOS_CONSULTA) {
     for (const tanda of TANDAS) {
       // Un respiro entre consultas: encadenarlas sin pausa dentro de la misma
@@ -1146,9 +1179,14 @@ try {
 
       const tipo = consulta.nombre;
       console.log(`\n── ${tipo} (${tanda.desde} a ${tanda.hasta}) ──`);
-      let filas: FilaBajada[];
+      let filas: FilaBajada[] | null;
       try {
-        await abrirModuloConsulta(page, consulta.menu);
+        if (!await abrirModuloConsulta(page, consulta.menu)) {
+          // Sin módulo abierto no hay nada que intentar: seguir gastaba minuto
+          // y medio por consulta escribiendo en el marco del menú.
+          console.error(`  ✗ ${tipo} (${tanda.desde} a ${tanda.hasta}): no se llegó a la pantalla de consulta.`);
+          continue;
+        }
         filas = await consultarUnTipo(page, consulta, tanda.desde, tanda.hasta);
       } catch (e) {
         // Una consulta que falla —el portal cambió, se cortó la conexión— no
@@ -1156,6 +1194,12 @@ try {
         console.error(`  ✗ ${tipo} (${tanda.desde} a ${tanda.hasta}): ${e instanceof Error ? e.message : e}`);
         continue;
       }
+
+      // `null` es «no se pudo consultar»; `[]` es «se consultó y no había
+      // nada», que es un resultado legítimo. Distinguirlos importa: es lo que
+      // permite al final saber si el run sirvió de algo.
+      if (filas === null) continue;
+      logradas++;
 
       if (DEBUG || filas.length === 0) continue;
 
@@ -1185,6 +1229,17 @@ try {
         if (c) comprobantes.push({ c, xmlUrl, pdfUrl });
       }
     }
+  }
+
+  // Un run donde NINGUNA consulta llegó siquiera a la tabla de resultados no
+  // es un run vacío: es un run roto, y tiene que verse rojo en la lista de
+  // Actions. El 28/09/2026 uno así terminó en verde habiendo fallado sus ocho
+  // consultas, y desde afuera era idéntico a «no había comprobantes».
+  if (logradas === 0 && consultas > 0) {
+    console.error(`\n✗ Ninguna de las ${consultas} consultas llegó a resultados. Revisa el artefacto 'capturas/'.`);
+    process.exitCode = 1;
+  } else if (logradas < consultas) {
+    console.log(`\n⚠ ${consultas - logradas} de ${consultas} consultas no llegaron a resultados.`);
   }
 
   if (DEBUG) {
