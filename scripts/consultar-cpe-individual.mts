@@ -135,29 +135,43 @@ async function entrar(page: Page) {
 
 /**
  * Hace clic en un texto del menú, pero en el que esté VISIBLE de verdad —no
- * en «el primero que aparece en el HTML».
+ * en «el primero que aparece en el HTML»—, y en la posición que corresponda
+ * cuando hay más de un visible a la vez.
  *
- * El árbol de SOL repite textos: «Factura Electrónica» existe dos veces (una
- * dentro de «SEE - SOL», una rama que nunca se despliega, y otra como
- * categoría propia, la que de verdad lleva a algo), y el propio menú entero
- * parece estar duplicado en el documento (se vieron dos `id="nivel1_11"`).
- * `.first()` sin mirar visibilidad se quedó pegado en la copia muerta —así
- * falló el segundo run real (28/09/2026)—. Filtrar por `isVisible()` toma la
- * copia que el usuario vería si estuviera mirando la pantalla.
+ * El árbol de SOL repite textos de dos formas distintas:
+ *   1. «Factura Electrónica» existe dos veces (una dentro de «SEE - SOL»,
+ *      una rama que nunca se despliega, y otra como categoría propia, la
+ *      que de verdad lleva a algo). De estas, la copia muerta no está
+ *      visible nunca: filtrar por `isVisible()` alcanza.
+ *   2. «Consultar Factura, Boletas y Notas» se repite EN EL MISMO camino:
+ *      hay una categoría con ese nombre y, adentro, el enlace de verdad
+ *      con el mismo nombre otra vez (confirmado por el run del 28/09/2026,
+ *      #3: el clic sobre la categoría la deja seleccionada —así se vio en
+ *      la captura «formulario-abierto»— pero las DOS veces el código buscó
+ *      «la primera visible» y las dos veces cayó en la categoría, que
+ *      simplemente se abre y se cierra de nuevo sin avanzar). Para este
+ *      caso hace falta pedir la ÚLTIMA visible en la segunda vuelta —la
+ *      categoría ya estaba visible antes del clic; el enlace de adentro
+ *      recién se vuelve visible después, así que queda más abajo en el
+ *      documento—.
  */
-async function clicEnAlgunMarco(page: Page, texto: string, timeoutMs = 20000): Promise<boolean> {
+async function clicEnAlgunMarco(
+  page: Page, texto: string, posicion: "primera" | "ultima" = "primera", timeoutMs = 20000,
+): Promise<boolean> {
   const fin = Date.now() + timeoutMs;
   while (Date.now() < fin) {
     for (const f of page.frames()) {
       try {
         const candidatos = f.locator(`text=${texto}`);
         const n = await candidatos.count();
+        const visibles: number[] = [];
         for (let i = 0; i < n; i++) {
-          const el = candidatos.nth(i);
-          if (await el.isVisible().catch(() => false)) {
-            await el.click({ timeout: 5000 });
-            return true;
-          }
+          if (await candidatos.nth(i).isVisible().catch(() => false)) visibles.push(i);
+        }
+        if (visibles.length > 0) {
+          const idx = posicion === "ultima" ? visibles[visibles.length - 1] : visibles[0];
+          await candidatos.nth(idx).click({ timeout: 5000 });
+          return true;
         }
       } catch { /* el marco puede estar navegando */ }
     }
@@ -219,8 +233,17 @@ async function abrirFormularioIndividual(page: Page) {
 
   for (const [i, texto] of MENU_INDIVIDUAL.entries()) {
     const ultimo = i === MENU_INDIVIDUAL.length - 1;
-    if (await clicEnAlgunMarco(page, texto)) {
-      await page.waitForTimeout(ultimo ? 3000 : 1200);
+    // Si este paso repite el texto del anterior —el caso de «Consultar
+    // Factura, Boletas y Notas» dos veces seguidas—, la categoría ya quedó
+    // visible con el clic previo: el enlace de adentro es el que hace falta
+    // ahora, y ese es el que aparece último, no el primero.
+    const posicion = i > 0 && MENU_INDIVIDUAL[i - 1] === texto ? "ultima" : "primera";
+    // El siguiente paso repite este mismo texto: hay que dejar tiempo de
+    // sobra para que el enlace de adentro termine de aparecer antes de
+    // buscarlo, no los 1200ms de siempre.
+    const siguienteRepite = MENU_INDIVIDUAL[i + 1] === texto;
+    if (await clicEnAlgunMarco(page, texto, posicion)) {
+      await page.waitForTimeout(ultimo ? 3000 : siguienteRepite ? 2500 : 1200);
       if (!ultimo) await evidencia(page, `menu-${i}`);
       continue;
     }
