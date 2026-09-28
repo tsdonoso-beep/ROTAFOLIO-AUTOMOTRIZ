@@ -1,11 +1,16 @@
 // Bajar los comprobantes (XML y PDF) del portal de SUNAT y archivarlos en Drive
 //
 // El detalle de ítems no lo da ninguna API: sale del XML, y al XML solo se
-// llega por la pantalla «Consultar Factura y Nota» de SOL, que tiene login.
+// llega por las pantallas de consulta de CPE de SOL, que tienen login.
 // Por eso esto maneja un navegador de verdad (Playwright), no peticiones
 // sueltas. Corre en GitHub Actions —Apps Script no puede manejar un navegador
 // y Vercel corta al minuto— y reusa los secretos que ya están: el usuario y la
-// clave de SOL son los mismos del SIRE.
+// clave de SOL pueden ser los mismos del SIRE.
+//
+// QUÉ SE PUEDE PEDIR: el catálogo de tipos de consulta —cómo se llama cada uno
+// en el portal y por qué entrada del menú se llega— vive en
+// `lib/sunat/cpe-consulta.ts`, junto con el corte del rango en tandas. Acá
+// queda solo el manejo del navegador.
 //
 // Qué hace: entra, va a la consulta, y fila por fila baja el XML y el PDF de
 // cada comprobante y los sube a la carpeta de Drive del proyecto. Con el XML
@@ -20,7 +25,7 @@
 //   • Descarga (DEBUG=0): baja XML+PDF, los archiva en Drive y guarda el
 //     detalle.
 
-import { chromium, type Page, type Frame, type Download } from "playwright";
+import { chromium, type Page, type Frame, type Locator, type Download } from "playwright";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Readable } from "node:stream";
@@ -30,6 +35,10 @@ import { normalizarClavePrivada, correoDeServicio, carpeta, publicarHoja } from 
 import { leerZip } from "../lib/sunat/zip.ts";
 import { leerComprobanteXml, type ComprobanteCpe } from "../lib/sunat/cpe-xml.ts";
 import { prepararLote, origenDe, periodoDe, identidad, type DocLote } from "../lib/sunat/cpe-importacion.ts";
+import {
+  conMenuDeBoletas, consultaDe, normalizar, tandasPorMes, periodosDelRango, nombreDeHojaDelRango,
+  type Consulta, type Pantalla, type Tanda,
+} from "../lib/sunat/cpe-consulta.ts";
 import { filasItemsSunat, filaDetalleDesdeRpc, detalleCpeCompleto, TIPOS_ITEMS } from "../lib/export/items-sunat.ts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -42,20 +51,51 @@ function pedir(...nombres: string[]): string {
 }
 
 const RUC       = process.env.SUNAT_RUC?.trim() || "20512201611";
-const USUARIO   = pedir("SUNAT_INROPRIN_USUARIO");     // el secundario de SOL, ej. APISIREE
-const CLAVE     = pedir("SUNAT_INROPRIN_CLAVE");
+// El acceso de SOL con el que se entra al portal.
+//
+// Se buscan primero SUNAT_SOL_USUARIO / SUNAT_SOL_CLAVE y se cae a los del
+// SIRE. Nacieron siendo el mismo usuario secundario, pero el acceso que puede
+// ver boletas se dio aparte: con un solo secreto para las dos cosas, cambiarlo
+// acá cambiaría también el del SIRE —que no necesita ese permiso— y un error
+// en uno rompería los dos. Mientras los secretos nuevos no estén puestos, esto
+// se comporta exactamente como antes.
+const USUARIO = pedir("SUNAT_SOL_USUARIO", "SUNAT_INROPRIN_USUARIO");  // el secundario de SOL, ej. APISIREE
+const CLAVE   = pedir("SUNAT_SOL_CLAVE", "SUNAT_INROPRIN_CLAVE");
 
 // El usuario del portal es el secundario solo, sin el RUC pegado adelante.
 const USUARIO_SOL = USUARIO.startsWith(RUC) ? USUARIO.slice(RUC.length) : USUARIO;
 
 const DEBUG = process.env.DEBUG !== "0";
 
-// Uno o varios, separados por coma: "FE Emitidas,FE Recibidas,NC Emitidas".
+// Por dónde se entra a las boletas, si la corrida de depuración mostró que no
+// es lo que dice el catálogo. Los textos del menú van separados por «>»:
+// "Empresas > Comprobantes de pago > Consultar Boleta". Vacío = el del
+// catálogo. Es un tornillo de ajuste: cuando se sepa el camino de verdad, se
+// escribe en `lib/sunat/cpe-consulta.ts` y este input deja de hacer falta.
+const MENU_BOLETAS = (process.env.MENU_BOLETAS?.trim() || "")
+  .split(">").map(t => t.trim()).filter(Boolean);
+
+const CATALOGO = conMenuDeBoletas(MENU_BOLETAS);
+
+// Uno o varios, separados por coma: "FE Emitidas,FE Recibidas,BE Recibidas".
 // El portal los tiene como consultas separadas —no hay un «todo junto»—, así
 // que en vez de disparar el workflow una vez por tipo (con su propio login
 // cada vez) esto entra una sola vez y los recorre todos en la misma sesión.
-const TIPOS_CONSULTA = (process.env.TIPOS_CONSULTA?.trim() || process.env.TIPO_CONSULTA?.trim() || "FE Recibidas")
-  .split(",").map(t => t.trim()).filter(Boolean);
+//
+// Se resuelven contra el catálogo ANTES de entrar a SUNAT: un nombre mal
+// escrito en el workflow tiene que cortar acá, con la lista de los que hay, y
+// no después de un login y veinte minutos de corrida.
+const TIPOS_CONSULTA: Consulta[] = (process.env.TIPOS_CONSULTA?.trim() || process.env.TIPO_CONSULTA?.trim() || "FE Recibidas")
+  .split(",").map(t => t.trim()).filter(Boolean)
+  .map(n => {
+    const c = consultaDe(n, CATALOGO);
+    if (!c) {
+      console.error(`✗ "${n}" no es un tipo de consulta conocido.`);
+      console.error(`  Los que hay: ${CATALOGO.map(x => x.nombre).join(", ")}.`);
+      process.exit(1);
+    }
+    return c;
+  });
 
 // La carpeta de Drive del proyecto donde se archivan los comprobantes.
 const CARPETA_DRIVE = process.env.SUNAT_DRIVE_FOLDER?.trim() || "1RnyGimYdnhbQ3nKxGOoBc_iRz38fxCnX";
@@ -74,6 +114,36 @@ const HOY = new Date();
 const FECHA_FIN = process.env.FECHA_FIN?.trim() || ddmmyyyy(HOY);
 const FECHA_INICIO = process.env.FECHA_INICIO?.trim()
   || ddmmyyyy(new Date(HOY.getTime() - 30 * 24 * 3600 * 1000));
+
+/**
+ * Partir el rango en una consulta por mes calendario.
+ *
+ * Apagado por omisión: la corrida diaria pide dos días y partirlos no tiene
+ * sentido. Se prende para los rellenos largos —agosto y setiembre completos,
+ * por ejemplo—, donde pedir varios meses en UNA sola consulta es justo lo que
+ * disparó el «User rate limit exceeded» de SUNAT.
+ */
+const PARTIR_POR_MES = process.env.PARTIR_POR_MES === "1";
+
+/**
+ * El rango, ya partido en las consultas que se van a hacer.
+ *
+ * En depuración NO se parte, aunque se haya pedido: ahí el objetivo es ver qué
+ * ofrece el portal —el menú, las opciones del «Tipo de Consulta»—, y eso se ve
+ * igual de bien en una consulta que en seis. Partir multiplicaría la corrida
+ * (ocho tipos por dos meses son dieciséis entradas al menú) para repetir el
+ * mismo hallazgo. El corte está probado aparte, en los tests del módulo.
+ */
+const TANDAS: Tanda[] = PARTIR_POR_MES && !DEBUG
+  ? tandasPorMes(FECHA_INICIO, FECHA_FIN)
+  : [{ desde: FECHA_INICIO, hasta: FECHA_FIN }];
+
+/**
+ * Además de la hoja histórica, dejar una hoja APARTE solo con los períodos que
+ * abarca el rango pedido. Apagado por omisión: la corrida diaria no necesita
+ * una hoja nueva cada día.
+ */
+const HOJA_DEL_RANGO = process.env.HOJA_DEL_RANGO === "1";
 
 const CAPTURAS = join(process.cwd(), "capturas");
 mkdirSync(CAPTURAS, { recursive: true });
@@ -200,6 +270,15 @@ async function clicEnAlgunMarco(page: Page, texto: string, timeoutMs = 20000): P
 // no sea de los tipos que claramente no son de texto.
 const SEL_TEXTO = 'input:not([type="hidden"]):not([type="button"]):not([type="submit"]):not([type="image"]):not([type="checkbox"]):not([type="radio"]):not([type="password"])';
 
+// Los enlaces de descarga de la tabla de boletas.
+//
+// El del XML se busca por «(XML)» y no por «Descargar Factura»: el portal
+// rotula el enlace de una BOLETA como «Descargar Factura (XML)» —sí, dice
+// Factura— y ese texto puede corregirse cualquier día, mientras que la parte
+// que distingue al XML del PDF es el formato entre paréntesis.
+const SEL_XML_BOLETA = 'a:has-text("(XML)")';
+const SEL_PDF_BOLETA = 'a:has-text("PDF")';
+
 /**
  * Encuentra el iframe donde vive el formulario de la consulta.
  *
@@ -210,14 +289,13 @@ const SEL_TEXTO = 'input:not([type="hidden"]):not([type="button"]):not([type="su
  * verdad tiene el `select` de tipo y los campos de fecha, y se espera a que
  * cargue.
  */
-async function marcoConsulta(page: Page, intentos = 30): Promise<Frame> {
+async function marcoConsulta(page: Page, pantalla: Pantalla, intentos = 30): Promise<Frame> {
   let respaldo: Frame | null = null;
   let maxInputs = -1;
   for (let i = 0; i < intentos; i++) {
     for (const f of page.frames()) {
       try {
-        // El formulario tiene el campo de fecha «fec_desde»: es la marca segura.
-        if (await f.locator('input[name="fec_desde"]').count()) return f;
+        if (await esElFormulario(f, pantalla)) return f;
         const inputs = await f.locator(SEL_TEXTO).count();
         if (inputs > maxInputs) { maxInputs = inputs; respaldo = f; }
       } catch { /* el marco puede estar navegando */ }
@@ -227,35 +305,227 @@ async function marcoConsulta(page: Page, intentos = 30): Promise<Frame> {
   return respaldo ?? page.mainFrame();
 }
 
-/** Pone una fecha en el campo con ese `name`, abriéndolo si es de solo lectura. */
-async function ponerFechaPorNombre(marco: Frame, nombre: string, valor: string) {
-  const campo = marco.locator(`input[name="${nombre}"]`).first();
-  await campo.evaluate((el, v) => {
-    const i = el as HTMLInputElement;
-    i.removeAttribute("readonly");
-    i.value = v as string;
-    i.dispatchEvent(new Event("input", { bubbles: true }));
-    i.dispatchEvent(new Event("change", { bubbles: true }));
-    i.dispatchEvent(new Event("blur", { bubbles: true }));
-  }, valor).catch((e: unknown) => console.log(`  ⚠ no se pudo poner ${nombre}: ${e instanceof Error ? e.message.split("\n")[0] : e}`));
+/**
+ * ¿Este marco tiene el formulario que buscamos?
+ *
+ * Cada pantalla se reconoce por algo que solo ella tiene:
+ *
+ *   • facturas: el campo de fecha se llama `fec_desde`. Es la marca de siempre.
+ *   • boletas: un `<select>` cuyas opciones hablan de BVE. Se elige ese marcador
+ *     y no el texto «Fecha de Inicio» porque los nombres de sus campos no los
+ *     conocemos —el portal solo muestra las etiquetas—, mientras que las
+ *     opciones del desplegable sí están confirmadas contra el portal real.
+ */
+async function esElFormulario(f: Frame, pantalla: Pantalla): Promise<boolean> {
+  if (pantalla === "facturas") {
+    return (await f.locator('input[name="fec_desde"]').count()) > 0;
+  }
+  return f.locator("select").evaluateAll(els =>
+    els.some(s => Array.from((s as HTMLSelectElement).options).some(o => /BVE/i.test(o.text)))
+  ).catch(() => false);
 }
 
 /**
- * Elige el Tipo de Consulta, que es un combobox (input visible + hidden), no
- * un <select>. Se hace como un humano: clic en el visible y clic en la opción.
+ * Escribe la fecha en un campo, abriéndolo si es de solo lectura.
+ *
+ * Se escribe directo (dd/mm/yyyy) y se disparan los eventos a mano, en vez de
+ * pelear con el calendario emergente. Lo comparten las dos pantallas, que
+ * difieren en CÓMO encontrar el campo, no en cómo llenarlo.
  */
-async function elegirTipo(marco: Frame, etiqueta: string) {
+async function escribirFecha(campo: Locator, valor: string): Promise<boolean> {
+  try {
+    await campo.evaluate((el, v) => {
+      const i = el as HTMLInputElement;
+      i.removeAttribute("readonly");
+      i.value = v as string;
+      i.dispatchEvent(new Event("input", { bubbles: true }));
+      i.dispatchEvent(new Event("change", { bubbles: true }));
+      i.dispatchEvent(new Event("blur", { bubbles: true }));
+    }, valor);
+    return true;
+  } catch (e) {
+    console.log(`  ⚠ no se pudo escribir la fecha: ${e instanceof Error ? e.message.split("\n")[0] : e}`);
+    return false;
+  }
+}
+
+/** Pone una fecha en el campo con ese `name` (pantalla de facturas y notas). */
+async function ponerFechaPorNombre(marco: Frame, nombre: string, valor: string) {
+  const campo = marco.locator(`input[name="${nombre}"]`).first();
+  if (!await escribirFecha(campo, valor)) console.log(`  ⚠ …era el campo ${nombre}`);
+}
+
+/**
+ * Pone una fecha en el formulario de BOLETAS, donde no sabemos cómo se llaman
+ * los campos.
+ *
+ * En la pantalla de facturas los campos se llaman `fec_desde` / `fec_hasta` y
+ * se van a buscar por nombre. En la de boletas el portal solo muestra las
+ * etiquetas «Fecha de Inicio» y «Fecha de Fin»; el `name` real no se ve en una
+ * captura. Así que se intentan dos caminos, en orden, y el registro dice cuál
+ * funcionó —con eso, la próxima vez se puede ir directo—:
+ *
+ *   1. por la etiqueta de su fila, que es lo que sí se ve y lo que no cambia
+ *      aunque SUNAT renombre un campo;
+ *   2. por posición entre los campos de texto (el primero es inicio, el
+ *      segundo es fin), que es como está armado ese formulario de tres filas.
+ *
+ * Devuelve false si ninguno encontró el campo, y entonces la consulta se
+ * abandona: pedir un rango que no se pudo escribir traería otro período.
+ */
+async function ponerFechaDeBoleta(
+  marco: Frame, etiqueta: string, posicion: number, valor: string
+): Promise<boolean> {
+  // `.last()` toma la fila más interna: si hay tablas anidadas, la de afuera
+  // también contiene el texto y aparece antes en el documento.
+  const porFila = marco.locator("tr").filter({ hasText: etiqueta }).last().locator(SEL_TEXTO).first();
+  if (await porFila.count().catch(() => 0)) {
+    if (await escribirFecha(porFila, valor)) {
+      console.log(`  · «${etiqueta}» = ${valor} (por la etiqueta de la fila)`);
+      return true;
+    }
+  }
+
+  const porPosicion = marco.locator(SEL_TEXTO).nth(posicion);
+  if (await porPosicion.count().catch(() => 0)) {
+    if (await escribirFecha(porPosicion, valor)) {
+      console.log(`  · «${etiqueta}» = ${valor} (por posición, campo de texto nº ${posicion + 1})`);
+      return true;
+    }
+  }
+
+  console.log(`  ✗ no encontré el campo «${etiqueta}» en el formulario de boletas.`);
+  return false;
+}
+
+/**
+ * Elige el Tipo de Consulta en la pantalla de FACTURAS Y NOTAS —un combobox
+ * (input visible + hidden), no un <select>— y CONFIRMA que quedó elegido ese y
+ * no otro. Devuelve false si no se pudo.
+ *
+ * Se hace como un humano: clic en el visible y clic en la opción. Lo nuevo es
+ * el «y confirma». Antes, cuando no encontraba la opción, teclaba el texto y
+ * mandaba Enter y seguía adelante; con los seis tipos de siempre eso nunca
+ * hizo daño porque todos existían. Con las boletas sí puede hacerlo: su
+ * etiqueta es una suposición, y si no existe el combobox se queda con lo que
+ * tenía —el log diría «BE Recibidas: 112 comprobantes» y serían facturas, que
+ * es peor que no bajar nada, porque nadie lo notaría—.
+ *
+ * Por eso: si el tipo tiene código confirmado, se compara contra el campo
+ * oculto; si no lo tiene (las boletas), al menos se exige que la opción exista
+ * de verdad en la lista.
+ */
+async function elegirTipoDeFactura(marco: Frame, consulta: Consulta): Promise<boolean> {
   const visible = marco.locator('[id="criterio.tipoConsulta"]').first();
-  if (!(await visible.count())) { console.log("  ⚠ no encontré el campo de tipo"); return; }
+  if (!(await visible.count())) { console.log("  ⚠ no encontré el campo de tipo"); return false; }
   await visible.click().catch(() => {});
   await marco.page().waitForTimeout(800);
+
+  // Las opciones que este acceso ofrece DE VERDAD. Es la evidencia que dice
+  // cómo se llaman las boletas en el portal, en vez de adivinar la etiqueta.
+  const opciones = await marco.locator("li, .ui-menu-item, option").evaluateAll(
+    els => [...new Set(els.map(e => (e.textContent || "").replace(/\s+/g, " ").trim())
+      .filter(t => t.length > 0 && t.length < 60))].slice(0, 40)
+  ).catch(() => [] as string[]);
+  if (opciones.length) console.log(`  · opciones del «Tipo de Consulta»: ${opciones.join(" | ")}`);
+
+  const etiqueta = consulta.etiqueta;
   const opcion = marco.locator(
     `li:has-text("${etiqueta}"), .ui-menu-item:has-text("${etiqueta}"), option:has-text("${etiqueta}"), a:has-text("${etiqueta}")`
   ).first();
-  if (await opcion.count()) { await opcion.click().catch(() => {}); return; }
-  // Respaldo: teclear el texto y Enter.
-  await visible.fill(etiqueta).catch(() => {});
-  await visible.press("Enter").catch(() => {});
+
+  if (await opcion.count()) {
+    await opcion.click().catch(() => {});
+  } else if (consulta.confirmado) {
+    // Respaldo de siempre, solo para los tipos que sabemos que existen:
+    // teclear el texto y Enter. El código se verifica abajo igual.
+    console.log(`  ⚠ no vi la opción «${etiqueta}» en la lista; se teclea y se verifica.`);
+    await visible.fill(etiqueta).catch(() => {});
+    await visible.press("Enter").catch(() => {});
+  } else {
+    console.log(`  ✗ este acceso no ofrece «${etiqueta}» (etiqueta sin confirmar). No se consulta este tipo:`);
+    console.log("    corregí la etiqueta en lib/sunat/cpe-consulta.ts con una de las opciones de arriba.");
+    return false;
+  }
+
+  if (consulta.codigo) {
+    // El campo oculto se actualiza por un evento del combobox, no en el mismo
+    // tic del clic: leerlo de inmediato puede sorprenderlo con el valor
+    // ANTERIOR (el que trae el formulario recién abierto). Abortar por eso
+    // sería romper una consulta que iba bien — y en la corrida diaria, que
+    // nadie mira, eso se vería como «hoy no había comprobantes».
+    //
+    // Así que se le da tiempo: se acepta apenas coincide, y solo se abandona
+    // si sigue en otro valor después de varios intentos. Esa insistencia es
+    // lo que distingue un desfase de medio segundo de un tipo mal elegido.
+    let puesto = "";
+    for (let i = 0; i < 6; i++) {
+      puesto = await marco.locator('input[name="tipoConsulta"]').first().inputValue().catch(() => "");
+      if (!puesto || puesto === consulta.codigo) break;
+      await marco.page().waitForTimeout(500);
+    }
+    if (puesto && puesto !== consulta.codigo) {
+      console.log(`  ✗ el formulario quedó con tipoConsulta=${puesto} y ${consulta.nombre} es ${consulta.codigo}. No se consulta, para no bajar otro tipo creyendo que es este.`);
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Elige el Tipo de Consulta en la pantalla de BOLETAS, que es un `<select>` de
+ * HTML de verdad —no el combobox de jQuery de la otra pantalla—, y confirma
+ * que quedó elegida esa opción.
+ *
+ * Se busca el `<select>` por sus opciones y no por su posición: el formulario
+ * podría ganar otro desplegable mañana y la posición dejaría de significar
+ * nada, mientras que «el que ofrece BVE Recibidas» seguirá siendo ese.
+ *
+ * La comparación es por texto normalizado (sin acentos ni dobles espacios)
+ * pero EXACTA, no «que contenga»: «BVE Emitidas» está contenido en nada, pero
+ * «NC-BVE Emitidas» contiene «BVE Emitidas», y con una comparación floja pedir
+ * la nota de crédito podría elegir la boleta. Ese es justo el error que no se
+ * nota mirando el resultado.
+ */
+async function elegirTipoDeBoleta(marco: Frame, consulta: Consulta): Promise<boolean> {
+  const selects = marco.locator("select");
+  const cuantos = await selects.count().catch(() => 0);
+  if (cuantos === 0) { console.log("  ⚠ no encontré ningún desplegable en el formulario de boletas."); return false; }
+
+  const buscada = normalizar(consulta.etiqueta);
+  for (let i = 0; i < cuantos; i++) {
+    const select = selects.nth(i);
+    const opciones = await select.locator("option").allTextContents().catch(() => [] as string[]);
+    if (opciones.length === 0) continue;
+    console.log(`  · opciones del desplegable nº ${i + 1}: ${opciones.map(o => o.trim()).join(" | ")}`);
+
+    const exacta = opciones.find(o => normalizar(o) === buscada);
+    if (!exacta) continue;
+
+    await select.selectOption({ label: exacta.trim() }).catch(async () => {
+      // Respaldo: algunas páginas viejas no reaccionan al label; se elige por
+      // índice y se avisa el cambio con un evento, como haría una persona.
+      await select.evaluate((el, texto) => {
+        const s = el as HTMLSelectElement;
+        const idx = Array.from(s.options).findIndex(o => o.text.trim() === texto);
+        if (idx >= 0) { s.selectedIndex = idx; s.dispatchEvent(new Event("change", { bubbles: true })); }
+      }, exacta.trim());
+    });
+
+    const elegida = await select.evaluate(el => {
+      const s = el as HTMLSelectElement;
+      return s.options[s.selectedIndex]?.text ?? "";
+    }).catch(() => "");
+    if (normalizar(elegida) !== buscada) {
+      console.log(`  ✗ pedí «${consulta.etiqueta}» y el desplegable quedó en «${elegida}». No se consulta.`);
+      return false;
+    }
+    console.log(`  · Tipo de Consulta = «${elegida.trim()}»`);
+    return true;
+  }
+
+  console.log(`  ✗ ningún desplegable ofrece «${consulta.etiqueta}». No se consulta este tipo.`);
+  return false;
 }
 
 /**
@@ -282,7 +552,35 @@ async function clicAceptar(marco: Frame) {
 }
 
 /**
- * Llega a «Consultar Factura y Nota» desde el menú «¿Qué necesitas hacer?».
+ * Imprime las entradas del menú de SOL que se ven ahora mismo.
+ *
+ * Es cómo se averigua por dónde entra un módulo que nunca usamos, sin tener la
+ * clave delante: el log del run dice qué ofrece ESTE acceso y con eso se
+ * corrige el catálogo. Hace falta justo ahora que el acceso creció —las
+ * boletas están detrás de una entrada que todavía no vimos— y seguirá sirviendo
+ * la próxima vez que SUNAT renombre algo.
+ */
+async function opcionesDelMenu(page: Page) {
+  for (const f of page.frames()) {
+    let textos: string[] = [];
+    try {
+      textos = await f.locator("a, li").evaluateAll(els => [...new Set(
+        els.map(e => (e.textContent || "").replace(/\s+/g, " ").trim())
+          .filter(t => t.length > 3 && t.length < 70)
+      )].slice(0, 50));
+    } catch { continue; }
+    if (textos.length === 0) continue;
+    console.log(`  · menú visible en ${f.url().slice(0, 60) || "(principal)"}:`);
+    textos.forEach(t => console.log(`     – ${t}`));
+  }
+}
+
+/**
+ * Llega a la pantalla de consulta desde el menú «¿Qué necesitas hacer?».
+ *
+ * Qué textos hay que clicar lo dice el catálogo (`consulta.menu`), no este
+ * código: facturas y notas viven en una pantalla y las boletas pueden vivir en
+ * otra, y esa diferencia es un dato, no un `if`.
  *
  * Se repite antes de CADA tipo de consulta —aunque sea un poco más lento que
  * reusar el formulario ya abierto— porque es el único camino que se probó de
@@ -298,24 +596,35 @@ async function clicAceptar(marco: Frame) {
  * cero —la sesión sigue viva, no vuelve a pedir clave— para cerrar cualquier
  * pestaña del módulo que haya quedado abierta.
  */
-async function abrirModuloConsulta(page: Page) {
-  console.log("Menú → Empresas → Consulta de Facturas y Notas Electrónicas…");
+async function abrirModuloConsulta(page: Page, menu: string[]) {
+  console.log(`Menú → ${menu.join(" → ")}…`);
   await irConReintento(page, LOGIN_URL);
   await page.waitForLoadState("networkidle", { timeout: 30000 }).catch(() => {});
   await evidencia(page, "menu-inicio");
   console.log(`  · frames: ${page.frames().map(f => f.url() || "(vacío)").join(" | ")}`);
 
-  if (!await clicEnAlgunMarco(page, "Empresas")) console.log("  ⚠ no encontré «Empresas»");
-  await page.waitForTimeout(1500);
-  await evidencia(page, "empresas");
+  for (const [i, texto] of menu.entries()) {
+    const ultimo = i === menu.length - 1;
+    if (await clicEnAlgunMarco(page, texto)) {
+      await page.waitForTimeout(ultimo ? 3000 : 1500);
+      if (!ultimo) await evidencia(page, `menu-${slug(texto)}`);
+      continue;
+    }
 
-  if (!await clicEnAlgunMarco(page, "Consulta de Facturas y Notas Electrónicas")) {
-    // Alternativa: la ruta por menú, si el acceso directo no está.
-    await clicEnAlgunMarco(page, "Comprobantes de pago");
-    await page.waitForTimeout(1000);
-    await clicEnAlgunMarco(page, "Consultar Factura y Nota");
+    // Un texto del menú que no está es lo que hay que saber con nombre y
+    // apellido: se dice cuál, y se lista lo que el menú sí ofrece.
+    console.log(`  ⚠ no encontré «${texto}» en el menú de este acceso.`);
+    await opcionesDelMenu(page);
+
+    // El respaldo de siempre para facturas y notas: la ruta larga por
+    // «Comprobantes de pago», por si el acceso directo no está.
+    if (texto === "Consulta de Facturas y Notas Electrónicas") {
+      await clicEnAlgunMarco(page, "Comprobantes de pago");
+      await page.waitForTimeout(1000);
+      await clicEnAlgunMarco(page, "Consultar Factura y Nota");
+      await page.waitForTimeout(3000);
+    }
   }
-  await page.waitForTimeout(3000);
   await evidencia(page, "consulta-abierta");
 }
 
@@ -378,8 +687,129 @@ function descargarPorIndice(f: Frame, indice: number, metodo: "descargar" | "des
  * el tipo («Descargar NC (XML)» en notas de crédito—, así que no se busca
  * por texto para decidir cuántas filas hay: se lee `rowCount` del grid.
  */
-async function consultarUnTipo(page: Page, tipo: string): Promise<FilaBajada[]> {
-  const marco = await marcoConsulta(page);
+function consultarUnTipo(page: Page, consulta: Consulta, desde: string, hasta: string): Promise<FilaBajada[]> {
+  return consulta.pantalla === "boletas"
+    ? consultarBoletas(page, consulta, desde, hasta)
+    : consultarFacturas(page, consulta, desde, hasta);
+}
+
+/**
+ * Pide un tipo de la pantalla de BOLETAS y devuelve las descargas.
+ *
+ * Es un camino aparte del de facturas —no una rama dentro de él— porque no
+ * comparten casi nada: otro formulario, otro tipo de desplegable, otra tabla y
+ * otra forma de bajar. Meterlo todo en una función con `if`s dejaría las dos
+ * mitades enredadas y pondría en riesgo la de facturas, que ya está probada
+ * contra datos reales.
+ *
+ * La tabla de resultados acá es HTML común, no la grilla dojox: trae TODAS las
+ * filas en el documento, así que contar los enlaces y clicarlos —el camino
+ * viejo, el que en la grilla se quedaba en 25 de 400— es exactamente lo
+ * correcto, y no hace falta nada del arreglo de bajar por índice.
+ */
+async function consultarBoletas(page: Page, consulta: Consulta, desde: string, hasta: string): Promise<FilaBajada[]> {
+  const tipo = consulta.nombre;
+  const marco = await marcoConsulta(page, "boletas");
+  console.log(`  · marco de la consulta: ${marco.url() || "(principal)"}`);
+  if (DEBUG) await radiografia(page);
+
+  const fechasOk = (await ponerFechaDeBoleta(marco, "Fecha de Inicio", 0, desde))
+    && (await ponerFechaDeBoleta(marco, "Fecha de Fin", 1, hasta));
+  if (!fechasOk) {
+    // Sin el rango escrito, Aceptar traería el período que estuviera puesto.
+    // Archivar eso como si fuera el rango pedido es peor que no traer nada.
+    await evidencia(page, `sin-fechas-${slug(tipo)}`);
+    return [];
+  }
+
+  if (!await elegirTipoDeBoleta(marco, consulta)) {
+    await evidencia(page, `sin-tipo-${slug(tipo)}`);
+    return [];
+  }
+
+  await evidencia(page, `consulta-lista-${slug(tipo)}`);
+  await clicAceptar(marco);
+
+  // Los resultados pueden quedar en este marco o en otro: se busca el que
+  // tenga enlaces de descarga. Hasta 60s, como en la otra pantalla.
+  let res: Frame = marco;
+  let xmls = 0;
+  for (let i = 0; i < 30; i++) {
+    for (const f of page.frames()) {
+      const c = await f.locator(SEL_XML_BOLETA).count().catch(() => 0);
+      if (c > xmls) { xmls = c; res = f; }
+    }
+    if (xmls > 0) break;
+    await page.waitForTimeout(2000);
+  }
+
+  const pdfs = await res.locator(SEL_PDF_BOLETA).count().catch(() => 0);
+  await evidencia(page, `resultados-${slug(tipo)}`);
+  console.log(`  · resultados [${tipo}]: ${xmls} enlaces XML, ${pdfs} enlaces PDF en ${res.url().slice(0, 70)}`);
+
+  if (xmls === 0) {
+    // Puede ser un mes sin boletas de ese tipo —legítimo— o que la tabla haya
+    // quedado en otro lado. La radiografía distingue una cosa de la otra.
+    await radiografia(page);
+    return [];
+  }
+
+  // Cruce de cordura: en una tabla HTML común, los enlaces deberían ser tantos
+  // como filas de datos. Si no cuadran, algo se está contando mal y hay que
+  // verlo en el registro ANTES de dar la descarga por completa —es el mismo
+  // error que en la grilla dojox dejó 25 de 400 durante semanas—.
+  const filasTabla = await res.locator("tr").count().catch(() => 0);
+  if (filasTabla > 0 && Math.abs(filasTabla - xmls) > 3) {
+    console.log(`  ⚠ la tabla tiene ${filasTabla} filas <tr> y hay ${xmls} enlaces XML. Revisa si falta bajar algo.`);
+  }
+  if (pdfs > 0 && pdfs !== xmls) {
+    console.log(`  ⚠ hay ${xmls} enlaces XML pero ${pdfs} de PDF: se bajará el XML de todas y el PDF donde esté.`);
+  }
+
+  if (DEBUG) {
+    console.log(`Modo depuración [${tipo}]: se ven ${xmls} comprobantes. No se baja nada.`);
+    return [];
+  }
+
+  console.log(`Bajando ${xmls} comprobantes de ${tipo} (XML${pdfs > 0 ? " + PDF" : ", sin PDF en esta pantalla"})…`);
+  const salida: FilaBajada[] = [];
+  const xml = res.locator(SEL_XML_BOLETA);
+  const pdf = res.locator(SEL_PDF_BOLETA);
+
+  for (let i = 0; i < xmls; i++) {
+    let xmlArchivo: ArchivoBajado | null = null;
+    let pdfArchivo: ArchivoBajado | null = null;
+
+    try {
+      xmlArchivo = await bajar(page, () => xml.nth(i).click());
+    } catch (e) {
+      console.log(`  · XML fila ${i + 1} [${tipo}]: ${e instanceof Error ? e.message : e} — reintentando…`);
+      await page.waitForTimeout(1500);
+      try { xmlArchivo = await bajar(page, () => xml.nth(i).click()); }
+      catch (e2) { console.log(`  · XML fila ${i + 1} [${tipo}]: ${e2 instanceof Error ? e2.message : e2}`); }
+    }
+
+    if (i < pdfs) {
+      try { pdfArchivo = await bajar(page, () => pdf.nth(i).click()); }
+      catch (e) { console.log(`  · PDF fila ${i + 1} [${tipo}]: ${e instanceof Error ? e.message : e}`); }
+    }
+
+    salida.push({ xml: xmlArchivo, pdf: pdfArchivo });
+
+    // El mismo respiro que en la otra pantalla: pedir archivo tras archivo sin
+    // pausa es lo que disparó el «User rate limit exceeded» de SUNAT.
+    await page.waitForTimeout(400);
+  }
+  return salida;
+}
+
+/**
+ * Pide un tipo de la pantalla de FACTURAS Y NOTAS y devuelve las descargas.
+ * Es el camino de siempre, el probado contra datos reales.
+ */
+async function consultarFacturas(page: Page, consulta: Consulta, desde: string, hasta: string): Promise<FilaBajada[]> {
+  const tipo = consulta.nombre;
+  const marco = await marcoConsulta(page, "facturas");
   console.log(`  · marco de la consulta: ${marco.url() || "(principal)"}`);
 
   // Radiografía: qué hay de verdad en cada frame, para fijar los selectores
@@ -389,13 +819,18 @@ async function consultarUnTipo(page: Page, tipo: string): Promise<FilaBajada[]> 
   // Fechas: por su nombre real (fec_desde / fec_hasta), no por posición —la
   // radiografía mostró que hay varios inputs de texto y contar posiciones caía
   // en los equivocados—.
-  await ponerFechaPorNombre(marco, "fec_desde", FECHA_INICIO);
-  await ponerFechaPorNombre(marco, "fec_hasta", FECHA_FIN);
+  await ponerFechaPorNombre(marco, "fec_desde", desde);
+  await ponerFechaPorNombre(marco, "fec_hasta", hasta);
 
   // Tipo de Consulta: no es un <select> sino un combobox (input visible
   // #criterio.tipoConsulta + hidden name=tipoConsulta). Se maneja como un
-  // humano: clic en el visible y clic en la opción.
-  await elegirTipo(marco, tipo);
+  // humano: clic en el visible y clic en la opción. Si no se pudo dejar ESTE
+  // tipo puesto, se abandona la consulta: bajar lo que haya quedado en el
+  // formulario sería archivarlo bajo un nombre que no le corresponde.
+  if (!await elegirTipoDeFactura(marco, consulta)) {
+    await evidencia(page, `sin-tipo-${slug(tipo)}`);
+    return [];
+  }
 
   // Confirmar qué quedó puesto de verdad en el formulario.
   const leer = async (n: string) => (await marco.locator(`input[name="${n}"]`).first().inputValue().catch(() => "?"));
@@ -463,7 +898,7 @@ async function consultarUnTipo(page: Page, tipo: string): Promise<FilaBajada[]> 
       const periodoEnHtml = html.match(/del\s*Periodo\s*<\/?[^>]*>?\s*([\d/ -]+)/i)?.[1]?.trim()
         ?? html.match(/(\d{2}\/\d{2}\/\d{4}\s*-\s*\d{2}\/\d{2}\/\d{4})/)?.[1];
       const filas = (html.match(/<tr[ >]/gi) ?? []).length;
-      console.log(`  · PRUEBA imprimirListado [${tipo}]: se consultó "${FECHA_INICIO} - ${FECHA_FIN}", se pidió el listado con "${RANGO_PRUEBA_IMPRIMIR}" → el HTML dice periodo "${periodoEnHtml}", ${filas} filas <tr>.`);
+      console.log(`  · PRUEBA imprimirListado [${tipo}]: se consultó "${desde} - ${hasta}", se pidió el listado con "${RANGO_PRUEBA_IMPRIMIR}" → el HTML dice periodo "${periodoEnHtml}", ${filas} filas <tr>.`);
     } catch (e) {
       console.log(`  · PRUEBA imprimirListado [${tipo}] falló: ${e instanceof Error ? e.message : e}`);
     }
@@ -655,6 +1090,27 @@ async function carpetaDelLote(
 // ── Guardar el detalle (opcional, si hay base) ────────────────────
 
 /**
+ * Entra a la base como el robot. `null` si no hay credenciales o si el login
+ * falla, que es un aviso, no un motivo para tumbar la corrida: lo bajado ya
+ * quedó archivado en Drive.
+ *
+ * Aparte de `guardarDetalle` porque publicar una hoja también necesita entrar,
+ * y hay un caso en que hay que publicar sin haber guardado nada: cuando la
+ * corrida no bajó nada nuevo pero la hoja del rango se pidió igual.
+ */
+async function clienteBase(): Promise<SupabaseClient | null> {
+  const url = process.env.SUPABASE_URL || process.env.PROJECT_URL;
+  if (!url) return null;
+  const sb = createClient(url, pedir("SUPABASE_ANON_KEY", "ANON_KEY"),
+    { auth: { autoRefreshToken: false, persistSession: false } });
+  const { error } = await sb.auth.signInWithPassword({
+    email: pedir("ROBOT_CORREO"), password: pedir("ROBOT_CLAVE"),
+  });
+  if (error) { console.error("⚠ No se pudo entrar a la base:", error.message); return null; }
+  return sb;
+}
+
+/**
  * Guarda el detalle y devuelve el cliente ya logueado como el robot, para
  * que el llamador pueda reusarlo y dejar la hoja publicada sin loguearse de
  * nuevo. `null` si no había credenciales de la base o nada que guardar.
@@ -677,12 +1133,8 @@ async function guardarDetalle(
     d.pdfDriveUrl = par?.pdfUrl ?? null;
   }
 
-  const sb = createClient(url, pedir("SUPABASE_ANON_KEY", "ANON_KEY"),
-    { auth: { autoRefreshToken: false, persistSession: false } });
-  const { error: eLogin } = await sb.auth.signInWithPassword({
-    email: pedir("ROBOT_CORREO"), password: pedir("ROBOT_CLAVE"),
-  });
-  if (eLogin) { console.error("⚠ No se guardó el detalle (login):", eLogin.message); return null; }
+  const sb = await clienteBase();
+  if (!sb) return null;
   const { data, error } = await sb.rpc("guardar_cpe", { p_empresa_ruc: RUC, p_docs: lote });
   if (error) { console.error("⚠ No se guardó el detalle:", error.message); return null; }
   const r = (Array.isArray(data) ? data[0] : data) as { nuevos: number; actualizados: number; items: number };
@@ -723,6 +1175,64 @@ async function publicarLaHojaDetalle(sb: SupabaseClient): Promise<void> {
     tipos: TIPOS_ITEMS,
   });
   console.log(`Hoja de detalle al día: ${filas.length} ítems · ${r.url}`);
+}
+
+/**
+ * Deja una hoja APARTE con solo los períodos que abarca el rango pedido.
+ *
+ * La histórica —«COMPROBANTES SUNAT - DETALLE»— trae todo y por eso crece sin
+ * parar; para revisar dos meses concretos, o para pasárselos a alguien sin
+ * mandarle el archivo entero, sirve una hoja con esos meses y nada más.
+ *
+ * Se llena desde la BASE, no desde lo que se acaba de bajar: así sale completa
+ * aunque esta corrida solo haya agregado lo que faltaba, y así también sale
+ * bien si se vuelve a correr el mismo rango (que es seguro repetir: Drive
+ * detecta «ya estaba» y la base actualiza en vez de duplicar).
+ *
+ * El nombre lleva el rango y es estable, así que la corrida siguiente del
+ * mismo rango REEMPLAZA esta hoja en vez de dejar otra al lado.
+ */
+async function publicarLaHojaDelRango(sb: SupabaseClient): Promise<void> {
+  if (!process.env.GOOGLE_SA_EMAIL || !process.env.GOOGLE_DRIVE_FOLDER_ID) {
+    console.log("Sin credenciales de Drive: no se crea la hoja del rango.");
+    return;
+  }
+
+  const periodos = periodosDelRango(FECHA_INICIO, FECHA_FIN);
+  const nombre = nombreDeHojaDelRango(periodos);
+  if (!nombre) {
+    console.log(`No se entendió el rango ${FECHA_INICIO} – ${FECHA_FIN}: no se crea la hoja aparte.`);
+    return;
+  }
+
+  // Un período por llamada: `detalle_cpe` filtra por período exacto, no por
+  // rango, y paginar cada uno es el camino que ya está probado.
+  const datos: Record<string, unknown>[] = [];
+  try {
+    for (const periodo of periodos) datos.push(...await detalleCpeCompleto(sb, periodo));
+  } catch (e) {
+    console.error("⚠ No se pudo leer el detalle del rango:", e instanceof Error ? e.message : e);
+    return;
+  }
+
+  const filas = datos.map(filaDetalleDesdeRpc);
+  const r = await publicarHoja({
+    filas: filasItemsSunat(filas),
+    nombre,
+    carpetas: ["SUNAT"],
+    tipos: TIPOS_ITEMS,
+  });
+  console.log(`Hoja «${nombre}»: ${filas.length} ítems · ${r.url}`);
+
+  // El desglose por tipo de comprobante, que es cómo se comprueba de un
+  // vistazo si las boletas (03) de verdad entraron o si la hoja trae solo
+  // facturas otra vez.
+  const porTipo = new Map<string, number>();
+  for (const f of filas) {
+    const t = f.tipoComprobante || "?";
+    porTipo.set(t, (porTipo.get(t) ?? 0) + 1);
+  }
+  console.log(`  · ítems por tipo de comprobante: ${[...porTipo].sort().map(([t, n]) => `${t}=${n}`).join(" ") || "(ninguno)"}`);
 }
 
 /**
@@ -775,63 +1285,88 @@ try {
   let nuevos = 0, existentes = 0;
   const comprobantes: Array<{ c: ComprobanteCpe; xmlUrl: string | null; pdfUrl: string | null }> = [];
 
-  console.log(`\nTipos a consultar: ${TIPOS_CONSULTA.join(" · ")}`);
+  console.log(`\nTipos a consultar: ${TIPOS_CONSULTA.map(t => t.nombre).join(" · ")}`);
+  console.log(`Rango: ${FECHA_INICIO} a ${FECHA_FIN}`
+    + (TANDAS.length > 1 ? ` — partido en ${TANDAS.length} consultas, una por mes` : ""));
 
-  for (const [i, tipo] of TIPOS_CONSULTA.entries()) {
-    console.log(`\n── ${tipo} (${FECHA_INICIO} a ${FECHA_FIN}) ──`);
-    let filas: FilaBajada[];
-    try {
-      await abrirModuloConsulta(page);
-      filas = await consultarUnTipo(page, tipo);
-    } catch (e) {
-      // Un tipo que falla —el portal cambió, se cortó la conexión— no debe
-      // tumbar los demás: los otros cinco igual merecen bajarse.
-      console.error(`  ✗ ${tipo}: ${e instanceof Error ? e.message : e}`);
-      continue;
-    }
+  // Tipo por tipo y, dentro de cada uno, tanda por tanda. Son
+  // TIPOS × TANDAS consultas dentro del MISMO login.
+  let consultas = 0;
+  for (const consulta of TIPOS_CONSULTA) {
+    for (const tanda of TANDAS) {
+      // Un respiro entre consultas: encadenarlas sin pausa dentro de la misma
+      // sesión es justo el patrón que un WAF marca como robot. Va antes de cada
+      // una menos la primera, así no se espera de gusto al final.
+      if (consultas++ > 0) await page.waitForTimeout(3000);
 
-    if (DEBUG || filas.length === 0) continue;
-
-    // Se lee el XML antes de subir para saber, por comprobante, si es
-    // Emitida o Recibida y de qué mes es —así cada archivo va directo a su
-    // carpeta ordenada, en vez de a una carpeta plana que hay que reordenar
-    // después—.
-    for (const fila of filas) {
-      const xmls = fila.xml ? xmlsDe(fila.xml) : [];
-      const c = xmls[0] ? leerComprobanteXml(xmls[0]) : null;
-      const origen = c ? origenDe(c, RUC) : "OTRO";
-      const periodo = c ? periodoDe(c.fechaEmision) : null;
-      const carpetaId = await carpetaDelLote(drive!, origen, periodo);
-
-      let xmlUrl: string | null = null;
-      let pdfUrl: string | null = null;
-      if (fila.xml) {
-        const r = await subirADrive(drive!, carpetaId, fila.xml);
-        if (r.estado === "nuevo") nuevos++; else existentes++;
-        xmlUrl = r.url;
+      const tipo = consulta.nombre;
+      console.log(`\n── ${tipo} (${tanda.desde} a ${tanda.hasta}) ──`);
+      let filas: FilaBajada[];
+      try {
+        await abrirModuloConsulta(page, consulta.menu);
+        filas = await consultarUnTipo(page, consulta, tanda.desde, tanda.hasta);
+      } catch (e) {
+        // Una consulta que falla —el portal cambió, se cortó la conexión— no
+        // debe tumbar las demás: las otras igual merecen bajarse.
+        console.error(`  ✗ ${tipo} (${tanda.desde} a ${tanda.hasta}): ${e instanceof Error ? e.message : e}`);
+        continue;
       }
-      if (fila.pdf) {
-        const r = await subirADrive(drive!, carpetaId, fila.pdf);
-        if (r.estado === "nuevo") nuevos++; else existentes++;
-        pdfUrl = r.url;
-      }
-      if (c) comprobantes.push({ c, xmlUrl, pdfUrl });
-    }
 
-    // Un respiro entre tipos: son consultas seguidas dentro de la misma
-    // sesión, y encadenarlas sin pausa es justo el patrón que un WAF marca
-    // como robot. No aplica tras el último tipo.
-    if (i < TIPOS_CONSULTA.length - 1) await page.waitForTimeout(3000);
+      if (DEBUG || filas.length === 0) continue;
+
+      // Se lee el XML antes de subir para saber, por comprobante, si es
+      // Emitida o Recibida y de qué mes es —así cada archivo va directo a su
+      // carpeta ordenada, en vez de a una carpeta plana que hay que reordenar
+      // después—.
+      for (const fila of filas) {
+        const xmls = fila.xml ? xmlsDe(fila.xml) : [];
+        const c = xmls[0] ? leerComprobanteXml(xmls[0]) : null;
+        const origen = c ? origenDe(c, RUC) : "OTRO";
+        const periodo = c ? periodoDe(c.fechaEmision) : null;
+        const carpetaId = await carpetaDelLote(drive!, origen, periodo);
+
+        let xmlUrl: string | null = null;
+        let pdfUrl: string | null = null;
+        if (fila.xml) {
+          const r = await subirADrive(drive!, carpetaId, fila.xml);
+          if (r.estado === "nuevo") nuevos++; else existentes++;
+          xmlUrl = r.url;
+        }
+        if (fila.pdf) {
+          const r = await subirADrive(drive!, carpetaId, fila.pdf);
+          if (r.estado === "nuevo") nuevos++; else existentes++;
+          pdfUrl = r.url;
+        }
+        if (c) comprobantes.push({ c, xmlUrl, pdfUrl });
+      }
+    }
   }
 
   if (DEBUG) {
     console.log("\nModo depuración: no se bajó nada. Revisa el artefacto 'capturas/'.");
-  } else if (comprobantes.length === 0) {
-    console.log("\nNo se bajó ningún archivo en el rango, en ninguno de los tipos consultados.");
   } else {
-    console.log(`\nArchivados en Drive: ${nuevos} nuevos, ${existentes} ya estaban.`);
-    const sb = await guardarDetalle(comprobantes);
-    if (sb) await publicarLaHojaDetalle(sb);
+    if (comprobantes.length === 0) {
+      console.log("\nNo se bajó ningún archivo en el rango, en ninguno de los tipos consultados.");
+    } else {
+      console.log(`\nArchivados en Drive: ${nuevos} nuevos, ${existentes} ya estaban.`);
+    }
+
+    // Si no se bajó nada pero la hoja del rango se pidió igual, se entra a la
+    // base solo para publicarla: la hoja se arma con lo que hay GUARDADO, así
+    // que sale bien aunque esta corrida no haya agregado nada. Sin esto, pedir
+    // la hoja de un rango ya descargado terminaba sin hoja y sin explicación.
+    //
+    // Cuando sí hubo algo que bajar, en cambio, un guardado que falla deja el
+    // `null` de siempre y NO se publica nada: una hoja a la que le falta lo de
+    // esta corrida es peor que ninguna, porque se lee como completa.
+    const sb = comprobantes.length > 0
+      ? await guardarDetalle(comprobantes)
+      : (HOJA_DEL_RANGO ? await clienteBase() : null);
+
+    if (sb) {
+      await publicarLaHojaDetalle(sb);
+      if (HOJA_DEL_RANGO) await publicarLaHojaDelRango(sb);
+    }
   }
 } catch (e) {
   await evidencia(page, "error");
