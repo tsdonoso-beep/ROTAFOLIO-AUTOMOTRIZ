@@ -51,15 +51,18 @@ const LIMITE = Number(process.env.LIMITE?.trim() || (DEBUG ? "3" : "0"));
 
 const LOGIN_URL = "https://e-menu.sunat.gob.pe/cl-ti-itmenu/MenuInternet.htm";
 
-// El camino que muestran las capturas del portal real (28/09/2026):
-// Empresas → Comprobantes de pago → Factura Electrónica → «Consultar
-// Factura, Boletas y Notas» (aparece dos veces: la entrada del menú y,
-// debajo, el enlace de verdad).
+// El camino real, confirmado por la radiografía del primer run (28/09/2026):
+// tras el clic en «Comprobantes de pago» el menú despliega TODO el árbol de
+// una sola vez —«Factura Electrónica» no es un enlace, es solo el
+// encabezado de la categoría; nunca hay que hacerle clic—, y «Consultar
+// Factura, Boletas y Notas» ya queda visible ahí mismo. La primera versión
+// de este menú copiaba el camino con flechitas de la captura (cinco pasos,
+// con «Factura Electrónica» como uno de ellos) y se colgó ahí: ese texto
+// existe en la página, pero no es clicable, así que el clic nunca hacía
+// nada y el siguiente paso jamás aparecía.
 const MENU_INDIVIDUAL = [
   "Empresas",
   "Comprobantes de pago",
-  "Factura Electrónica",
-  "Consultar Factura, Boletas y Notas",
   "Consultar Factura, Boletas y Notas",
 ];
 
