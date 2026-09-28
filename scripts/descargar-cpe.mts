@@ -449,7 +449,21 @@ async function elegirTipoDeFactura(marco: Frame, consulta: Consulta): Promise<bo
   }
 
   if (consulta.codigo) {
-    const puesto = await marco.locator('input[name="tipoConsulta"]').first().inputValue().catch(() => "");
+    // El campo oculto se actualiza por un evento del combobox, no en el mismo
+    // tic del clic: leerlo de inmediato puede sorprenderlo con el valor
+    // ANTERIOR (el que trae el formulario recién abierto). Abortar por eso
+    // sería romper una consulta que iba bien — y en la corrida diaria, que
+    // nadie mira, eso se vería como «hoy no había comprobantes».
+    //
+    // Así que se le da tiempo: se acepta apenas coincide, y solo se abandona
+    // si sigue en otro valor después de varios intentos. Esa insistencia es
+    // lo que distingue un desfase de medio segundo de un tipo mal elegido.
+    let puesto = "";
+    for (let i = 0; i < 6; i++) {
+      puesto = await marco.locator('input[name="tipoConsulta"]').first().inputValue().catch(() => "");
+      if (!puesto || puesto === consulta.codigo) break;
+      await marco.page().waitForTimeout(500);
+    }
     if (puesto && puesto !== consulta.codigo) {
       console.log(`  ✗ el formulario quedó con tipoConsulta=${puesto} y ${consulta.nombre} es ${consulta.codigo}. No se consulta, para no bajar otro tipo creyendo que es este.`);
       return false;
