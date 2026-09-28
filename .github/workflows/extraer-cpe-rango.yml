@@ -1,0 +1,157 @@
+# Extraer un rango largo de comprobantes y dejarlo en una hoja aparte
+#
+# Es el mismo motor que «SUNAT descargar XML» (`descargar-cpe.yml`, mismo
+# script, mismo login, mismo archivado en Drive). Se separó porque los dos
+# trabajos son distintos de verdad y mezclarlos hacía daño:
+#
+#   • `descargar-cpe.yml` corre SOLO, todos los días a las 08:00, y pide una
+#     ventana de dos días. Mantiene el mes en curso al día.
+#   • este corre A MANO, pide meses completos, y además de archivar deja una
+#     hoja con solo esos meses.
+#
+# Con un solo workflow, las dos cosas se pisaban: el cron heredaba el rango
+# ancho del relleno (cientos de descargas repetidas a diario, y el «User rate
+# limit exceeded» de SUNAT), o el relleno heredaba la ventana de dos días del
+# cron. Acá el cron no existe: este workflow no arranca si nadie lo dispara.
+#
+# QUÉ TRAE DE NUEVO
+#   1. Parte el rango en una consulta por MES (PARTIR_POR_MES=1). Pedirle dos
+#      meses de golpe a SUNAT es justo lo que dispara su límite de solicitudes.
+#   2. Deja una hoja aparte con esos meses (HOJA_DEL_RANGO=1), con el rango en
+#      el nombre: «COMPROBANTES SUNAT - DETALLE 2026-08 a 2026-09». La hoja
+#      histórica —«COMPROBANTES SUNAT - DETALLE», que trae todo— se sigue
+#      actualizando igual; esta es además de esa, no en vez de esa.
+#   3. Puede pedir BOLETAS, con el acceso ampliado de SOL.
+#
+# ANTES DE LA PRIMERA CORRIDA DE VERDAD, LEER ESTO
+#
+# La pantalla que el scraper usa hoy —«Consulta de Facturas y Notas
+# Electrónicas»— no lista boletas: sus seis tipos son FE, NC y ND. Dónde
+# aparecen las boletas con el acceso nuevo es algo que NO se puede saber sin
+# entrar: pueden ser opciones nuevas del mismo combobox «Tipo de Consulta», o
+# una entrada de menú aparte. Así que:
+#
+#   PASO 1 — correr con debug = true (lo que viene marcado). No baja nada:
+#            entra, recorre el menú y deja en el registro la lista de lo que
+#            este acceso ofrece de verdad (las entradas del menú y las opciones
+#            del «Tipo de Consulta»), más las capturas como artefacto.
+#   PASO 2 — con esa lista, corregir en `lib/sunat/cpe-consulta.ts` la etiqueta
+#            y el menú de «BE Emitidas» / «BE Recibidas». Para probar un camino
+#            sin tocar código, está el input `menu_boletas`.
+#   PASO 3 — recién entonces correr con debug = false.
+#
+# Si la etiqueta de las boletas no existe en el portal, el script SALTA ese
+# tipo y lo dice. No baja lo que haya quedado en el formulario: eso archivaría
+# facturas bajo el nombre de boletas, y nadie lo notaría.
+
+name: SUNAT extraer rango (hoja aparte)
+
+# A mano y nada más: es un relleno, no una tarea diaria.
+on:
+  workflow_dispatch:
+    inputs:
+      debug:
+        description: "Solo mirar: entra, lista el menú y los tipos que ofrece este acceso, y no baja nada. Dejar en true la primera vez."
+        type: boolean
+        required: false
+        default: true
+      fecha_inicio:
+        description: "Desde (dd/mm/yyyy)."
+        required: false
+        default: "01/08/2026"
+      fecha_fin:
+        description: "Hasta (dd/mm/yyyy)."
+        required: false
+        default: "30/09/2026"
+      tipos_consulta:
+        description: >-
+          Los tipos a consultar, separados por coma. Los nombres válidos están
+          en el catálogo de lib/sunat/cpe-consulta.ts: FE Emitidas, FE
+          Recibidas, NC Emitidas, NC Recibidas, ND Emitidas, ND Recibidas, BE
+          Emitidas, BE Recibidas. Un nombre que no esté en la lista corta la
+          corrida antes del login, diciendo cuáles hay.
+        required: false
+        default: "FE Emitidas,FE Recibidas,NC Emitidas,NC Recibidas,ND Emitidas,ND Recibidas,BE Emitidas,BE Recibidas"
+      menu_boletas:
+        description: >-
+          Para probar por dónde se entra a las boletas sin tocar código: los
+          textos del menú separados por «>», por ejemplo «Empresas >
+          Comprobantes de pago > Consultar Boleta». Vacío = el camino que dice
+          el catálogo. Cuando uno funcione, escribirlo en cpe-consulta.ts y
+          dejar esto vacío de nuevo.
+        required: false
+        default: ""
+
+# Esto solo lee de SUNAT y escribe en la base y en Drive.
+permissions:
+  contents: read
+
+jobs:
+  extraer:
+    runs-on: ubuntu-latest
+    # Ocho tipos por dos meses son dieciséis consultas en la misma sesión, y un
+    # mes cargado con seis tipos ya rondaba la hora. El tope de un job de
+    # GitHub son 6 horas; se deja algo de margen debajo para que el fallo, si
+    # llega, sea del script y no un corte a mitad de descarga.
+    timeout-minutes: 330
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      # Solo Chromium, que es lo que usa el script, con sus dependencias de
+      # sistema. Evita bajar los otros navegadores.
+      - run: npx playwright install --with-deps chromium
+
+      - name: Entrar a SOL y (si no es depuración) bajar el rango
+        env:
+          SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
+          # El acceso ampliado de SOL, el que puede ver boletas. Si estos dos
+          # secretos no están puestos, el script cae a los del SIRE —los de
+          # siempre— y todo sigue funcionando como antes, solo que sin boletas.
+          SUNAT_SOL_USUARIO: ${{ secrets.SUNAT_SOL_USUARIO }}
+          SUNAT_SOL_CLAVE: ${{ secrets.SUNAT_SOL_CLAVE }}
+          SUNAT_INROPRIN_USUARIO: ${{ secrets.SUNAT_INROPRIN_USUARIO }}
+          SUNAT_INROPRIN_CLAVE: ${{ secrets.SUNAT_INROPRIN_CLAVE }}
+          SUNAT_INROPRIN_CLIENT_ID: ${{ secrets.SUNAT_INROPRIN_CLIENT_ID }}
+          # La carpeta de Drive donde se archivan los comprobantes. Si no se
+          # pone el secreto, el script usa la del proyecto por omisión.
+          SUNAT_DRIVE_FOLDER: ${{ secrets.SUNAT_DRIVE_FOLDER }}
+          GOOGLE_SA_EMAIL: ${{ secrets.GOOGLE_SA_EMAIL }}
+          GOOGLE_SA_PRIVATE_KEY: ${{ secrets.GOOGLE_SA_PRIVATE_KEY }}
+          # Hace falta para dejar las hojas publicadas. Si falta, lo bajado
+          # igual queda archivado y guardado, y solo se saltan las hojas.
+          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          PROJECT_URL: ${{ secrets.PROJECT_URL }}
+          ANON_KEY: ${{ secrets.ANON_KEY }}
+          ROBOT_CORREO: ${{ secrets.ROBOT_CORREO }}
+          ROBOT_CLAVE: ${{ secrets.ROBOT_CLAVE }}
+          DEBUG: ${{ inputs.debug && '1' || '0' }}
+          FECHA_INICIO: ${{ inputs.fecha_inicio }}
+          FECHA_FIN: ${{ inputs.fecha_fin }}
+          TIPOS_CONSULTA: ${{ inputs.tipos_consulta }}
+          MENU_BOLETAS: ${{ inputs.menu_boletas }}
+          # Las dos cosas que distinguen a este workflow del diario.
+          PARTIR_POR_MES: "1"
+          HOJA_DEL_RANGO: "1"
+        run: node --experimental-strip-types scripts/descargar-cpe.mts
+
+      # Las capturas y el HTML de cada paso: es la evidencia con la que se
+      # fijan el menú y la etiqueta de las boletas. Se suben aunque el paso
+      # anterior falle, que es justo cuando más se necesitan.
+      - name: Subir capturas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capturas-sunat-rango
+          path: capturas/
+          if-no-files-found: warn
+          retention-days: 7
