@@ -101,6 +101,11 @@ const MENU_INDIVIDUAL: PasoMenu[] = [
   { texto: "Empresas" },
   { texto: "Comprobantes de pago" },
   { texto: "Comprobantes de Pago", posicion: "ultima" },
+  // Faltaba este: el run #7 (28/09/2026) saltó directo de «Comprobantes de
+  // Pago» a «Nueva Consulta de comprobantes de pago» y no lo encontró —el
+  // catálogo del menú (comentario de arriba) dice clarito que entre los dos
+  // va esta categoría, 11.38.1—.
+  { texto: "Consulta de Comprobantes de Pago" },
   { texto: "Nueva Consulta de comprobantes de pago" },
   { texto: "Nueva Consulta de comprobantes de pago" },
 ];
