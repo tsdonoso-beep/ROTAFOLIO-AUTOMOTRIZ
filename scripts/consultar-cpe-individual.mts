@@ -51,18 +51,27 @@ const LIMITE = Number(process.env.LIMITE?.trim() || (DEBUG ? "3" : "0"));
 
 const LOGIN_URL = "https://e-menu.sunat.gob.pe/cl-ti-itmenu/MenuInternet.htm";
 
-// El camino real, confirmado por la radiografía del primer run (28/09/2026):
-// tras el clic en «Comprobantes de pago» el menú despliega TODO el árbol de
-// una sola vez —«Factura Electrónica» no es un enlace, es solo el
-// encabezado de la categoría; nunca hay que hacerle clic—, y «Consultar
-// Factura, Boletas y Notas» ya queda visible ahí mismo. La primera versión
-// de este menú copiaba el camino con flechitas de la captura (cinco pasos,
-// con «Factura Electrónica» como uno de ellos) y se colgó ahí: ese texto
-// existe en la página, pero no es clicable, así que el clic nunca hacía
-// nada y el siguiente paso jamás aparecía.
+// El camino de verdad son los cinco pasos de la captura original. El HTML
+// del segundo run trajo, en un <script>, el catálogo completo del menú
+// (`var opciones=...`) con la URL de cada programa —ahí se ve que
+// «Consultar Factura, Boletas y Notas» (11.9.5.1.1) abre
+// `/ol-ti-itconscpegem/consultar.do`, una aplicación DISTINTA de las dos que
+// ya usa `descargar-cpe.mts` (`...itconscpemype` para facturas,
+// `...itconscpemypebve` para boletas)—.
+//
+// El primer run sacó el paso de «Factura Electrónica» creyendo que no era
+// clicable; el segundo, sin ese paso, tampoco encontró «Consultar Factura,
+// Boletas y Notas». La razón real, que el mismo HTML delató: «Factura
+// Electrónica» aparece DOS VECES en el árbol —una dentro de «SEE - SOL» (una
+// rama muerta, sin nada debajo) y otra como categoría propia, la que sí
+// lleva a lo que buscamos—. `clicEnAlgunMarco` tomaba «la primera que
+// encuentra» sin mirar si está visible, y agarraba la copia muerta. La
+// arregla eso, no el camino: el camino correcto siempre fue este de cinco.
 const MENU_INDIVIDUAL = [
   "Empresas",
   "Comprobantes de pago",
+  "Factura Electrónica",
+  "Consultar Factura, Boletas y Notas",
   "Consultar Factura, Boletas y Notas",
 ];
 
@@ -124,13 +133,32 @@ async function entrar(page: Page) {
   }
 }
 
+/**
+ * Hace clic en un texto del menú, pero en el que esté VISIBLE de verdad —no
+ * en «el primero que aparece en el HTML».
+ *
+ * El árbol de SOL repite textos: «Factura Electrónica» existe dos veces (una
+ * dentro de «SEE - SOL», una rama que nunca se despliega, y otra como
+ * categoría propia, la que de verdad lleva a algo), y el propio menú entero
+ * parece estar duplicado en el documento (se vieron dos `id="nivel1_11"`).
+ * `.first()` sin mirar visibilidad se quedó pegado en la copia muerta —así
+ * falló el segundo run real (28/09/2026)—. Filtrar por `isVisible()` toma la
+ * copia que el usuario vería si estuviera mirando la pantalla.
+ */
 async function clicEnAlgunMarco(page: Page, texto: string, timeoutMs = 20000): Promise<boolean> {
   const fin = Date.now() + timeoutMs;
   while (Date.now() < fin) {
     for (const f of page.frames()) {
       try {
-        const loc = f.locator(`text=${texto}`).first();
-        if (await loc.count()) { await loc.click({ timeout: 5000 }); return true; }
+        const candidatos = f.locator(`text=${texto}`);
+        const n = await candidatos.count();
+        for (let i = 0; i < n; i++) {
+          const el = candidatos.nth(i);
+          if (await el.isVisible().catch(() => false)) {
+            await el.click({ timeout: 5000 });
+            return true;
+          }
+        }
       } catch { /* el marco puede estar navegando */ }
     }
     await page.waitForTimeout(500);
@@ -200,6 +228,10 @@ async function abrirFormularioIndividual(page: Page) {
     await radiografiaMenu(page);
     throw new Error(`No se llegó al formulario: falta «${texto}» en el menú.`);
   }
+  // Confirma en el log que se aterrizó en /ol-ti-itconscpegem —la aplicación
+  // que el catálogo del menú (visto en el HTML del segundo run) dice que le
+  // corresponde a esta consulta— y no en alguna otra por error de camino.
+  console.log(`  · frames: ${page.frames().map(f => f.url() || "(vacío)").join(" | ")}`);
   await evidencia(page, "formulario-abierto");
 }
 
