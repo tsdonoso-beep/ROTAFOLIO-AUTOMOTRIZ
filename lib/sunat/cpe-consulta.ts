@@ -53,10 +53,12 @@ export interface Consulta {
    * está confirmado contra el portal real. Solo sirve para verificar en el
    * log que quedó puesto el tipo correcto; nunca se escribe a mano.
    *
-   * Los de facturas están confirmados. Los de boleta todavía no se conocen —el
-   * primer run que elija uno los va a imprimir (`tipo(hidden)=…`) y ahí se
-   * anotan—. Mientras sean null, lo que se verifica es que el combobox quede
-   * mostrando la etiqueta pedida.
+   * Confirmados: los seis de factura (10, 11, 13, 14, 15, 16) y tres de los
+   * cuatro de boleta (17, 18, 20). Falta el de ND-BVE Emitidas.
+   *
+   * Mientras alguno sea null, lo que se verifica de ese tipo es que el combobox
+   * quede mostrando la etiqueta pedida, y el script imprime el código en cuanto
+   * lo vea para poder anotarlo acá.
    */
   codigo: string | null;
   /**
@@ -106,9 +108,19 @@ export const CATALOGO: Consulta[] = [
   // Que las notas de boleta solo existan EMITIDAS no es un olvido: el portal
   // no ofrece «NC-BVE Recibidas» ni «ND-BVE Recibidas», y agregarlas «por
   // simetría» sería inventar dos consultas que van a fallar siempre.
-  { nombre: "BVE Emitidas",    etiqueta: "BVE Emitidas",    menu: MENU_BOLETAS, pantalla: "boletas", codigo: null, confirmado: true },
-  { nombre: "BVE Recibidas",   etiqueta: "BVE Recibidas",   menu: MENU_BOLETAS, pantalla: "boletas", codigo: null, confirmado: true },
-  { nombre: "NC-BVE Emitidas", etiqueta: "NC-BVE Emitidas", menu: MENU_BOLETAS, pantalla: "boletas", codigo: null, confirmado: true },
+  //
+  // Los códigos salieron de los enlaces «Imprimir» del propio portal, que los
+  // llevan en la URL:
+  //   …/ol-ti-itconscpemypebve/consultar.do?action=imprimirListado
+  //      &periodoDesc=22/09/2026 - 25/09/2026&tipoConsulta=18
+  //
+  // El de ND-BVE Emitidas todavía no apareció. Queda en null a propósito: con
+  // null se verifica contra la etiqueta que muestra el combobox —más flojo,
+  // pero cierto— y el script IMPRIME el código en cuanto lo vea. Poner acá una
+  // suposición sería peor que no poner nada.
+  { nombre: "BVE Emitidas",    etiqueta: "BVE Emitidas",    menu: MENU_BOLETAS, pantalla: "boletas", codigo: "17", confirmado: true },
+  { nombre: "BVE Recibidas",   etiqueta: "BVE Recibidas",   menu: MENU_BOLETAS, pantalla: "boletas", codigo: "18", confirmado: true },
+  { nombre: "NC-BVE Emitidas", etiqueta: "NC-BVE Emitidas", menu: MENU_BOLETAS, pantalla: "boletas", codigo: "20", confirmado: true },
   { nombre: "ND-BVE Emitidas", etiqueta: "ND-BVE Emitidas", menu: MENU_BOLETAS, pantalla: "boletas", codigo: null, confirmado: true },
 ];
 

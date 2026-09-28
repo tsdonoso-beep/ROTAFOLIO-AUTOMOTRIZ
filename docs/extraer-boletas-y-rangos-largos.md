@@ -27,18 +27,38 @@ no tienen por qué vivir ahí, así que ahora cada tipo dice por dónde se llega
 | NC Recibidas | NC Recibidas | `14` | ídem | sí |
 | ND Emitidas | ND Emitidas | `15` | ídem | sí |
 | ND Recibidas | ND Recibidas | `16` | ídem | sí |
-| BVE Emitidas | BVE Emitidas | — | Empresas › Comprobantes de pago › SEE - SOL › Boleta de Venta Electrónica › Consultar Boleta de Venta y Nota | sí |
-| BVE Recibidas | BVE Recibidas | — | ídem | sí |
-| NC-BVE Emitidas | NC-BVE Emitidas | — | ídem | sí |
-| ND-BVE Emitidas | ND-BVE Emitidas | — | ídem | sí |
+| BVE Emitidas | BVE Emitidas | `17` | Empresas › Comprobantes de pago › SEE - SOL › Boleta de Venta Electrónica › Consultar Boleta de Venta y Nota | sí |
+| BVE Recibidas | BVE Recibidas | `18` | ídem | sí |
+| NC-BVE Emitidas | NC-BVE Emitidas | `20` | ídem | sí |
+| ND-BVE Emitidas | ND-BVE Emitidas | *(sin ver)* | ídem | sí |
 
 Las cuatro etiquetas de boleta son **las que ofrece el desplegable**, leídas de
 la captura del portal. Que las notas de boleta solo existan **Emitidas** no es
 un olvido: el portal no ofrece «NC-BVE Recibidas» ni «ND-BVE Recibidas», y
 agregarlas por simetría serían dos consultas condenadas a fallar.
 
-Las boletas no llevan código porque su pantalla usa un `<select>` de verdad: lo
-que se verifica ahí es el **texto de la opción elegida**, no un campo oculto.
+### De dónde salieron los códigos de boleta
+
+Del propio portal: el botón **Imprimir** de la tabla de resultados arma un
+enlace que lleva el código en la URL.
+
+```
+…/ol-ti-itconscpemypebve/consultar.do?action=imprimirListado
+   &periodoDesc=22/09/2026 - 25/09/2026&tipoConsulta=18
+```
+
+Así se confirmaron `17` (BVE Emitidas), `18` (BVE Recibidas) y `20` (NC-BVE
+Emitidas). **El de ND-BVE Emitidas todavía no apareció**, y queda en `null` a
+propósito: con `null` la verificación compara contra la etiqueta que muestra el
+combobox —más flojo, pero cierto— y el script imprime el código en cuanto lo
+vea. Una suposición en esa celda sería peor que la celda vacía.
+
+Sobre la numeración, para quien la retome: los seis de factura van `10`, `11`
+(FE), `13`, `14` (NC), `15`, `16` (ND), con un hueco en `12`. Los de boleta
+arrancan en `17` y tienen un hueco parecido en `19`. Si el patrón se repitiera,
+ND-BVE Emitidas caería en `22` — pero eso es una conjetura, no un dato, y se
+comprueba en un segundo abriendo ese mismo enlace con `tipoConsulta=22` y
+mirando qué título trae el listado.
 
 ## 2. Las dos pantallas SÍ se parecen — y esto se creyó al revés
 
@@ -120,10 +140,10 @@ boletas. Nadie lo notaría.
 Por eso se **verifica antes de bajar**, y con qué se compara depende de lo que
 se sepa del tipo:
 
-- **con código conocido** (los de factura): contra el campo oculto
+- **con código conocido** (nueve de los diez): contra el campo oculto
   `tipoConsulta`, que es el dato que de verdad viaja a SUNAT. Se abandona si no
-  coincide con `10`, `11`, `13`…
-- **sin código** (los de boleta, todavía): contra lo que muestra el campo
+  coincide con `10`, `11`, `13`, `17`, `18`, `20`…
+- **sin código** (hoy solo ND-BVE Emitidas): contra lo que muestra el campo
   visible. Es más flojo, pero atrapa el caso que importa — que el combobox se
   haya quedado en otra cosa.
 
@@ -214,12 +234,11 @@ deja en el registro:
 
 Más las capturas y el HTML de cada paso como artefacto `capturas-sunat-rango`.
 
-### Paso 2 — anotar los códigos de boleta
+### Paso 2 — anotar el código que falta
 
-Si el registro imprimió `· «BVE Recibidas» → tipoConsulta=XX`, conviene anotar
-ese código en `cpe-consulta.ts`. Con el código puesto, la verificación pasa a
-comparar contra el dato que de verdad viaja a SUNAT, en vez de contra el texto
-que muestra el campo visible.
+Si el registro imprimió `· «ND-BVE Emitidas» → tipoConsulta=XX`, anotarlo en
+`cpe-consulta.ts`. Con el código puesto, la verificación pasa a comparar contra
+el dato que de verdad viaja a SUNAT en vez de contra el texto que se ve.
 
 Si SUNAT renombra una entrada del menú, el input `menu_boletas` permite probar
 otro camino sin tocar código: los textos separados por `>`.
@@ -257,12 +276,9 @@ pasar el diario a la cuenta nueva es agregarle dos líneas de `env`.
   (§4 de `docs/scraper-cpe-hallazgos-tecnicos.md`). No se está leyendo todavía
   —habría que decidir antes si un anulado se guarda y se marca, o se excluye
   del detalle—, pero por primera vez el dato está a la vista.
-- **Los códigos de `tipoConsulta` de las boletas.** Los de facturas están
-  confirmados (`10`, `11`, `13`, `14`, `15`, `16`); los de boleta todavía no se
-  vieron, porque el primer run se cortó antes de elegir el tipo. Mientras sean
-  desconocidos, lo que se verifica es que el combobox quede mostrando la
-  etiqueta pedida: más flojo que comparar el código, pero atrapa el caso que
-  importa. El próximo run los imprime.
+- **El código de `tipoConsulta` de ND-BVE Emitidas.** Los otros nueve están
+  confirmados. Mientras falte, ese tipo se verifica contra la etiqueta del
+  combobox y el script imprime su código en cuanto lo vea.
 - **La tabla de resultados de boletas.** Todavía no se llegó a verla desde el
   script. Puede ser la grilla dojox o una tabla común; el código se adapta a
   las dos y dice en el registro cuál encontró.
