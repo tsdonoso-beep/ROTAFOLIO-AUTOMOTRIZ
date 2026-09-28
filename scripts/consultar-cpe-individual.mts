@@ -269,15 +269,25 @@ interface Pendiente {
   moneda: string | null;
 }
 
-/** El catálogo 01 de SUNAT, solo los que de verdad aparecen en el SIRE. */
-function nombreTipoComprobante(codigo: string): string {
-  const nombres: Record<string, string> = {
-    "01": "Factura",
-    "03": "Boleta de Venta",
-    "07": "Nota de Crédito",
-    "08": "Nota de Débito",
+/**
+ * Qué etiqueta de «Tipo de Consulta» pedir, para el código de comprobante
+ * del SIRE.
+ *
+ * Todo lo que trae `pendientes()` es del registro de COMPRAS —siempre
+ * «Recibidas»—, así que no hace falta distinguir Emitida/Recibida acá: son
+ * las mismas seis etiquetas que ya usa `descargar-cpe.mts` contra la otra
+ * pantalla. La captura del run #4 (28/09/2026) mostró el campo «Tipo de
+ * Consulta» en «FE Emitidas» por omisión —así que el catálogo de nombres es
+ * el mismo— y la radiografía confirmó que es el MISMO widget de las dos
+ * pantallas: `criterio.tipoConsulta` (visible) + `tipoConsulta` (oculto).
+ */
+function etiquetaTipoConsulta(tipoComprobante: string): string {
+  const etiquetas: Record<string, string> = {
+    "01": "FE Recibidas",
+    "07": "NC Recibidas",
+    "08": "ND Recibidas",
   };
-  return nombres[codigo] ?? codigo;
+  return etiquetas[tipoComprobante] ?? "FE Recibidas";
 }
 
 /**
@@ -336,55 +346,57 @@ async function pendientes(periodo: string): Promise<Pendiente[]> {
     }));
 }
 
-// Los campos de texto de SUNAT no siempre traen type="text" (ver
-// descargar-cpe.mts); se usa el mismo criterio acá.
-const SEL_TEXTO = 'input:not([type="hidden"]):not([type="button"]):not([type="submit"]):not([type="image"]):not([type="checkbox"]):not([type="radio"]):not([type="password"])';
+/**
+ * Elige la etiqueta en el campo «Tipo de Consulta».
+ *
+ * Es el mismo widget que `elegirTipo` maneja en descargar-cpe.mts (un
+ * combobox: input visible `criterio.tipoConsulta` + un campo que lleva el
+ * valor real `tipoConsulta`), confirmado por la radiografía del run #4.
+ * Acá no se verifica contra un código oculto —los de esta pantalla no se
+ * conocen todavía— porque, a diferencia de allá, un tipo elegido de más no
+ * arriesga bajar cientos de filas equivocadas: esto pide UN comprobante
+ * puntual, y si el tipo quedó mal la consulta simplemente no va a
+ * encontrarlo.
+ */
+async function elegirTipoConsulta(marco: Frame, etiqueta: string): Promise<void> {
+  const visible = marco.locator('[id="criterio.tipoConsulta"]').first();
+  if (!(await visible.count())) { console.log("  ⚠ no encontré el campo de «Tipo de Consulta»."); return; }
+  await visible.click().catch(() => {});
+  await marco.page().waitForTimeout(800);
+
+  const opcion = marco.locator(
+    `li:has-text("${etiqueta}"), .ui-menu-item:has-text("${etiqueta}"), option:has-text("${etiqueta}"), a:has-text("${etiqueta}")`
+  ).first();
+  if (await opcion.count()) {
+    await opcion.click().catch(() => {});
+  } else {
+    await visible.fill(etiqueta).catch(() => {});
+    await visible.press("Enter").catch(() => {});
+  }
+  await marco.page().waitForTimeout(300);
+}
 
 /**
- * Llena el formulario «Individual» con un pendiente.
+ * Llena el formulario de «Consultar Factura, Boletas y Notas» con un
+ * pendiente.
  *
- * AFINAR: los selectores de abajo son una primera lectura de las capturas
- * que trajo el usuario (RUC Emisor, Tipo de comprobante, Serie y número —
- * un solo campo dividido en dos cajas), no confirmados todavía contra el
- * DOM real. `radiografiaFormulario`, llamada antes de esto en cada corrida
- * de depuración, es la que dice si hay que ajustarlos.
+ * Los ids son los que confirmó la radiografía del run #4 (28/09/2026) contra
+ * el portal real. Antes de esto hubo un intento por `name*="ruc"` que cayó
+ * en el campo OCULTO `formArchivo.ruc` —esta pantalla tiene dos campos
+ * llamados «ruc»: uno oculto para el POST y el visible de verdad,
+ * `criterio.ruc` (con `name=rucEmisor`)—, y el genérico lo encontraba
+ * primero por aparecer antes en el documento.
  */
 async function llenarFormulario(page: Page, p: Pendiente): Promise<Frame | null> {
   for (const f of page.frames()) {
-    const rucInput = f.locator('input[name*="ruc" i], input[id*="ruc" i]').first();
+    const rucInput = f.locator('[id="criterio.ruc"]').first();
     if (!(await rucInput.count())) continue;
 
     try {
-      // Todas las de esta lista son compras: el emisor es el proveedor y el
-      // adquiriente es la empresa, o sea «Recibido».
-      await f.getByText("Recibido", { exact: false }).first().click({ timeout: 3000 }).catch(() => {});
-
+      await elegirTipoConsulta(f, etiquetaTipoConsulta(p.tipoComprobante));
       await rucInput.fill(p.proveedorRuc);
-
-      const tipoSelect = f.locator("select").first();
-      if (await tipoSelect.count()) {
-        const etiqueta = nombreTipoComprobante(p.tipoComprobante);
-        await tipoSelect.selectOption({ label: etiqueta }).catch(() =>
-          console.log(`  ⚠ no encontré la opción "${etiqueta}" en el <select> de tipo; revisa la radiografía de arriba.`));
-      }
-
-      // Serie y número: dos cajas de texto, la primera con la serie y la
-      // segunda con el número, según la captura. Se llenan por posición
-      // dentro del mismo frame que trajo el campo de RUC, no por `name`
-      // —no se conoce todavía—.
-      const textos = await f.locator(SEL_TEXTO).all();
-      const cajasVacias = [];
-      for (const t of textos) {
-        const valor = await t.inputValue().catch(() => "x");
-        if (valor === "") cajasVacias.push(t);
-      }
-      if (cajasVacias.length >= 2) {
-        await cajasVacias[0].fill(p.serie);
-        await cajasVacias[1].fill(p.numero);
-      } else {
-        console.log(`  ⚠ esperaba 2 cajas vacías para serie/número y encontré ${cajasVacias.length}; revisa la radiografía.`);
-      }
-
+      await f.locator('[id="criterio.serie"]').first().fill(p.serie);
+      await f.locator('[id="criterio.numero"]').first().fill(p.numero);
       return f;
     } catch (e) {
       console.log(`  ⚠ no pude llenar el formulario: ${e instanceof Error ? e.message : e}`);
