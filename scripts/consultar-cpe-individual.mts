@@ -33,10 +33,16 @@
 // el resultado y guardarlo en `cpe_comprobante`—, igual que se hizo con
 // boletas en `descargar-cpe.mts`.
 
-import { chromium, type Page, type Frame } from "playwright";
+import { chromium, type Page, type Frame, type Download } from "playwright";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { createClient } from "@supabase/supabase-js";
+import { Readable } from "node:stream";
+import { google } from "googleapis";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { normalizarClavePrivada, correoDeServicio, carpeta } from "../lib/drive/servidor.ts";
+import { leerZip } from "../lib/sunat/zip.ts";
+import { leerComprobanteXml, type ComprobanteCpe } from "../lib/sunat/cpe-xml.ts";
+import { prepararLote, origenDe, periodoDe, identidad } from "../lib/sunat/cpe-importacion.ts";
 
 function pedir(...nombres: string[]): string {
   for (const n of nombres) { const v = (process.env[n] ?? "").trim(); if (v) return v; }
@@ -58,6 +64,11 @@ const PERIODO = process.env.PERIODO?.trim() || "202609";
 const LIMITE = Number(process.env.LIMITE?.trim() || (DEBUG ? "3" : "0"));
 
 const LOGIN_URL = "https://e-menu.sunat.gob.pe/cl-ti-itmenu/MenuInternet.htm";
+
+// La misma carpeta de Drive donde descargar-cpe.mts archiva los
+// comprobantes: son el mismo tipo de documento (XML+PDF de una factura),
+// solo que llegan por una pantalla distinta.
+const CARPETA_DRIVE = process.env.SUNAT_DRIVE_FOLDER?.trim() || "1RnyGimYdnhbQ3nKxGOoBc_iRz38fxCnX";
 
 /** Un paso del menú: qué texto clicar y, si hace falta, en qué posición. */
 interface PasoMenu { texto: string; posicion?: "primera" | "ultima" }
@@ -572,6 +583,166 @@ async function clicConsultar(marco: Frame) {
   console.log("  ⚠ no encontré el botón Consultar/Buscar.");
 }
 
+// ── FASE 2: bajar de verdad, archivar y guardar ─────────────────────
+
+interface ArchivoBajado { nombre: string; datos: Buffer; tipo: string }
+
+/** Dispara una descarga y la devuelve como buffer con su nombre. Igual que en descargar-cpe.mts. */
+async function bajar(page: Page, accion: () => Promise<void>): Promise<ArchivoBajado> {
+  const [descarga] = await Promise.all([
+    page.waitForEvent("download", { timeout: 60000 }) as Promise<Download>,
+    accion(),
+  ]);
+  const stream = await descarga.createReadStream();
+  const trozos: Buffer[] = [];
+  for await (const t of stream) trozos.push(t as Buffer);
+  const nombre = descarga.suggestedFilename();
+  const tipo = /\.pdf$/i.test(nombre) ? "application/pdf"
+    : /\.(xml|zip)$/i.test(nombre) ? (/\.zip$/i.test(nombre) ? "application/zip" : "application/xml")
+    : "application/octet-stream";
+  return { nombre, datos: Buffer.concat(trozos), tipo };
+}
+
+/**
+ * Descarga el XML y el PDF del modal «Resultado».
+ *
+ * Los botones no tienen texto ni `onclick` —son íconos de Angular—, pero sí
+ * un `ngbtooltip` con el nombre de la acción, confirmado por el HTML real
+ * del run #13 (29/09/2026): «Descargar PDF», «Descargar XML», «Descargar
+ * CDR» (el acuse de SUNAT, que no hace falta acá), «Imprimir», «Enviar
+ * Correo». Ese atributo es un selector mucho más firme que cualquier clase
+ * de Angular, que cambia de una versión a otra del build.
+ */
+async function descargarXmlYPdf(page: Page, marco: Frame): Promise<{ xml: ArchivoBajado | null; pdf: ArchivoBajado | null }> {
+  let xml: ArchivoBajado | null = null;
+  let pdf: ArchivoBajado | null = null;
+
+  const botonXml = marco.locator('button[ngbtooltip="Descargar XML"]').first();
+  if (await botonXml.count()) {
+    try { xml = await bajar(page, () => botonXml.click()); }
+    catch (e) { console.log(`  · no se pudo bajar el XML: ${e instanceof Error ? e.message : e}`); }
+  } else {
+    console.log("  ⚠ no encontré el botón «Descargar XML» en el modal.");
+  }
+
+  const botonPdf = marco.locator('button[ngbtooltip="Descargar PDF"]').first();
+  if (await botonPdf.count()) {
+    try { pdf = await bajar(page, () => botonPdf.click()); }
+    catch (e) { console.log(`  · no se pudo bajar el PDF: ${e instanceof Error ? e.message : e}`); }
+  } else {
+    console.log("  ⚠ no encontré el botón «Descargar PDF» en el modal.");
+  }
+
+  return { xml, pdf };
+}
+
+/** El o los XML que trae una descarga: sueltos o dentro de un ZIP. Igual que en descargar-cpe.mts. */
+function xmlsDe(f: ArchivoBajado): string[] {
+  if (/\.zip$/i.test(f.nombre)) {
+    return leerZip(f.datos).filter(a => /\.xml$/i.test(a.nombre)).map(a => decodificar(a.contenido));
+  }
+  if (/\.xml$/i.test(f.nombre)) return [decodificar(f.datos)];
+  return [];
+}
+
+/** Decodifica por lo que los bytes SON, no por lo que el XML dice que son. Igual que en descargar-cpe.mts. */
+function decodificar(buf: Buffer): string {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(buf);
+  } catch {
+    return buf.toString("latin1");
+  }
+}
+
+function clienteDrive() {
+  const email = correoDeServicio(process.env.GOOGLE_SA_EMAIL, process.env.GOOGLE_SA_PRIVATE_KEY);
+  const key = normalizarClavePrivada(process.env.GOOGLE_SA_PRIVATE_KEY);
+  if (!email || !key) { console.error("✗ Faltan GOOGLE_SA_EMAIL / GOOGLE_SA_PRIVATE_KEY."); process.exit(1); }
+  const auth = new google.auth.JWT({ email, key, scopes: ["https://www.googleapis.com/auth/drive"] });
+  return google.drive({ version: "v3", auth });
+}
+
+/** Sube un archivo sin repetir el que ya está. Igual que en descargar-cpe.mts. */
+async function subirADrive(
+  drive: ReturnType<typeof clienteDrive>, carpetaId: string, f: ArchivoBajado
+): Promise<{ estado: "nuevo" | "existe"; url: string | null }> {
+  const q = `name = '${f.nombre.replace(/'/g, "\\'")}' and '${carpetaId}' in parents and trashed = false`;
+  const ya = await drive.files.list({
+    q, fields: "files(id,webViewLink)", supportsAllDrives: true, includeItemsFromAllDrives: true,
+  });
+  if (ya.data.files && ya.data.files.length > 0) {
+    return { estado: "existe", url: ya.data.files[0].webViewLink ?? null };
+  }
+  const creado = await drive.files.create({
+    requestBody: { name: f.nombre, parents: [carpetaId] },
+    media: { mimeType: f.tipo, body: Readable.from(f.datos) },
+    fields: "id,webViewLink",
+    supportsAllDrives: true,
+  });
+  return { estado: "nuevo", url: creado.data.webViewLink ?? null };
+}
+
+const carpetasPorRuta = new Map<string, Promise<string>>();
+/** La carpeta para un origen y un período, cacheada. Igual que en descargar-cpe.mts. */
+async function carpetaDelLote(
+  drive: ReturnType<typeof clienteDrive>, origen: "RECIBIDO" | "EMITIDO" | "OTRO", periodo: string | null
+): Promise<string> {
+  const sub = origen === "RECIBIDO" ? "Recibidas" : origen === "EMITIDO" ? "Emitidas" : "Otros";
+  const mes = periodo && /^\d{6}$/.test(periodo) ? `${periodo.slice(0, 4)}-${periodo.slice(4, 6)}` : "Sin fecha";
+  const clave = `${sub}/${mes}`;
+  let promesa = carpetasPorRuta.get(clave);
+  if (!promesa) {
+    promesa = (async () => {
+      const idSub = await carpeta(drive, sub, CARPETA_DRIVE);
+      return carpeta(drive, mes, idSub);
+    })();
+    carpetasPorRuta.set(clave, promesa);
+  }
+  return promesa;
+}
+
+/** Entra a la base como el robot. `null` si falla, que es un aviso, no un motivo para tumbar la corrida. */
+async function clienteBase(): Promise<SupabaseClient | null> {
+  const url = process.env.SUPABASE_URL || process.env.PROJECT_URL;
+  if (!url) return null;
+  const sb = createClient(url, pedir("SUPABASE_ANON_KEY", "ANON_KEY"),
+    { auth: { autoRefreshToken: false, persistSession: false } });
+  const { error } = await sb.auth.signInWithPassword({
+    email: pedir("ROBOT_CORREO"), password: pedir("ROBOT_CLAVE"),
+  });
+  if (error) { console.error("⚠ No se pudo entrar a la base:", error.message); return null; }
+  return sb;
+}
+
+/**
+ * Guarda el lote de comprobantes confirmados en `cpe_comprobante`.
+ *
+ * Mismo `guardar_cpe` que usa `descargar-cpe.mts`: un comprobante que ya
+ * estaba se actualiza en vez de duplicarse, así que repetir un rango ya
+ * confirmado no hace daño.
+ */
+async function guardarLote(
+  comprobantes: Array<{ c: ComprobanteCpe; xmlUrl: string | null; pdfUrl: string | null }>
+): Promise<void> {
+  if (comprobantes.length === 0) return;
+  const lote = prepararLote(comprobantes.map(x => x.c), RUC);
+  if (lote.length === 0) return;
+
+  const urlsPorIdentidad = new Map(comprobantes.map(x => [identidad(x.c), x]));
+  for (const d of lote) {
+    const par = urlsPorIdentidad.get(identidad(d));
+    d.xmlDriveUrl = par?.xmlUrl ?? null;
+    d.pdfDriveUrl = par?.pdfUrl ?? null;
+  }
+
+  const sb = await clienteBase();
+  if (!sb) return;
+  const { data, error } = await sb.rpc("guardar_cpe", { p_empresa_ruc: RUC, p_docs: lote });
+  if (error) { console.error("⚠ No se guardó el detalle:", error.message); return; }
+  const r = (Array.isArray(data) ? data[0] : data) as { nuevos: number; actualizados: number; items: number };
+  console.log(`Guardado en cpe_comprobante: ${r?.nuevos} nuevos, ${r?.actualizados} actualizados, ${r?.items} ítems.`);
+}
+
 // ── Principal ─────────────────────────────────────────────────────
 
 const navegador = await chromium.launch({
@@ -593,6 +764,10 @@ try {
 
   await entrar(page);
 
+  const drive = DEBUG ? null : clienteDrive();
+  let nuevos = 0, existentes = 0;
+  const comprobantes: Array<{ c: ComprobanteCpe; xmlUrl: string | null; pdfUrl: string | null }> = [];
+
   for (const [i, p] of aProcesar.entries()) {
     console.log(`\n── ${i + 1}/${aProcesar.length}: ${p.proveedorNombre ?? p.proveedorRuc} · ${p.tipoComprobante} ${p.serie}-${p.numero} ──`);
     await abrirFormularioIndividual(page);
@@ -604,15 +779,40 @@ try {
       await clicConsultar(marco);
       await page.waitForTimeout(2000);
       await evidencia(page, `resultado-${p.serie}-${p.numero}`);
-      if (DEBUG) await radiografiaResultado(page, `resultado-html-${p.serie}-${p.numero}`);
-    }
+      if (DEBUG) {
+        await radiografiaResultado(page, `resultado-html-${p.serie}-${p.numero}`);
+      } else {
+        // El modal «Resultado» se abre DENTRO del mismo frame que ya
+        // teníamos (es una app de una sola página, sin navegar a otro
+        // lado), así que el `marco` de siempre sirve para buscar los
+        // botones de descarga.
+        const { xml: xmlArchivo, pdf: pdfArchivo } = await descargarXmlYPdf(page, marco);
+        const xmls = xmlArchivo ? xmlsDe(xmlArchivo) : [];
+        const c = xmls[0] ? leerComprobanteXml(xmls[0]) : null;
 
-    if (!DEBUG) {
-      // FASE 2 (todavía no escrita): leer el resultado de esta pantalla y
-      // guardarlo en cpe_comprobante. Falta ver, con la evidencia de arriba,
-      // qué trae de verdad —de ahí sale si hay XML que bajar o solo datos
-      // en pantalla, y cómo se leen—.
-      console.log("  · fase 2 pendiente: por ahora esto solo confirma, no guarda.");
+        if (!c) {
+          console.log("  ⚠ no se pudo leer el XML de este comprobante; no se guarda nada de este.");
+        } else {
+          const origen = origenDe(c, RUC);
+          const periodo = periodoDe(c.fechaEmision);
+          const carpetaId = await carpetaDelLote(drive!, origen, periodo);
+
+          let xmlUrl: string | null = null;
+          let pdfUrl: string | null = null;
+          if (xmlArchivo) {
+            const r = await subirADrive(drive!, carpetaId, xmlArchivo);
+            if (r.estado === "nuevo") nuevos++; else existentes++;
+            xmlUrl = r.url;
+          }
+          if (pdfArchivo) {
+            const r = await subirADrive(drive!, carpetaId, pdfArchivo);
+            if (r.estado === "nuevo") nuevos++; else existentes++;
+            pdfUrl = r.url;
+          }
+          comprobantes.push({ c, xmlUrl, pdfUrl });
+          console.log(`  · confirmado y archivado: ${c.serie}-${c.numero}, ${c.moneda} ${c.total}.`);
+        }
+      }
     }
 
     // Espaciar las solicitudes: el mismo motivo que en descargar-cpe.mts, y
@@ -621,8 +821,14 @@ try {
     await page.waitForTimeout(1500);
   }
 
-  console.log(`\nListo: se revisaron ${aProcesar.length} de ${lista.length} pendientes de ${PERIODO}.`);
-  if (DEBUG) console.log("Modo depuración: revisa el artefacto 'capturas/' antes de correr con DEBUG=0.");
+  if (DEBUG) {
+    console.log(`\nListo: se revisaron ${aProcesar.length} de ${lista.length} pendientes de ${PERIODO}.`);
+    console.log("Modo depuración: revisa el artefacto 'capturas/' antes de correr con DEBUG=0.");
+  } else {
+    console.log(`\nArchivados en Drive: ${nuevos} nuevos, ${existentes} ya estaban.`);
+    await guardarLote(comprobantes);
+    console.log(`Listo: se confirmaron ${comprobantes.length} de ${aProcesar.length} pendientes procesados (de ${lista.length} en ${PERIODO}).`);
+  }
 } catch (e) {
   await evidencia(page, "error");
   console.error("✗", e instanceof Error ? e.message : e);
