@@ -278,7 +278,11 @@ async function radiografiaResultado(page: Page, nombreArchivo: string): Promise<
     try {
       esResultado = (await f.locator("text=Visualizar").count()) > 0
         || (await f.locator("text=Factura electrónica").count()) > 0
-        || (await f.locator("text=Boleta electrónica").count()) > 0;
+        || (await f.locator("text=Boleta electrónica").count()) > 0
+        // El modal de «Nueva Consulta de comprobantes de pago» (la captura
+        // del usuario, run #8): se abre con el título «Resultado» y los
+        // íconos de PDF/XML/imprimir/correo.
+        || (await f.locator("text=Resultado").count()) > 0;
     } catch { continue; }
     if (!esResultado) continue;
 
@@ -328,8 +332,28 @@ async function abrirFormularioIndividual(page: Page) {
     // buscarlo, no los 1200ms de siempre.
     const siguienteRepite = MENU_INDIVIDUAL[i + 1]?.texto === texto;
     if (await clicEnAlgunMarco(page, texto, posicion)) {
-      await page.waitForTimeout(ultimo ? 3000 : siguienteRepite ? 2500 : 1200);
-      if (!ultimo) await evidencia(page, `menu-${i}`);
+      if (ultimo) {
+        // «Nueva Consulta de comprobantes de pago» es una app aparte
+        // (`e-factura.sunat.gob.pe`, no `ww1.sunat.gob.pe`) que el run #8
+        // (28/09/2026) tardó más de los 3s de siempre en cargar la PRIMERA
+        // vez de la corrida —el segundo y el tercer pendiente ya la
+        // encontraron con esos 3s, con el navegador "tibio"—. Se espera
+        // activamente a que aparezca el campo de RUC en vez de una espera
+        // fija, para no repetir ese fallo con una app pesada y sin alargar
+        // la corrida cuando carga rápido.
+        const fin = Date.now() + 20000;
+        while (Date.now() < fin) {
+          let listo = false;
+          for (const f of page.frames()) {
+            if (await f.locator('input[name="rucEmisor"]').count().catch(() => 0)) { listo = true; break; }
+          }
+          if (listo) break;
+          await page.waitForTimeout(500);
+        }
+      } else {
+        await page.waitForTimeout(siguienteRepite ? 2500 : 1200);
+        await evidencia(page, `menu-${i}`);
+      }
       continue;
     }
     console.log(`  ⚠ no encontré «${texto}» en el menú de este acceso.`);
@@ -337,7 +361,7 @@ async function abrirFormularioIndividual(page: Page) {
     throw new Error(`No se llegó al formulario: falta «${texto}» en el menú.`);
   }
   // Confirma en el log a qué aplicación se llegó —para el camino nuevo
-  // debería ser /app/contribuyentems/.../nuevaconsulta.html, no
+  // debería ser e-factura.sunat.gob.pe/.../nuevaconsulta/..., no
   // ol-ti-itconscpegem— y no otra por error de camino.
   console.log(`  · frames: ${page.frames().map(f => f.url() || "(vacío)").join(" | ")}`);
   await evidencia(page, "formulario-abierto");
@@ -355,24 +379,22 @@ interface Pendiente {
 }
 
 /**
- * Qué etiqueta de «Tipo de Consulta» pedir, para el código de comprobante
- * del SIRE.
+ * Qué etiqueta de «Tipo de comprobante» pedir, para el código de comprobante
+ * del SIRE, en el desplegable de «Nueva Consulta de comprobantes de pago»
+ * (la pantalla nueva, confirmada por el run #8, 28/09/2026).
  *
- * Todo lo que trae `pendientes()` es del registro de COMPRAS —siempre
- * «Recibidas»—, así que no hace falta distinguir Emitida/Recibida acá: son
- * las mismas seis etiquetas que ya usa `descargar-cpe.mts` contra la otra
- * pantalla. La captura del run #4 (28/09/2026) mostró el campo «Tipo de
- * Consulta» en «FE Emitidas» por omisión —así que el catálogo de nombres es
- * el mismo— y la radiografía confirmó que es el MISMO widget de las dos
- * pantallas: `criterio.tipoConsulta` (visible) + `tipoConsulta` (oculto).
+ * La captura que trajo el usuario mostró «Factura» ya elegida por omisión en
+ * ese desplegable —a diferencia de la pantalla vieja, acá no hace falta
+ * distinguir Emitida/Recibida en la ETIQUETA: eso lo dice el radio
+ * «Recibido» aparte (`elegirFiltroRecibido`)—.
  */
-function etiquetaTipoConsulta(tipoComprobante: string): string {
+function etiquetaTipoComprobante(tipoComprobante: string): string {
   const etiquetas: Record<string, string> = {
-    "01": "FE Recibidas",
-    "07": "NC Recibidas",
-    "08": "ND Recibidas",
+    "01": "Factura",
+    "07": "Nota de Crédito",
+    "08": "Nota de Débito",
   };
-  return etiquetas[tipoComprobante] ?? "FE Recibidas";
+  return etiquetas[tipoComprobante] ?? "Factura";
 }
 
 /**
@@ -385,8 +407,8 @@ function etiquetaTipoConsulta(tipoComprobante: string): string {
  * la tiene completa) y se usa para preguntarle a SUNAT, comprobante por
  * comprobante, si esta otra pantalla lo puede confirmar.
  *
- * Solo factura, NC y ND (01/07/08): son los únicos tipos que esta pantalla
- * ofrece en «Tipo de Consulta» (`etiquetaTipoConsulta`). El run #5
+ * Solo factura, NC y ND (01/07/08): son los únicos tipos que se saben pedir
+ * en «Tipo de comprobante» (`etiquetaTipoComprobante`). El run #5
  * (28/09/2026) mostró por qué hace falta filtrar, no solo mapear: los tres
  * primeros pendientes de setiembre por fecha resultaron ser tipo «53» —diez
  * en total ese mes—, con `proveedor_ruc = "0"` y `proveedor_nombre` igual al
@@ -444,60 +466,70 @@ async function pendientes(periodo: string): Promise<Pendiente[]> {
 }
 
 /**
- * Elige la etiqueta en el campo «Tipo de Consulta».
+ * Marca el radio «Recibido».
  *
- * Es el mismo widget que `elegirTipo` maneja en descargar-cpe.mts (un
- * combobox: input visible `criterio.tipoConsulta` + un campo que lleva el
- * valor real `tipoConsulta`), confirmado por la radiografía del run #4.
- * Acá no se verifica contra un código oculto —los de esta pantalla no se
- * conocen todavía— porque, a diferencia de allá, un tipo elegido de más no
- * arriesga bajar cientos de filas equivocadas: esto pide UN comprobante
- * puntual, y si el tipo quedó mal la consulta simplemente no va a
- * encontrarlo.
+ * La radiografía del run #8 (28/09/2026) mostró dos radios sin más:
+ * `input#emitido[name=radioBoton]` e `input#recibido[name=radioBoton]`. Todo
+ * lo que trae `pendientes()` es del registro de COMPRAS, así que siempre es
+ * «Recibido» —nunca hace falta elegir «Emitido»—. Se prueba `.check()`
+ * primero (lo normal para un radio real) y, si el control está pintado
+ * encima por CSS de la app y Playwright lo considera no interactuable, se
+ * cae a un clic forzado.
  */
-async function elegirTipoConsulta(marco: Frame, etiqueta: string): Promise<void> {
-  const visible = marco.locator('[id="criterio.tipoConsulta"]').first();
-  if (!(await visible.count())) { console.log("  ⚠ no encontré el campo de «Tipo de Consulta»."); return; }
-  await visible.click().catch(() => {});
-  await marco.page().waitForTimeout(800);
+async function elegirFiltroRecibido(marco: Frame): Promise<void> {
+  const radio = marco.locator("#recibido").first();
+  if (!(await radio.count())) { console.log("  ⚠ no encontré el radio «Recibido»."); return; }
+  await radio.check({ timeout: 3000 }).catch(() => radio.click({ force: true, timeout: 3000 }).catch(() => {}));
+}
+
+/**
+ * Elige la etiqueta en el campo «Tipo de comprobante».
+ *
+ * La radiografía del run #8 mostró un input de texto sin `name` propio
+ * (`name=""`, entre `rucEmisor` y `serieComprobante`) para este campo: no es
+ * un `<select>`, así que se maneja como un combobox —clic para abrir y clic
+ * en la opción—, igual que los de las pantallas JSP, pero buscando la
+ * opción entre los contenedores típicos de un combobox moderno
+ * (`[role="option"]`, `li`) además de los de siempre, porque esta es una app
+ * distinta (Angular o similar) y no se sabe todavía cuál usa.
+ */
+async function elegirTipoComprobante(marco: Frame, etiqueta: string): Promise<void> {
+  const campo = marco.locator('input[type="text"][name=""]').first();
+  if (!(await campo.count())) { console.log("  ⚠ no encontré el campo de «Tipo de comprobante»."); return; }
+  await campo.click().catch(() => {});
+  await marco.page().waitForTimeout(600);
 
   const opcion = marco.locator(
-    `li:has-text("${etiqueta}"), .ui-menu-item:has-text("${etiqueta}"), option:has-text("${etiqueta}"), a:has-text("${etiqueta}")`
+    `[role="option"]:has-text("${etiqueta}"), li:has-text("${etiqueta}"), .ui-menu-item:has-text("${etiqueta}"), option:has-text("${etiqueta}")`
   ).first();
   if (await opcion.count()) {
     await opcion.click().catch(() => {});
   } else {
-    await visible.fill(etiqueta).catch(() => {});
-    await visible.press("Enter").catch(() => {});
+    await campo.fill(etiqueta).catch(() => {});
+    await campo.press("Enter").catch(() => {});
   }
   await marco.page().waitForTimeout(300);
 }
 
 /**
- * Llena el formulario con un pendiente.
+ * Llena «Nueva Consulta de comprobantes de pago» con un pendiente.
  *
- * DESACTUALIZADO a propósito, por ahora: los ids de acá (`criterio.ruc`,
- * `criterio.serie`, `criterio.numero`) son los de la pantalla VIEJA
- * («Consultar Factura, Boletas y Notas», confirmados en el run #4), no los
- * de «Nueva Consulta de comprobantes de pago» —la que de verdad da PDF y
- * XML, a la que apunta `MENU_INDIVIDUAL` desde el cambio de rumbo del
- * 28/09/2026—. Esta función va a fallar sola («no encontré el campo de RUC
- * en ningún frame») y eso está bien: en DEBUG, `radiografiaFormulario`
- * corre ANTES y esa es la evidencia que hace falta para reescribir esto con
- * los ids reales de la pantalla nueva, que es una app distinta (Angular o
- * similar, a juzgar por la URL `/app/contribuyentems/...`) y seguramente no
- * comparte nombres de campo con las pantallas JSP de siempre.
+ * Los `name` son los que confirmó la radiografía del run #8 (28/09/2026)
+ * contra `e-factura.sunat.gob.pe`: `rucEmisor`, `serieComprobante`,
+ * `numeroComprobante`, más el radio y el campo de tipo sin `name` que
+ * manejan las dos funciones de arriba.
  */
 async function llenarFormulario(page: Page, p: Pendiente): Promise<Frame | null> {
   for (const f of page.frames()) {
-    const rucInput = f.locator('[id="criterio.ruc"]').first();
+    const rucInput = f.locator('input[name="rucEmisor"]').first();
     if (!(await rucInput.count())) continue;
 
     try {
-      await elegirTipoConsulta(f, etiquetaTipoConsulta(p.tipoComprobante));
+      await elegirFiltroRecibido(f);
+      await elegirTipoComprobante(f, etiquetaTipoComprobante(p.tipoComprobante));
       await rucInput.fill(p.proveedorRuc);
-      await f.locator('[id="criterio.serie"]').first().fill(p.serie);
-      await f.locator('[id="criterio.numero"]').first().fill(p.numero);
+      await f.locator('input[name="serieComprobante"]').first().fill(p.serie);
+      await f.locator('input[name="numeroComprobante"]').first().fill(p.numero);
       return f;
     } catch (e) {
       console.log(`  ⚠ no pude llenar el formulario: ${e instanceof Error ? e.message : e}`);
