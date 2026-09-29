@@ -273,25 +273,17 @@ async function radiografiaFormulario(page: Page) {
  * ese ícono al hacer clic.
  */
 async function radiografiaResultado(page: Page, nombreArchivo: string): Promise<void> {
+  // Solo por URL, sin respaldo por texto: los runs #6 y #10 (28-29/09/2026)
+  // mostraron DOS respaldos por texto distintos («Resultado», luego
+  // «Visualizar»/«Factura electrónica»/«Boleta electrónica») haciendo el
+  // mismo falso positivo sobre el menú de SOL —tiene que traer alguno de
+  // esos textos escondido en algún componente genérico (el buscador del
+  // menú, quizás), y ese frame SIEMPRE tiene contenido, así que ganaba la
+  // carrera sin que el modal de verdad se hubiera abierto nunca—. Ya se sabe
+  // con certeza cuál es la app (e-factura.sunat.gob.pe), así que no hace
+  // falta adivinar por texto.
   for (const f of page.frames()) {
-    // Primero por URL: es la señal firme de que este es el frame de la app
-    // de verdad, no el menú de SOL. Hace falta porque el run #10 (29/09/2026)
-    // mostró que buscar solo por texto («Resultado») cae en falsos
-    // positivos: el menú de SOL trae ese texto en algún lado —seguramente el
-    // panel de sugerencias del buscador «Busque una opción del menú»— y ese
-    // frame SIEMPRE tiene contenido (los enlaces del sidebar de siempre), así
-    // que `esResultado` daba true aunque el modal de verdad nunca se abriera.
-    const esAppDeVerdad = /e-factura\.sunat\.gob\.pe|ol-ti-itconscpegem/i.test(f.url());
-
-    let esResultado = esAppDeVerdad;
-    if (!esResultado) {
-      try {
-        esResultado = (await f.locator("text=Visualizar").count()) > 0
-          || (await f.locator("text=Factura electrónica").count()) > 0
-          || (await f.locator("text=Boleta electrónica").count()) > 0;
-      } catch { continue; }
-    }
-    if (!esResultado) continue;
+    if (!/e-factura\.sunat\.gob\.pe|ol-ti-itconscpegem/i.test(f.url())) continue;
 
     try {
       writeFileSync(join(CAPTURAS, `${nombreArchivo}.html`), await f.content());
@@ -316,7 +308,7 @@ async function radiografiaResultado(page: Page, nombreArchivo: string): Promise<
     }
     return;
   }
-  console.log("  · no encontré un frame con el resultado (¿no encontró el comprobante?).");
+  console.log(`  · no encontré el frame de e-factura entre los actuales: ${page.frames().map(f => f.url() || "(vacío)").join(" | ")}`);
 }
 
 async function abrirFormularioIndividual(page: Page) {
