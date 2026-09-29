@@ -421,6 +421,15 @@ Si el enlace apunta a una subcarpeta del legajo («01 PROVEEDOR»), se sube a
 la carpeta de la OC. Si ni así hay factura, se miran los archivos de la
 carpeta de arriba que llevan el número de la OC.
 
+Si a la OC le falta factura, guía, DAM o acta, se **leen por dentro** (OCR de
+Drive) hasta 4 PDF o imágenes cuyo nombre no lo dice: los de nombre genérico
+(«docs…», «scan…») y los que pasaron por OC solo por decir «OC» o llevar su
+número. Un «docs solpack oc150-2026.pdf» escaneado trae factura y guía, y
+cuenta para las dos. La factura se reconoce por «FACTURA ELECTRÓNICA» (o
+«factura» + serie F… + RUC, o «commercial invoice»); la guía, por el punto de
+partida y de llegada, no por la palabra: la factura cita su guía. Necesita el
+servicio **Drive API** (Servicios + → Drive API); sin él, funciona sin leer.
+
 ### Cómo se usa
 
 1. Una hoja **nueva** en tu unidad → Extensiones → Apps Script → pega el

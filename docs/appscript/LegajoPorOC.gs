@@ -40,7 +40,10 @@
  * 1. Crea una hoja NUEVA en tu unidad (no la de la captura de carpetas: este
  *    script usa nombres de funciones que chocarían con aquel).
  * 2. Extensiones → Apps Script → borra lo que haya, pega este archivo, guarda.
- * 3. Recarga la hoja: aparece el menú «Legajo por OC».
+ * 3. Para leer por dentro los PDF escaneados sin nombre claro («docs
+ *    proveedor oc150-2026.pdf»): a la izquierda, Servicios (+) → «Drive API»
+ *    → Agregar. Sin esto funciona igual, solo que no los lee.
+ *    Recarga la hoja: aparece el menú «Legajo por OC».
  * 4. «1. Armar tabla del proyecto» o «1. Armar tabla de TODO el cuadro de
  *    aprobaciones 2026» (la primera vez pide permisos). Para tener las dos,
  *    usa dos hojas nuevas, cada una con este script: corren a la vez.
@@ -69,6 +72,12 @@ var EMPRESA = 'INROPRIN';        // (modo proyecto) las OC de Inroplas tienen ot
 var MINUTOS_POR_TANDA = 4;       // Apps Script corta a los 6; el resto es para escribir
 var MINUTOS_ENTRE_TANDAS = 10;
 var LIMITE_ARCHIVOS = 800;       // más que esto: el enlace es de una carpeta general, no de la OC
+// Leer por dentro (OCR) los PDF e imágenes que el nombre no delata («docs
+// solpack oc150-2026.pdf», «scan001.pdf»), solo si a la OC le falta factura,
+// guía, DAM o acta. Necesita el servicio «Drive API» (Servicios + → Drive API).
+var LEER_DOCUMENTOS = true;
+var LEER_POR_OC = 4;             // cuántos archivos como mucho se leen por OC
+var CARPETA_TEMPORAL = '_lectura_legajo_temporal';
 
 // Los 11 documentos, en el orden de la pizarra.
 //   solo:     IMPO = solo importaciones · BIEN = no aplica a servicios · SERVICIO = solo servicios
@@ -463,6 +472,7 @@ function revisarTanda_(k, n) {
 
     var tabla = hojaT.getRange(2, 1, hojaT.getLastRow() - 1, CAB_TABLA.length).getValues();
     var archivos = [], resultados = {}, hechas = 0, cache = {}, cacheArriba = {};
+    var lectura = prepararLectura_();
 
     for (var i = k; i < tabla.length; i += n) {
       if (tabla[i][COL_ESTADO - 1] !== 'PENDIENTE') continue;
@@ -476,8 +486,8 @@ function revisarTanda_(k, n) {
       var res = cache[clave_] || (cache[clave_] = revisarCarpeta_(id, limite, ocNum, cacheArriba));
       if (res.estado === 'SIN TERMINAR' && hechas > 0) break; // se reintenta en la próxima tanda
 
-      var porDoc = {};
       res.archivos.forEach(function (a) {
+        if (a.claves) return; // ya clasificado en esta tanda (carpeta compartida)
         var claves = [claveDoc_(a.parece)];
         // «scan001.pdf» dentro de «FACTURA Y GUÍA» cuenta para las dos.
         a.enCarpeta.forEach(function (p) { claves.push(claveDoc_(p)); });
@@ -485,12 +495,33 @@ function revisarTanda_(k, n) {
         // Un PDF o imagen que no dice qué es, pero lleva el número de la OC:
         // es la OC. (Un Excel con el número suele ser el costeo, no la OC.)
         if (!claves.length && a.parece === 'OTRO' && /PDF|Imagen/.test(a.tipo) && ocNum &&
-          nombreMencionaOC_(a.nombre, ocNum)) claves = ['OC'];
+          nombreMencionaOC_(a.nombre, ocNum)) { claves = ['OC']; a.porNumero = true; }
         // En una importación, el comprobante de pago al exterior es el SWIFT.
         if (!claves.length && /^PAGO/.test(a.parece) && f[I_PROC] === 'Importación') claves = ['SWIFT'];
-        claves.forEach(function (c) { (porDoc[c] = porDoc[c] || []).push(a); });
+        a.claves = claves;
+      });
+
+      // Si falta algo que el nombre no delata, se leen por dentro los
+      // archivos dudosos: un «docs solpack oc150-2026.pdf» escaneado puede
+      // traer la factura y la guía, aunque el nombre diga «OC».
+      var faltan = documentosQueFaltan_(res.archivos, f);
+      if (faltan.length && lectura.activa) {
+        var candidatos = candidatosALeer_(res.archivos);
+        for (var c = 0; c < candidatos.length && lectura.activa; c++) {
+          if ((Date.now() - inicio) / 60000 > MINUTOS_POR_TANDA + 0.5) break;
+          var a = candidatos[c];
+          if (!(a.id in lectura.hechas)) lectura.hechas[a.id] = leerPorDentro_(a.id, lectura);
+          var leidos = lectura.hechas[a.id];
+          if (leidos && leidos.length) { a.claves = leidos; a.leido = true; }
+          if (!documentosQueFaltan_(res.archivos, f).length) break; // ya no falta nada que leer
+        }
+      }
+
+      var porDoc = {};
+      res.archivos.forEach(function (a) {
+        a.claves.forEach(function (c) { (porDoc[c] = porDoc[c] || []).push(a); });
         archivos.push([f[0], f[I_AREA], f[I_LINK], a.ubicacion, a.nombre, a.url, a.tipo, a.parece,
-          claves.map(nombreDeClave_).join(', '), a.pistas, a.creado]);
+          a.claves.map(nombreDeClave_).join(', ') + (a.leido ? ' (leído por dentro)' : ''), a.pistas, a.creado]);
       });
       resultados[i] = { estado: res.estado, detalle: res.detalle, n: res.archivos.length, porDoc: porDoc };
       hechas++;
@@ -514,7 +545,8 @@ function revisarTanda_(k, n) {
         .filter(function (v) { return v[0] === 'PENDIENTE'; }).length;
       if (pendientes === 0) detenerLegajoAutomatico_();
       var texto = 'Revisor ' + (k + 1) + ' de ' + n + ': ' + hechas + ' OC, ' + archivos.length +
-        ' archivos. Faltan ' + pendientes + ' en total' + (pendientes === 0 ? ' — TERMINADO.' : '.');
+        ' archivos, ' + Object.keys(lectura.hechas).length + ' leídos por dentro. Faltan ' + pendientes +
+        ' en total' + (pendientes === 0 ? ' — TERMINADO.' : '.') + (lectura.aviso ? ' OJO: ' + lectura.aviso : '');
       actualizarResumen_(libro, texto);
       try { libro.toast(texto, 'Legajo por OC', 10); } catch (e) {}
     } finally {
@@ -568,6 +600,143 @@ function claveDoc_(parece) {
     'PROFORMA': 'PROFORMA', 'CORREO / CAPTURA': 'CORREO', 'ACTA DE CONFORMIDAD': 'ACTA'
   };
   return mapa[p] || '';
+}
+
+// ── Leer por dentro (OCR) los archivos que el nombre no delata ──
+
+/** Lo que le falta a la OC de lo que se puede reconocer leyendo: factura, guía, DAM, acta. */
+function documentosQueFaltan_(archivos, f) {
+  var hay = {};
+  archivos.forEach(function (a) { (a.claves || []).forEach(function (c) { hay[c] = true; }); });
+  var falta = [];
+  if (!hay.FACTURA) falta.push('FACTURA');
+  if (!hay.GUIA && f[I_TIPO] !== 'Servicio') falta.push('GUIA');
+  if (!hay.DAM && f[I_PROC] === 'Importación') falta.push('DAM');
+  if (!hay.ACTA && f[I_TIPO] === 'Servicio') falta.push('ACTA');
+  return falta;
+}
+
+// Palabras de nombres que no dicen nada: «docs», «scan», «CamScanner»…
+var NOMBRES_GENERICOS = ['DOC', 'DOCS', 'DOCUMENTO', 'DOCUMENTOS', 'SCAN', 'ESCANEO', 'ESCANEADO', 'CAMSCANNER',
+  'IMG', 'IMAGEN', 'ADJUNTO', 'ADJUNTOS', 'WHATSAPP', 'SUSTENTO', 'SUSTENTOS', 'ARCHIVO', 'NUEVO'];
+
+/**
+ * Los PDF e imágenes que vale la pena leer, en orden: primero los de nombre
+ * genérico o sin clasificar, después los que pasaron por OC solo por decir
+ * «OC» o llevar su número (un escaneo de la factura suele llamarse «docs
+ * proveedor oc150-2026»). Lo que el nombre ya dice claro (cotización,
+ * requerimiento, pago, ficha…) no se lee.
+ */
+function candidatosALeer_(archivos) {
+  var puntaje = function (a) {
+    if (!/PDF|Imagen/.test(a.tipo) || a.leido) return -1;
+    var palabras = textoPlano_(a.nombre).split(' ');
+    var generico = palabras.some(function (p) { return NOMBRES_GENERICOS.indexOf(p) !== -1; });
+    if (a.parece === 'OTRO' || / \(por la carpeta\)$/.test(a.parece) || generico) return 2;
+    var ocSoloPorPalabra = a.parece === 'ORDEN DE COMPRA/SERVICIO' && !/ORDEN DE|PURCHASE ORDER/.test(a.pistas);
+    if (ocSoloPorPalabra || a.porNumero) return 1;
+    return -1;
+  };
+  return archivos.map(function (a) { return { a: a, p: puntaje(a) }; })
+    .filter(function (x) { return x.p > 0; })
+    .sort(function (x, y) { return y.p - x.p; })
+    .slice(0, LEER_POR_OC)
+    .map(function (x) { return x.a; });
+}
+
+/** Si se puede leer: hace falta el servicio Drive API. Si no, se sigue sin leer. */
+function prepararLectura_() {
+  var lectura = { activa: false, hechas: {}, temporal: '', aviso: '' };
+  if (!LEER_DOCUMENTOS) return lectura;
+  if (typeof Drive === 'undefined') {
+    lectura.aviso = 'para leer PDF escaneados, activa el servicio «Drive API» (Apps Script → Servicios + → Drive API).';
+    return lectura;
+  }
+  var it = DriveApp.getFoldersByName(CARPETA_TEMPORAL);
+  lectura.temporal = (it.hasNext() ? it.next() : DriveApp.createFolder(CARPETA_TEMPORAL)).getId();
+  lectura.activa = true;
+  return lectura;
+}
+
+/**
+ * Copia el archivo como documento de Google (Drive le hace OCR), saca el
+ * texto, borra la copia y dice qué documentos trae. El original no se toca.
+ * Un error de permiso apaga la lectura por el resto de la tanda.
+ */
+function leerPorDentro_(id, lectura) {
+  var copia = null;
+  try {
+    var v2 = typeof Drive.Files.insert === 'function'; // el servicio puede estar en v2 o v3
+    copia = v2
+      ? Drive.Files.copy({ title: 'lectura ' + id, parents: [{ id: lectura.temporal }] }, id,
+          { convert: true, ocr: true, ocrLanguage: 'es', supportsAllDrives: true })
+      : Drive.Files.copy({ name: 'lectura ' + id, mimeType: 'application/vnd.google-apps.document', parents: [lectura.temporal] }, id,
+          { ocrLanguage: 'es', supportsAllDrives: true });
+    return documentosEnTexto_(textoDeDocumento_(copia.id));
+  } catch (e) {
+    var msg = String(e.message || e);
+    if (/permiso|permission|autoriza|authoriz/i.test(msg)) {
+      lectura.activa = false;
+      lectura.aviso = 'falta un permiso para leer PDF (' + msg.slice(0, 80) + '). Corre «autorizarLecturaLegajo» desde el editor.';
+    }
+    return [];
+  } finally {
+    if (copia) {
+      try { Drive.Files.remove(copia.id); } catch (e) {
+        try { DriveApp.getFileById(copia.id).setTrashed(true); } catch (e2) {}
+      }
+    }
+  }
+}
+
+/**
+ * Para correr UNA vez desde el editor de Apps Script (elegirla arriba y
+ * «Ejecutar») si la lectura avisa que falta un permiso: Google vuelve a
+ * pedirlos. Hay que marcar TODAS las casillas, en especial «Documentos».
+ */
+function autorizarLecturaLegajo() {
+  DriveApp.getRootFolder().getName();
+  DocumentApp.getActiveDocument();
+  Logger.log('Permisos listos.');
+}
+
+/** El texto de la copia: con DocumentApp o, si no hay ese permiso, exportado por Drive. */
+function textoDeDocumento_(idDoc) {
+  try {
+    return DocumentApp.openById(idDoc).getBody().getText();
+  } catch (e) {
+    if (!/permiso|permission|autoriza|authoriz/i.test(String(e.message || e))) throw e;
+    try {
+      var r = Drive.Files.export(idDoc, 'text/plain', { alt: 'media' });
+      if (typeof r === 'string' && r) return r;
+      if (r && typeof r.getDataAsString === 'function') return r.getDataAsString();
+      if (r && r.length) return Utilities.newBlob(r).getDataAsString();
+    } catch (e2) {
+      // no hubo segundo camino: vale el error de permiso de arriba
+    }
+    throw e;
+  }
+}
+
+/**
+ * Qué documentos trae un texto leído. Un PDF puede traer varios (factura en
+ * la hoja 1 y guía en la 2). Se pide el rasgo propio de cada uno, no solo la
+ * palabra: una factura CITA su guía («Tipo de G.R.: Guía de Remisión
+ * Remitente, T001-73313»), pero solo la guía trae punto de partida y de
+ * llegada; y una OC dice «factura a 30 días» sin ser una factura.
+ */
+function documentosEnTexto_(texto) {
+  var P = String(texto || '').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ');
+  var hay = [];
+  var serieFactura = /(?:^|[^A-Z0-9])F[A-Z0-9]{3}\s*[-–—]\s*\d{1,8}(?!\d)/.test(P.replace(/F([A-Z]?)O(\d)/g, 'F$10$2'));
+  if (/FACTURA\s+ELECTRONICA/.test(P) || (/\bFACTURA\b/.test(P) && serieFactura && /R\.?\s*U\.?\s*C/.test(P)) ||
+    /COMMERCIAL\s+INVOICE|\bINVOICE\s*(NO\b|N[°º]|#|NUMBER|DATE)/.test(P)) hay.push('FACTURA');
+  if (/PUNTO\s+DE\s+PARTIDA|PUNTO\s+DE\s+LLEGADA|MOTIVO\s+DEL?\s+TRASLADO|DATOS\s+DEL\s+TRASLADO/.test(P)) hay.push('GUIA');
+  if (/DECLARACION\s+ADUANERA\s+DE\s+MERCANCIAS|\bDAM\b[^A-Z]{0,20}\d{3}\s*-\s*20\d\d\s*-\s*10\s*-\s*\d{3,6}/.test(P)) hay.push('DAM');
+  if (/ACTA\s+DE\s+(CONFORMIDAD|RECEPCION)|CONFORMIDAD\s+DEL?\s+SERVICIO/.test(P)) hay.push('ACTA');
+  if (/\bMT\s?103\b|SWIFT\s+(COPY|MESSAGE)|:32A:/.test(P)) hay.push('SWIFT');
+  if (!hay.length && /^.{0,300}ORDEN\s+DE\s+(COMPRA|SERVICIO)/.test(P)) hay.push('OC');
+  return hay;
 }
 
 function nombreDeClave_(clave) {
@@ -732,13 +901,14 @@ function recorrer_(carpeta, ruta, sub, vistas, salida, limite) {
 }
 
 function datosDeArchivo_(f, ubicacion, pistaCarpeta) {
-  var nombre = f.getName(), mime = f.getMimeType(), url = f.getUrl();
+  var nombre = f.getName(), mime = f.getMimeType(), url = f.getUrl(), id = f.getId();
   if (mime === 'application/vnd.google-apps.shortcut') {
     try {
       var real = DriveApp.getFileById(f.getTargetId());
       nombre = real.getName() + ' (acceso directo)';
       mime = real.getMimeType();
       url = real.getUrl();
+      id = real.getId();
     } catch (e) {
       nombre += ' (acceso directo sin acceso)';
     }
@@ -747,7 +917,7 @@ function datosDeArchivo_(f, ubicacion, pistaCarpeta) {
   // Si lo que dice qué es el archivo es la carpeta, todas sus pistas cuentan.
   var enCarpeta = / \(por la carpeta\)$/.test(c.parece) ?
     pistasEn_(textoPlano_(pistaCarpeta)).map(function (p) { return p.parece; }) : [];
-  return { ubicacion: ubicacion, nombre: nombre, url: url, tipo: tipoLegible_(mime, nombre),
+  return { id: id, ubicacion: ubicacion, nombre: nombre, url: url, tipo: tipoLegible_(mime, nombre),
     parece: c.parece, enCarpeta: enCarpeta, pistas: c.pistas.join(', '), creado: f.getDateCreated() };
 }
 
