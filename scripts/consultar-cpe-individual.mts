@@ -274,16 +274,23 @@ async function radiografiaFormulario(page: Page) {
  */
 async function radiografiaResultado(page: Page, nombreArchivo: string): Promise<void> {
   for (const f of page.frames()) {
-    let esResultado = false;
-    try {
-      esResultado = (await f.locator("text=Visualizar").count()) > 0
-        || (await f.locator("text=Factura electrónica").count()) > 0
-        || (await f.locator("text=Boleta electrónica").count()) > 0
-        // El modal de «Nueva Consulta de comprobantes de pago» (la captura
-        // del usuario, run #8): se abre con el título «Resultado» y los
-        // íconos de PDF/XML/imprimir/correo.
-        || (await f.locator("text=Resultado").count()) > 0;
-    } catch { continue; }
+    // Primero por URL: es la señal firme de que este es el frame de la app
+    // de verdad, no el menú de SOL. Hace falta porque el run #10 (29/09/2026)
+    // mostró que buscar solo por texto («Resultado») cae en falsos
+    // positivos: el menú de SOL trae ese texto en algún lado —seguramente el
+    // panel de sugerencias del buscador «Busque una opción del menú»— y ese
+    // frame SIEMPRE tiene contenido (los enlaces del sidebar de siempre), así
+    // que `esResultado` daba true aunque el modal de verdad nunca se abriera.
+    const esAppDeVerdad = /e-factura\.sunat\.gob\.pe|ol-ti-itconscpegem/i.test(f.url());
+
+    let esResultado = esAppDeVerdad;
+    if (!esResultado) {
+      try {
+        esResultado = (await f.locator("text=Visualizar").count()) > 0
+          || (await f.locator("text=Factura electrónica").count()) > 0
+          || (await f.locator("text=Boleta electrónica").count()) > 0;
+      } catch { continue; }
+    }
     if (!esResultado) continue;
 
     try {
@@ -485,16 +492,25 @@ async function elegirFiltroRecibido(marco: Frame): Promise<void> {
 /**
  * Elige la etiqueta en el campo «Tipo de comprobante».
  *
- * La radiografía del run #8 mostró un input de texto sin `name` propio
- * (`name=""`, entre `rucEmisor` y `serieComprobante`) para este campo: no es
- * un `<select>`, así que se maneja como un combobox —clic para abrir y clic
- * en la opción—, igual que los de las pantallas JSP, pero buscando la
+ * La radiografía del run #8 mostró un input de texto entre `rucEmisor` y
+ * `serieComprobante` sin `name` propio para este campo, impreso como
+ * `name=-` porque la radiografía usa `e.name || "-"`. El run #10 (29/09/2026)
+ * mostró que `[name=""]` no lo encuentra: en Angular es común que la
+ * PROPIEDAD `name` esté vacía sin que el ATRIBUTO `name=""` exista siquiera
+ * en el HTML, y el selector CSS de atributo exige que exista. Por eso se
+ * busca al revés —el input de texto que NO es ninguno de los tres con
+ * nombre conocido—, que no depende de si el atributo está o no.
+ *
+ * No es un `<select>`, así que se maneja como un combobox —clic para abrir y
+ * clic en la opción—, igual que los de las pantallas JSP, pero buscando la
  * opción entre los contenedores típicos de un combobox moderno
  * (`[role="option"]`, `li`) además de los de siempre, porque esta es una app
  * distinta (Angular o similar) y no se sabe todavía cuál usa.
  */
 async function elegirTipoComprobante(marco: Frame, etiqueta: string): Promise<void> {
-  const campo = marco.locator('input[type="text"][name=""]').first();
+  const campo = marco.locator(
+    'input[type="text"]:not([name="rucEmisor"]):not([name="serieComprobante"]):not([name="numeroComprobante"])'
+  ).first();
   if (!(await campo.count())) { console.log("  ⚠ no encontré el campo de «Tipo de comprobante»."); return; }
   await campo.click().catch(() => {});
   await marco.page().waitForTimeout(600);
