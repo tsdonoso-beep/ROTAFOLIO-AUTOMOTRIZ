@@ -421,6 +421,25 @@ function etiquetaTipoComprobante(tipoComprobante: string): string {
 }
 
 /**
+ * Para 07/08 (notas): si la nota modifica una factura o una boleta, según el
+ * prefijo de su propia serie —«FC01» modifica facturas, «BC01» boletas, la
+ * misma convención de SUNAT para la serie de la nota que para la del
+ * comprobante que corrige—.
+ *
+ * Hace falta desde el run #22 (29/09/2026): el desplegable ya no trae «Nota
+ * de Crédito» sola, la junta con el tipo que modifica —«Factura - Nota de
+ * Crédito», «Boleta de Venta - Nota de Crédito»—. Sin esto, buscar solo por
+ * «Nota de Crédito» encuentra las DOS opciones (las dos contienen esas
+ * palabras) y se queda con la primera que aparezca, sin importar si es la
+ * correcta: los runs #22-24 (300 pendientes) perdieron casi todo por esto —
+ * la opción equivocada deja la serie «incorrecta» y SUNAT nunca abre el
+ * modal de resultado.
+ */
+function calificadorTipoComprobante(serie: string): string {
+  return /^B/i.test(serie) ? "Boleta de Venta" : "Factura";
+}
+
+/**
  * Lo que el SIRE ya sabe que existe, para este período, con serie distinta
  * a E001 —la que la consulta por rango sí cubre—, y que todavía no está en
  * `cpe_comprobante`.
@@ -520,8 +539,14 @@ async function elegirFiltroRecibido(marco: Frame): Promise<void> {
  * Se clica el texto visible «Seleccionar» —el placeholder del combobox
  * vacío— y se busca la opción entre los contenedores típicos de un
  * desplegable moderno (`li`, `[role="option"]`, `.p-dropdown-item`).
+ *
+ * `calificador` (solo para 07/08, ver `calificadorTipoComprobante`) desempata
+ * cuando el texto de `etiqueta` calza con MÁS de una opción —confirmado por
+ * el run #26 (29/09/2026, debug): «Nota de Crédito» calzó con «Factura -
+ * Nota de Crédito» Y «Boleta de Venta - Nota de Crédito» a la vez, y sin
+ * desempate se quedaba con la primera sin mirar si era la correcta.
  */
-async function elegirTipoComprobante(marco: Frame, etiqueta: string): Promise<void> {
+async function elegirTipoComprobante(marco: Frame, etiqueta: string, calificador?: string): Promise<void> {
   const campo = marco.getByText("Seleccionar", { exact: true }).first();
   if (!(await campo.count())) {
     console.log("  ⚠ no encontré el combobox de «Tipo de comprobante» (¿ya no dice «Seleccionar»?).");
@@ -530,9 +555,17 @@ async function elegirTipoComprobante(marco: Frame, etiqueta: string): Promise<vo
   await campo.click().catch(() => {});
   await marco.page().waitForTimeout(600);
 
-  const opcion = marco.locator(
+  const candidatos = marco.locator(
     `li:has-text("${etiqueta}"), [role="option"]:has-text("${etiqueta}"), .p-dropdown-item:has-text("${etiqueta}"), .ui-menu-item:has-text("${etiqueta}"), option:has-text("${etiqueta}")`
-  ).first();
+  );
+  const n = await candidatos.count();
+  let opcion = candidatos.first();
+  if (calificador && n > 1) {
+    for (let i = 0; i < n; i++) {
+      const texto = (await candidatos.nth(i).textContent().catch(() => "")) ?? "";
+      if (texto.includes(calificador)) { opcion = candidatos.nth(i); break; }
+    }
+  }
   if (await opcion.count()) {
     await opcion.click().catch(() => {});
   } else {
@@ -556,7 +589,9 @@ async function llenarFormulario(page: Page, p: Pendiente): Promise<Frame | null>
 
     try {
       await elegirFiltroRecibido(f);
-      await elegirTipoComprobante(f, etiquetaTipoComprobante(p.tipoComprobante));
+      const calificador = (p.tipoComprobante === "07" || p.tipoComprobante === "08")
+        ? calificadorTipoComprobante(p.serie) : undefined;
+      await elegirTipoComprobante(f, etiquetaTipoComprobante(p.tipoComprobante), calificador);
       await rucInput.fill(p.proveedorRuc);
       await f.locator('input[name="serieComprobante"]').first().fill(p.serie);
       await f.locator('input[name="numeroComprobante"]').first().fill(p.numero);
