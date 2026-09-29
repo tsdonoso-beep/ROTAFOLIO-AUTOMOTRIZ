@@ -1,0 +1,84 @@
+# Confirmar comprobantes serie no-E001, uno por uno, contra SUNAT
+#
+# `descargar-cpe.yml` trae por rango de fechas, pero esa pantalla solo ve
+# serie E001 (confirmado el 28/09/2026 contra el SIRE: agosto trajo 559
+# comprobantes y los 559 eran E, mientras el SIRE tenía 857 más de serie F
+# en el mismo rango). La pantalla «Consultar Factura, Boletas y Notas» sí ve
+# otras series, pero al revés: pide UN comprobante a la vez (RUC del emisor,
+# tipo, serie y número), no un rango. Por eso este workflow no le pregunta a
+# SUNAT qué existe: la lista de pendientes sale del SIRE (`comprobantes_sunat`,
+# que ya trae RUC+serie+número de cada compra) y esto solo confirma cada uno.
+#
+# FASE 1 (la de ahora): depuración. Todavía no se sabe qué trae la pantalla
+# de resultado, así que por omisión (debug=true) esto entra, llena el
+# formulario con unos pocos pendientes y sube capturas + HTML, sin guardar
+# nada. Con esa evidencia se escribe la fase 2 (guardar de verdad) y recién
+# ahí tiene sentido correr con debug=false y limite en 0 para terminar un mes.
+
+name: SUNAT consultar CPE individual
+
+on:
+  workflow_dispatch:
+    inputs:
+      debug:
+        description: "Solo entrar, llenar el formulario y capturar el resultado, sin guardar (para fijar selectores)."
+        type: boolean
+        required: false
+        default: true
+      periodo:
+        description: "Período a revisar, yyyymm."
+        required: false
+        default: "202609"
+      limite:
+        description: "Cuántos pendientes procesar en esta corrida. 0 = todos los que falten."
+        required: false
+        default: "3"
+
+permissions:
+  contents: read
+
+jobs:
+  consultar:
+    runs-on: ubuntu-latest
+    # Una consulta por comprobante, no por mes: con cientos de pendientes por
+    # período, esto puede tardar bastante más que el workflow por rango.
+    timeout-minutes: 180
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - run: npx playwright install --with-deps chromium
+
+      - name: Entrar a SOL y confirmar los pendientes, uno por uno
+        env:
+          SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
+          SUNAT_SOL_USUARIO: ${{ secrets.SUNAT_SOL_USUARIO }}
+          SUNAT_SOL_CLAVE: ${{ secrets.SUNAT_SOL_CLAVE }}
+          SUNAT_INROPRIN_USUARIO: ${{ secrets.SUNAT_INROPRIN_USUARIO }}
+          SUNAT_INROPRIN_CLAVE: ${{ secrets.SUNAT_INROPRIN_CLAVE }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          PROJECT_URL: ${{ secrets.PROJECT_URL }}
+          ANON_KEY: ${{ secrets.ANON_KEY }}
+          ROBOT_CORREO: ${{ secrets.ROBOT_CORREO }}
+          ROBOT_CLAVE: ${{ secrets.ROBOT_CLAVE }}
+          DEBUG: ${{ inputs.debug && '1' || '0' }}
+          PERIODO: ${{ inputs.periodo || '202609' }}
+          LIMITE: ${{ inputs.limite || '3' }}
+        run: node --experimental-strip-types scripts/consultar-cpe-individual.mts
+
+      - name: Subir capturas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capturas-cpe-individual
+          path: capturas/
+          if-no-files-found: warn
+          retention-days: 7

@@ -1,12 +1,20 @@
 # Bajar los XML de los comprobantes desde el portal de SUNAT
 #
 # El detalle de ítems no lo da ninguna API: sale del XML, y al XML solo se
-# llega por la pantalla «Consultar Factura y Nota» de SOL, que tiene login.
-# Por eso esto maneja un navegador (Playwright), y corre acá y no en Apps
-# Script —que no puede manejar un navegador— ni en Vercel —que corta al minuto.
+# llega por las pantallas de consulta de SOL, que tienen login. Por eso esto
+# maneja un navegador (Playwright), y corre acá y no en Apps Script —que no
+# puede manejar un navegador— ni en Vercel —que corta al minuto.
 #
-# Reusa los secretos que ya están: el usuario y clave de SOL son los mismos
-# del SIRE. El repositorio es público: nada de esto va en un archivo.
+# BOLETAS: desde el 28/09/2026 la corrida diaria también las pide. Viven en
+# otra pantalla («Consultar Boleta de Venta y Nota») y hacía falta un acceso de
+# SOL con ese permiso: la cuenta general del SIRE solo ve facturas y notas. Por
+# eso ahora se pasan SUNAT_SOL_USUARIO / SUNAT_SOL_CLAVE, y el script cae a los
+# del SIRE si no están. Se hizo recién después de probar la cuenta nueva en
+# «SUNAT extraer rango», que bajó agosto y setiembre sin una falla; el volcado
+# del menú de esa corrida confirmó además que esa cuenta también ve la pantalla
+# de facturas, que es lo que hacía falta para no romper lo que ya funcionaba.
+#
+# El repositorio es público: nada de esto va en un archivo.
 #
 # Arranca en modo depuración (debug=true): entra, llega a la pantalla y sube
 # capturas y HTML como artefacto, sin bajar nada. Con eso se fijan los
@@ -45,13 +53,14 @@ on:
         default: ""
       tipo_consulta:
         description: >-
-          Uno o varios tipos del portal, separados por coma. El portal no
-          tiene un «todo junto»: son consultas separadas (FE Emitidas, FE
-          Recibidas, FE Rechazadas, NC Emitidas, NC Recibidas, ND Emitidas,
-          ND Recibidas), y esto entra una sola vez y las recorre todas en la
-          misma sesión, sin volver a loguearse por cada una.
+          Uno o varios tipos, separados por coma. El portal no tiene un «todo
+          junto»: son consultas separadas, y esto entra una sola vez y las
+          recorre todas en la misma sesión, sin volver a loguearse por cada
+          una. Los diez que hay están en lib/sunat/cpe-consulta.ts: seis de
+          factura y nota (FE/NC/ND) y cuatro de boleta (BVE/NC-BVE/ND-BVE). Un
+          nombre que no esté en esa lista corta la corrida antes del login.
         required: false
-        default: "FE Emitidas,FE Recibidas,NC Emitidas,NC Recibidas,ND Emitidas,ND Recibidas"
+        default: "FE Emitidas,FE Recibidas,NC Emitidas,NC Recibidas,ND Emitidas,ND Recibidas,BVE Emitidas,BVE Recibidas,NC-BVE Emitidas,ND-BVE Emitidas"
       rango_prueba_imprimir:
         description: >-
           Prueba puntual, apagada si se deja vacía: además de la consulta
@@ -69,9 +78,14 @@ permissions:
 jobs:
   descargar:
     runs-on: ubuntu-latest
-    # Con varios tipos de consulta en la misma corrida, un mes cargado puede
-    # tardar bastante más que los ~4 minutos de un solo tipo.
-    timeout-minutes: 90
+    # Con varios tipos en la misma corrida, un mes cargado puede tardar
+    # bastante más que los ~4 minutos de un solo tipo. Al pasar de seis tipos a
+    # diez se sube el tope: la ventana diaria es de dos días y trae poco, pero
+    # una consulta que devuelve CERO igual tarda ~90 s en concluirlo —espera a
+    # que aparezca la grilla, que en un mes cargado puede demorar 51 s, antes de
+    # caer al conteo de enlaces—, y con diez tipos eso ya son 15 minutos de
+    # esperas aunque no se baje nada.
+    timeout-minutes: 120
 
     steps:
       - uses: actions/checkout@v7
@@ -100,6 +114,12 @@ jobs:
       - name: Entrar a SOL y (si no es depuración) bajar los XML
         env:
           SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
+          # El acceso ampliado de SOL, el único que ve boletas. Si estos dos
+          # secretos no estuvieran puestos, el script cae a los del SIRE y la
+          # corrida sigue funcionando igual, solo que las cuatro consultas de
+          # boleta se saltarían.
+          SUNAT_SOL_USUARIO: ${{ secrets.SUNAT_SOL_USUARIO }}
+          SUNAT_SOL_CLAVE: ${{ secrets.SUNAT_SOL_CLAVE }}
           SUNAT_INROPRIN_USUARIO: ${{ secrets.SUNAT_INROPRIN_USUARIO }}
           SUNAT_INROPRIN_CLAVE: ${{ secrets.SUNAT_INROPRIN_CLAVE }}
           SUNAT_INROPRIN_CLIENT_ID: ${{ secrets.SUNAT_INROPRIN_CLIENT_ID }}
@@ -124,7 +144,7 @@ jobs:
           DEBUG: ${{ github.event_name == 'schedule' && '0' || (inputs.debug && '1' || '0') }}
           FECHA_INICIO: ${{ github.event_name == 'schedule' && steps.rango.outputs.desde || inputs.fecha_inicio }}
           FECHA_FIN: ${{ github.event_name == 'schedule' && steps.rango.outputs.hasta || inputs.fecha_fin }}
-          TIPOS_CONSULTA: ${{ inputs.tipo_consulta || 'FE Emitidas,FE Recibidas,NC Emitidas,NC Recibidas,ND Emitidas,ND Recibidas' }}
+          TIPOS_CONSULTA: ${{ inputs.tipo_consulta || 'FE Emitidas,FE Recibidas,NC Emitidas,NC Recibidas,ND Emitidas,ND Recibidas,BVE Emitidas,BVE Recibidas,NC-BVE Emitidas,ND-BVE Emitidas' }}
           PROBAR_IMPRIMIR: ${{ inputs.rango_prueba_imprimir && '1' || '0' }}
           RANGO_PRUEBA_IMPRIMIR: ${{ inputs.rango_prueba_imprimir }}
         run: node --experimental-strip-types scripts/descargar-cpe.mts
