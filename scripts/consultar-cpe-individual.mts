@@ -39,10 +39,11 @@ import { join } from "node:path";
 import { Readable } from "node:stream";
 import { google } from "googleapis";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { normalizarClavePrivada, correoDeServicio, carpeta } from "../lib/drive/servidor.ts";
+import { normalizarClavePrivada, correoDeServicio, carpeta, publicarHoja } from "../lib/drive/servidor.ts";
 import { leerZip } from "../lib/sunat/zip.ts";
 import { leerComprobanteXml, type ComprobanteCpe } from "../lib/sunat/cpe-xml.ts";
 import { prepararLote, origenDe, periodoDe, identidad } from "../lib/sunat/cpe-importacion.ts";
+import { filasItemsSunat, filaDetalleDesdeRpc, detalleCpeCompleto, TIPOS_ITEMS } from "../lib/export/items-sunat.ts";
 
 function pedir(...nombres: string[]): string {
   for (const n of nombres) { const v = (process.env[n] ?? "").trim(); if (v) return v; }
@@ -715,7 +716,9 @@ async function clienteBase(): Promise<SupabaseClient | null> {
 }
 
 /**
- * Guarda el lote de comprobantes confirmados en `cpe_comprobante`.
+ * Guarda el lote de comprobantes confirmados en `cpe_comprobante`, y
+ * devuelve el cliente ya logueado como el robot para que el llamador pueda
+ * reusarlo y publicar la hoja de detalle sin loguearse de nuevo.
  *
  * Mismo `guardar_cpe` que usa `descargar-cpe.mts`: un comprobante que ya
  * estaba se actualiza en vez de duplicarse, así que repetir un rango ya
@@ -723,10 +726,10 @@ async function clienteBase(): Promise<SupabaseClient | null> {
  */
 async function guardarLote(
   comprobantes: Array<{ c: ComprobanteCpe; xmlUrl: string | null; pdfUrl: string | null }>
-): Promise<void> {
-  if (comprobantes.length === 0) return;
+): Promise<SupabaseClient | null> {
+  if (comprobantes.length === 0) return null;
   const lote = prepararLote(comprobantes.map(x => x.c), RUC);
-  if (lote.length === 0) return;
+  if (lote.length === 0) return null;
 
   const urlsPorIdentidad = new Map(comprobantes.map(x => [identidad(x.c), x]));
   for (const d of lote) {
@@ -736,11 +739,45 @@ async function guardarLote(
   }
 
   const sb = await clienteBase();
-  if (!sb) return;
+  if (!sb) return null;
   const { data, error } = await sb.rpc("guardar_cpe", { p_empresa_ruc: RUC, p_docs: lote });
-  if (error) { console.error("⚠ No se guardó el detalle:", error.message); return; }
+  if (error) { console.error("⚠ No se guardó el detalle:", error.message); return null; }
   const r = (Array.isArray(data) ? data[0] : data) as { nuevos: number; actualizados: number; items: number };
   console.log(`Guardado en cpe_comprobante: ${r?.nuevos} nuevos, ${r?.actualizados} actualizados, ${r?.items} ítems.`);
+  return sb;
+}
+
+/**
+ * Deja la hoja «COMPROBANTES SUNAT - DETALLE» al día, igual que hace
+ * `descargar-cpe.mts` tras guardar.
+ *
+ * Sin esto, la hoja se queda como quedó la última vez que alguien la miró
+ * —justo lo que se quería evitar al automatizar—. Es opcional: si faltan las
+ * credenciales de Drive, el detalle igual quedó guardado en la base y solo
+ * se salta la publicación.
+ */
+async function publicarLaHojaDetalle(sb: SupabaseClient): Promise<void> {
+  if (!process.env.GOOGLE_SA_EMAIL || !process.env.GOOGLE_DRIVE_FOLDER_ID) {
+    console.log("Sin credenciales de Drive: no se actualiza la hoja de detalle.");
+    return;
+  }
+
+  let datos: Record<string, unknown>[];
+  try {
+    datos = await detalleCpeCompleto(sb, null);
+  } catch (e) {
+    console.error("⚠ No se pudo leer el detalle para la hoja:", e instanceof Error ? e.message : e);
+    return;
+  }
+
+  const filas = datos.map(filaDetalleDesdeRpc);
+  const r = await publicarHoja({
+    filas: filasItemsSunat(filas),
+    nombre: "COMPROBANTES SUNAT - DETALLE",
+    carpetas: ["SUNAT"],
+    tipos: TIPOS_ITEMS,
+  });
+  console.log(`Hoja de detalle al día: ${filas.length} ítems · ${r.url}`);
 }
 
 // ── Principal ─────────────────────────────────────────────────────
@@ -826,7 +863,8 @@ try {
     console.log("Modo depuración: revisa el artefacto 'capturas/' antes de correr con DEBUG=0.");
   } else {
     console.log(`\nArchivados en Drive: ${nuevos} nuevos, ${existentes} ya estaban.`);
-    await guardarLote(comprobantes);
+    const sb = await guardarLote(comprobantes);
+    if (sb) await publicarLaHojaDetalle(sb);
     console.log(`Listo: se confirmaron ${comprobantes.length} de ${aProcesar.length} pendientes procesados (de ${lista.length} en ${PERIODO}).`);
   }
 } catch (e) {

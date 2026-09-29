@@ -71,6 +71,10 @@ jobs:
           SUNAT_DRIVE_FOLDER: ${{ secrets.SUNAT_DRIVE_FOLDER }}
           GOOGLE_SA_EMAIL: ${{ secrets.GOOGLE_SA_EMAIL }}
           GOOGLE_SA_PRIVATE_KEY: ${{ secrets.GOOGLE_SA_PRIVATE_KEY }}
+          # Para dejar publicada la hoja "COMPROBANTES SUNAT - DETALLE" al
+          # terminar, igual que hace descargar-cpe.mts. Si falta, el detalle
+          # igual se guarda y solo se salta la hoja.
+          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           PROJECT_URL: ${{ secrets.PROJECT_URL }}
