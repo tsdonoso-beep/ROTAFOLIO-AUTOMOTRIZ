@@ -12,8 +12,11 @@
  *   · todas las subcarpetas, a cualquier profundidad;
  *   · palabras parecidas, no solo «FACTURA»: FACT, FT, F001-…, E001-…, y
  *     errores de tipeo (FATURA, FACTRUA);
- *   · si una OC no tiene nada que parezca factura adentro, busca afuera: en
- *     la carpeta superior y en todo el Drive, archivos con su número de OC.
+ *   · si el enlace apunta a una subcarpeta del legajo («01 PROVEEDOR»), sube
+ *     a la carpeta de la OC;
+ *   · si una OC no tiene nada que parezca factura adentro, busca en la
+ *     carpeta de arriba archivos con su número de OC (y en todo el Drive,
+ *     con BUSCAR_FUERA).
  *
  * La base original SOLO SE LEE. Todo se escribe en la hoja donde está pegado
  * este script (una hoja de tu unidad):
@@ -39,7 +42,7 @@ var ORIGEN_ID = '1tsu4HEA_o_yWdvvJCF5zhlrW_ffzMXiqtzMiRzMlxCY';
 var ORIGEN_PESTANA = '3. Registro Compras Grupo';
 var EMPRESAS = ['INROPRIN'];     // vacío [] = todas
 var ANIOS = [2026];              // vacío [] = todos
-var BUSCAR_FUERA = false;        // true = si no hay factura adentro, buscarla afuera (lento; en la 1.ª corrida aportó poco)
+var BUSCAR_FUERA = false;        // true = si no hay factura ni en la carpeta ni en la de arriba, buscarla en todo el Drive (lento; en la 1.ª corrida aportó poco)
 var MINUTOS_POR_TANDA = 4.5;     // Apps Script corta a los 6
 var LIMITE_ARCHIVOS = 800;       // más que esto: el enlace apunta a una carpeta general, no a la de una OC
 
@@ -188,15 +191,16 @@ function revisarSiguienteTanda() {
       // 6 minutos, porque Google corta sin dejar escribir nada y la siguiente
       // tanda se volvería a trabar en la misma carpeta.
       var limite = inicio + (MINUTOS_POR_TANDA + 0.5) * 60000;
-      var res = revisarCarpeta_(String(c[0]), limite);
+      var res = revisarCarpeta_(String(c[0]), limite, String(c[2]));
       if (res.estado === 'SIN TERMINAR' && hechas > 0) break; // se reintenta sola en la próxima tanda
       var dentro = res.archivos;
       var facturasDentro = dentro.filter(esFactura_).length;
       var xmlDentro = dentro.filter(function (a) { return a.parece === 'XML'; }).length;
 
+      // La carpeta de arriba se mira siempre (es barata); todo el Drive, solo con BUSCAR_FUERA.
       var fuera = [];
-      if (BUSCAR_FUERA && facturasDentro === 0 && res.estado !== 'SIN ACCESO') {
-        fuera = buscarFuera_(String(c[2]), res.carpeta, String(c[0]), cacheSuperior);
+      if (facturasDentro === 0 && res.carpeta) {
+        fuera = buscarFuera_(String(c[2]), res.carpeta, String(c[0]), cacheSuperior, BUSCAR_FUERA);
       }
 
       dentro.concat(fuera).forEach(function (a) {
@@ -234,10 +238,15 @@ function revisarSiguienteTanda() {
   }
 }
 
-/** Los archivos de una carpeta y todas sus subcarpetas. Nunca lanza: el problema va en `estado`. */
-function revisarCarpeta_(id, limite) {
+/**
+ * Los archivos de una carpeta y todas sus subcarpetas. Nunca lanza: el
+ * problema va en `estado`. Si el enlace apunta a una subcarpeta del legajo
+ * («01 PROVEEDOR», «003 Orden de compra»), se sube a la carpeta de la OC:
+ * ahí suelen estar la factura, la DAM o el desaduanaje.
+ */
+function revisarCarpeta_(id, limite, ocTexto) {
   var archivos = [];
-  var carpeta;
+  var carpeta, nota = '';
   try {
     carpeta = DriveApp.getFolderById(id);
     carpeta.getName(); // obliga a comprobar el acceso aquí y no más abajo
@@ -251,9 +260,14 @@ function revisarCarpeta_(id, limite) {
       return { estado: 'SIN ACCESO', archivos: [], carpeta: null, detalle: String(e.message || e) };
     }
   }
+  var deLaOC = carpetaDeLaOC_(carpeta, numeroDeOC_(String(ocTexto || '').split(' / ')[0]));
+  if (deLaOC.getId() !== carpeta.getId()) {
+    nota = 'El enlace apunta a la subcarpeta «' + carpeta.getName() + '»; se revisó desde «' + deLaOC.getName() + '».';
+    carpeta = deLaOC;
+  }
   try {
     recorrer_(carpeta, carpeta.getName(), '', {}, archivos, limite || Infinity);
-    return { estado: archivos.length ? 'OK' : 'VACÍA', archivos: archivos, carpeta: carpeta, detalle: '' };
+    return { estado: archivos.length ? 'OK' : 'VACÍA', archivos: archivos, carpeta: carpeta, detalle: nota };
   } catch (e) {
     if (e === DEMASIADO_GRANDE) {
       return { estado: 'MUY GRANDE', archivos: archivos, carpeta: carpeta,
@@ -277,6 +291,55 @@ function revisarCarpeta_(id, limite) {
 var DEMASIADO_GRANDE = { motivo: 'demasiado grande' };
 var SIN_TIEMPO = { motivo: 'sin tiempo' };
 
+// Nombres de subcarpeta del legajo que no son de ningún tipo de documento.
+var SUBCARPETAS_TIPICAS = ['PROVEEDOR', 'PROVEEDORES', 'DOCUMENTOS', 'ADJUNTOS', 'SUSTENTO', 'SUSTENTOS',
+  'ANEXOS', 'ARCHIVOS', 'OTROS', 'VALIDACION', 'DESADUANAJE', 'COMPRA', 'COMPRAS', 'LEGAJO'];
+
+/**
+ * Sube desde la carpeta del enlace hasta la carpeta de la OC, como mucho dos
+ * niveles. Sube si la de arriba lleva el número de la OC, o si la del enlace
+ * tiene nombre de subcarpeta y la de arriba no es una carpeta general.
+ */
+function carpetaDeLaOC_(carpeta, ocNum) {
+  var actual = carpeta;
+  try {
+    for (var nivel = 0; nivel < 2; nivel++) {
+      var padres = actual.getParents();
+      if (!padres.hasNext()) break;
+      var padre = padres.next();
+      var nombre = actual.getName();
+      var padreDeLaOC = !!ocNum && nombreMencionaOC_(padre.getName(), ocNum);
+      var pareceSub = !(ocNum && nombreMencionaOC_(nombre, ocNum)) && esNombreDeSubcarpeta_(nombre);
+      if (!padreDeLaOC && !(pareceSub && !esCarpetaGeneral_(padre, ocNum))) break;
+      actual = padre;
+    }
+  } catch (e) {
+    // sin permiso sobre la de arriba: se queda la del enlace
+  }
+  return actual;
+}
+
+function esNombreDeSubcarpeta_(nombre) {
+  if (/^\s*0\d{1,2}[\s._-]/.test(nombre)) return true; // «001 Requerimiento», «03 ORDEN DE COMPRA»
+  var t = textoPlano_(nombre);
+  if (pistasEn_(t).length) return true;
+  return t.split(' ').some(function (p) { return SUBCARPETAS_TIPICAS.indexOf(p) !== -1; });
+}
+
+/** Con subcarpetas de dos o más OC distintas, o con muchas subcarpetas, es la de un proyecto. */
+function esCarpetaGeneral_(carpeta, ocNum) {
+  var otras = {}, n = 0, it = carpeta.getFolders();
+  while (it.hasNext()) {
+    if (++n > 15) return true;
+    var m = /(\d{1,6})\s*-\s*(20\d\d)|(20\d\d)\s*-\s*(\d{1,6})/.exec(it.next().getName());
+    if (!m) continue;
+    var clave = m[1] ? Number(m[1]) + '-' + m[2] : Number(m[4]) + '-' + m[3];
+    if (!ocNum || clave !== ocNum.num + '-' + ocNum.anio) otras[clave] = true;
+    if (Object.keys(otras).length >= 2) return true;
+  }
+  return false;
+}
+
 function recorrer_(carpeta, ruta, sub, vistas, salida, limite) {
   if (Date.now() > limite) throw SIN_TIEMPO;
   var id = carpeta.getId();
@@ -297,10 +360,10 @@ function recorrer_(carpeta, ruta, sub, vistas, salida, limite) {
 
 /**
  * Cuando la carpeta no tiene factura: archivos con el número de OC en el
- * nombre, primero en la carpeta superior y luego en todo el Drive. Solo se
+ * nombre, primero en la carpeta superior y luego (con `enDrive`) en todo el Drive. Solo se
  * quedan los que además parecen factura, nota o XML — lo demás es ruido.
  */
-function buscarFuera_(ocTexto, carpeta, idCarpeta, cacheSuperior) {
+function buscarFuera_(ocTexto, carpeta, idCarpeta, cacheSuperior, enDrive) {
   var hallados = [], vistos = {};
   var ocs = ocTexto.split(' / ').map(numeroDeOC_).filter(Boolean);
   if (!ocs.length) return hallados;
@@ -330,7 +393,7 @@ function buscarFuera_(ocTexto, carpeta, idCarpeta, cacheSuperior) {
         sup.archivos.forEach(function (f) { quedarse(f, SUPERIOR, sup.nombre); });
       }
     }
-    if (!hallados.length) {
+    if (enDrive && !hallados.length) {
       ocs.forEach(function (oc) {
         consultasDeDrive_(oc).forEach(function (q) {
           var it = DriveApp.searchFiles(q), n = 0;
@@ -415,11 +478,14 @@ function detenerAutomatico_() {
 var CATEGORIAS = [
   { parece: 'NOTA DE CRÉDITO', frases: ['NOTA DE CREDITO', 'NOTA CREDITO'], palabras: ['NC'] },
   { parece: 'NOTA DE DÉBITO', frases: ['NOTA DE DEBITO', 'NOTA DEBITO'], palabras: ['ND'] },
-  { parece: 'FACTURA', frases: ['FACTURA ELECTRONICA'], palabras: ['FACTURA', 'FACTURAS', 'FACT', 'FAC', 'FACTU', 'FACTS', 'FE'], parecidas: ['FACTURA', 'FACTURAS', 'FACTURACION'] },
+  // Antes que FACTURA: una «proforma invoice» o «factura proforma» no es la factura.
+  { parece: 'COTIZACIÓN', frases: ['PROFORMA INVOICE', 'PERFORMA INVOICE', 'PRO FORMA'], palabras: ['PROFORMA', 'PROFORMAS', 'PERFORMA'], parecidas: ['PROFORMA'] },
+  // «INVOICE» es la factura del proveedor del exterior.
+  { parece: 'FACTURA', frases: ['FACTURA ELECTRONICA', 'COMMERCIAL INVOICE'], palabras: ['FACTURA', 'FACTURAS', 'FACT', 'FAC', 'FACTU', 'FACTS', 'FE', 'INVOICE', 'INVOICES', 'INV'], parecidas: ['FACTURA', 'FACTURAS', 'FACTURACION', 'INVOICE'] },
   // «FT_…» resultó ser ficha técnica, no factura (así las nombran los proveedores).
   { parece: 'FICHA TÉCNICA', frases: ['FICHA TECNICA', 'FICHAS TECNICAS'], palabras: ['FT', 'FTS'] },
   { parece: 'BOLETA', frases: [], palabras: ['BOLETA', 'BOLETAS', 'BV'], parecidas: ['BOLETA'] },
-  { parece: 'RECIBO POR HONORARIOS', frases: ['RECIBO POR HONORARIOS', 'RECIBO HONORARIOS'], palabras: ['RH', 'RHE', 'HONORARIOS'], parecidas: ['HONORARIOS'] },
+  { parece: 'RECIBO POR HONORARIOS', frases: ['RECIBO POR HONORARIOS', 'RECIBO HONORARIOS', 'R X H'], palabras: ['RH', 'RHE', 'RXH', 'HONORARIOS'], parecidas: ['HONORARIOS'] },
   { parece: 'COMPROBANTE (revisar)', frases: [], palabras: ['COMPROBANTE', 'COMPROBANTES', 'CPE'], parecidas: ['COMPROBANTE'] },
   { parece: 'DETRACCIÓN', frases: [], palabras: ['DETRACCION', 'DETRACCIONES', 'SPOT'], parecidas: ['DETRACCION'] },
   { parece: 'PAGO', frases: [], palabras: ['PAGO', 'PAGOS', 'VOUCHER', 'TRANSFERENCIA', 'CONSTANCIA', 'DEPOSITO', 'ABONO', 'ADELANTO'], parecidas: ['TRANSFERENCIA'] },
@@ -451,7 +517,9 @@ function clasificar_(nombre, ubicacion, mime) {
   var sunat = TIPO_SUNAT[(/(?:^|\D)[12]\d{10}[-_ ](01|03|07|08|09|R01)[-_ ]/.exec(String(nombre).toUpperCase()) || [])[1]];
   if (!parece && sunat) { parece = sunat; pistas.unshift({ parece: sunat, palabra: 'tipo SUNAT en el nombre' }); }
   if (!parece && pistas.length) parece = pistas[0].parece;
-  if (parece === 'FICHA TÉCNICA' && serie && !/^EG/.test(serie)) parece = 'FACTURA'; // «FT F001-123» sí es factura
+  // «FT F001-123» o «PROFORMA F001-123» con serie de SUNAT sí son factura.
+  if ((parece === 'FICHA TÉCNICA' && serie && !/^EG/.test(serie)) ||
+    (parece === 'COTIZACIÓN' && /^F/.test(serie))) parece = 'FACTURA';
   if (!parece && serie) {
     parece = /^F/.test(serie) ? 'FACTURA' : /^B/.test(serie) ? 'BOLETA' : 'FACTURA o RH (serie E)';
     pistas.push({ parece: parece, palabra: serie });
