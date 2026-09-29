@@ -292,19 +292,31 @@ async function radiografiaResultado(page: Page, nombreArchivo: string): Promise<
       console.log(`  · no pude guardar el HTML del resultado: ${e instanceof Error ? e.message : e}`);
     }
 
+    // Angular no deja rastro en `onclick`/`href` —esos atributos casi nunca
+    // existen ahí, aunque el elemento sí reaccione a un clic real, porque el
+    // manejo del evento vive en el componente, no en el HTML—. El primer
+    // intento de esta función filtraba por «sin onclick y sin href», que es
+    // justo lo que un botón moderno siempre tiene: se quedó sin nada que
+    // mostrar, aunque el frame fuera el correcto (run #12, 29/09/2026). Acá
+    // se listan TODOS sin filtrar, con lo que sí suele identificar un botón
+    // de ícono en una app moderna: sus clases (los framework de íconos, tipo
+    // "pi pi-file-pdf", van ahí) y el `aria-label`/`title`, además del texto.
     try {
-      const acciones = await f.locator("a, img, button, [onclick]").evaluateAll(els =>
-        els.slice(0, 30).map(e => {
+      const elementos = await f.locator("a, img, button, [role='button'], i[class*='pi-'], i[class*='icon'], [onclick]").evaluateAll(els =>
+        els.slice(0, 40).map(e => {
           const el = e as HTMLElement;
-          const texto = (el.textContent || el.getAttribute("alt") || el.getAttribute("title") || "").replace(/\s+/g, " ").trim().slice(0, 40);
-          const onclick = el.getAttribute("onclick") || "";
-          const href = el.getAttribute("href") || "";
-          return `${el.tagName.toLowerCase()} "${texto}" onclick="${onclick}" href="${href}"`;
-        }).filter(s => !/onclick=""\s+href=""$/.test(s)));
-      console.log("  · elementos con acción en el resultado:");
-      acciones.forEach(a => console.log(`     ↓ ${a}`));
+          const texto = (el.textContent || el.getAttribute("alt") || "").replace(/\s+/g, " ").trim().slice(0, 40);
+          const titulo = el.getAttribute("title") || el.getAttribute("aria-label") || "";
+          const clase = el.getAttribute("class") || "";
+          return `${el.tagName.toLowerCase()}${el.id ? "#" + el.id : ""} clase="${clase}" texto="${texto}" title="${titulo}"`;
+        }));
+      console.log(`  · elementos del resultado (${elementos.length}):`);
+      elementos.forEach(a => console.log(`     ↓ ${a}`));
+      if (elementos.length === 0) {
+        console.log("  · (nada: probablemente el modal no llegó a abrirse — revisa la captura de pantalla)");
+      }
     } catch (e) {
-      console.log(`  · no pude listar los enlaces del resultado: ${e instanceof Error ? e.message : e}`);
+      console.log(`  · no pude listar los elementos del resultado: ${e instanceof Error ? e.message : e}`);
     }
     return;
   }
@@ -484,37 +496,35 @@ async function elegirFiltroRecibido(marco: Frame): Promise<void> {
 /**
  * Elige la etiqueta en el campo «Tipo de comprobante».
  *
- * La radiografía del run #8 mostró un input de texto entre `rucEmisor` y
- * `serieComprobante` sin `name` propio para este campo, impreso como
- * `name=-` porque la radiografía usa `e.name || "-"`. El run #10 (29/09/2026)
- * mostró que `[name=""]` no lo encuentra: en Angular es común que la
- * PROPIEDAD `name` esté vacía sin que el ATRIBUTO `name=""` exista siquiera
- * en el HTML, y el selector CSS de atributo exige que exista. Por eso se
- * busca al revés —el input de texto que NO es ninguno de los tres con
- * nombre conocido—, que no depende de si el atributo está o no.
+ * El run #12 (29/09/2026) mostró, con captura de pantalla, por qué el
+ * intento anterior nunca funcionó: el campo NO es un `<select>` ni un
+ * `<input>` de texto de verdad —es un combobox estilizado (con pinta de
+ * PrimeNG «p-dropdown»: caja con borde, texto «Seleccionar» y una flechita—.
+ * El input de texto sin `name` que se apuntaba antes debe ser un proxy
+ * oculto para el envío del formulario, no lo que el usuario ve ni con lo que
+ * interactúa: clicarlo no abre nada. El resultado quedó tal cual —«El tipo
+ * de comprobante es obligatorio»—, con RUC, serie y número ya bien puestos.
  *
- * No es un `<select>`, así que se maneja como un combobox —clic para abrir y
- * clic en la opción—, igual que los de las pantallas JSP, pero buscando la
- * opción entre los contenedores típicos de un combobox moderno
- * (`[role="option"]`, `li`) además de los de siempre, porque esta es una app
- * distinta (Angular o similar) y no se sabe todavía cuál usa.
+ * Se clica el texto visible «Seleccionar» —el placeholder del combobox
+ * vacío— y se busca la opción entre los contenedores típicos de un
+ * desplegable moderno (`li`, `[role="option"]`, `.p-dropdown-item`).
  */
 async function elegirTipoComprobante(marco: Frame, etiqueta: string): Promise<void> {
-  const campo = marco.locator(
-    'input[type="text"]:not([name="rucEmisor"]):not([name="serieComprobante"]):not([name="numeroComprobante"])'
-  ).first();
-  if (!(await campo.count())) { console.log("  ⚠ no encontré el campo de «Tipo de comprobante»."); return; }
+  const campo = marco.getByText("Seleccionar", { exact: true }).first();
+  if (!(await campo.count())) {
+    console.log("  ⚠ no encontré el combobox de «Tipo de comprobante» (¿ya no dice «Seleccionar»?).");
+    return;
+  }
   await campo.click().catch(() => {});
   await marco.page().waitForTimeout(600);
 
   const opcion = marco.locator(
-    `[role="option"]:has-text("${etiqueta}"), li:has-text("${etiqueta}"), .ui-menu-item:has-text("${etiqueta}"), option:has-text("${etiqueta}")`
+    `li:has-text("${etiqueta}"), [role="option"]:has-text("${etiqueta}"), .p-dropdown-item:has-text("${etiqueta}"), .ui-menu-item:has-text("${etiqueta}"), option:has-text("${etiqueta}")`
   ).first();
   if (await opcion.count()) {
     await opcion.click().catch(() => {});
   } else {
-    await campo.fill(etiqueta).catch(() => {});
-    await campo.press("Enter").catch(() => {});
+    console.log(`  ⚠ el combobox se abrió (o no) pero no encontré la opción "${etiqueta}" adentro.`);
   }
   await marco.page().waitForTimeout(300);
 }
