@@ -142,7 +142,7 @@ describe("las columnas de impuestos", () => {
 
   test("siguen calzando las celdas con los títulos", () => {
     const f = filasComprobantesSunat([c()]);
-    assert.equal(f[0].length, 29);
+    assert.equal(f[0].length, 31);
     assert.equal(f[1].length, f[0].length);
     assert.equal(f[0][9], "Base imponible");
     assert.equal(f[0][10], "IGV");
@@ -176,18 +176,20 @@ describe("la condición del RUC, al final de la hoja", () => {
 
 // La OC en cuya carpeta de Drive está la factura, y su centro de costo.
 describe("la OC y el centro de costo, al final de la hoja", () => {
-  test("sin vínculo con una OC, las cuatro columnas quedan vacías", () => {
+  test("sin vínculo con una OC, las seis columnas quedan vacías", () => {
     const f = filasComprobantesSunat([c()])[1];
-    assert.deepEqual(f.slice(25), ["", "", "", ""]);
+    assert.deepEqual(f.slice(25), ["", "", "", "", "", ""]);
   });
 
-  test("con vínculo muestra la OC, el centro de costo, el código CONCAR y las alertas", () => {
+  test("con vínculo muestra la OC, el centro de costo, el código CONCAR, las alertas y el archivo que lo confirmó", () => {
     const f = filasComprobantesSunat([c({
       ocCarpeta: "0115-2026", centroCostoCg: "PROY-2025-079-5 PRONIED - TALLERES ESPECIALIZADO",
       codigoConcar: "30016", alertasOc: "factura anterior a la OC",
+      archivoOc: "FACTURA F001-18178.pdf", archivoOcUrl: "https://drive.google.com/file/d/xyz/view",
     })])[1];
     assert.deepEqual(f.slice(25), [
       "0115-2026", "PROY-2025-079-5 PRONIED - TALLERES ESPECIALIZADO", "30016", "factura anterior a la OC",
+      "FACTURA F001-18178.pdf", "https://drive.google.com/file/d/xyz/view",
     ]);
   });
 
@@ -196,9 +198,17 @@ describe("la OC y el centro de costo, al final de la hoja", () => {
     assert.equal(f[27], "");
   });
 
+  test("sin archivo que lo confirme, esas dos columnas quedan vacías aunque haya OC", () => {
+    const f = filasComprobantesSunat([c({ ocCarpeta: "0024-2026" })])[1];
+    assert.deepEqual(f.slice(29), ["", ""]);
+  });
+
   test("cabeceras y tipos siguen del mismo largo", () => {
     assert.equal(CABECERAS_SUNAT.length, TIPOS_SUNAT.length);
-    assert.deepEqual(CABECERAS_SUNAT.slice(25), ["OC (carpeta)", "Centro de costo (CG)", "Código CONCAR", "Revisar vínculo OC"]);
+    assert.deepEqual(CABECERAS_SUNAT.slice(25), [
+      "OC (carpeta)", "Centro de costo (CG)", "Código CONCAR", "Revisar vínculo OC",
+      "Archivo que confirma la OC", "Enlace del archivo (OC)",
+    ]);
   });
 });
 

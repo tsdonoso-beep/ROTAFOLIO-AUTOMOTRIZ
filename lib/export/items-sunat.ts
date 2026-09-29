@@ -53,6 +53,10 @@ export interface FilaDetalleCpe {
   centroCostoCg?: string | null;
   /** El código de CONCAR, solo si la equivalencia está confirmada. */
   codigoConcar?: string | null;
+  /** El archivo (de la carpeta de OC en Drive) que confirmó este vínculo. */
+  archivoOc?: string | null;
+  /** Su enlace, para verificar el vínculo sin buscarlo a mano. */
+  archivoOcUrl?: string | null;
 }
 
 // El orden importa: lo que se busca primero —de qué comprobante es, qué se
@@ -68,6 +72,7 @@ export const CABECERAS_ITEMS = [
   "Total del comprobante", "PDF", "XML",
   // Al final, para no correr lo que alguien ya tenga armado encima.
   "OC (carpeta)", "Centro de costo (CG)", "Código CONCAR",
+  "Archivo que confirma la OC", "Enlace del archivo (OC)",
 ];
 
 export const TIPOS_ITEMS: TipoColumna[] = [
@@ -102,6 +107,8 @@ export const TIPOS_ITEMS: TipoColumna[] = [
   "texto",  // OC (carpeta)
   "texto",  // Centro de costo (CG)
   "texto",  // Código CONCAR
+  "texto",  // Archivo que confirma la OC
+  "texto",  // Enlace del archivo (OC)
 ];
 
 /** Lo mínimo de un `SupabaseClient` que hace falta para paginar un RPC. */
@@ -181,6 +188,8 @@ export function filaDetalleDesdeRpc(d: Record<string, unknown>): FilaDetalleCpe 
     ocCarpeta: (d.oc_carpeta as string) ?? null,
     centroCostoCg: (d.centro_costo_cg as string) ?? null,
     codigoConcar: (d.codigo_concar as string) ?? null,
+    archivoOc: (d.archivo_oc as string) ?? null,
+    archivoOcUrl: (d.archivo_oc_url as string) ?? null,
   };
 }
 
@@ -227,6 +236,8 @@ export function filasItemsSunat(filas: FilaDetalleCpe[]): string[][] {
       f.ocCarpeta ?? "",
       f.centroCostoCg ?? "",
       f.codigoConcar ?? "",
+      f.archivoOc ?? "",
+      f.archivoOcUrl ?? "",
     ]),
   ];
 }
