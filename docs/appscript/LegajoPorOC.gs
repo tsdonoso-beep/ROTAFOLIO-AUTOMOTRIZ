@@ -146,8 +146,33 @@ function onOpen() {
     .addItem('Revisar solo (' + TRABAJADORES.length + ' en paralelo, cada ' + MINUTOS_ENTRE_TANDAS + ' min)', 'activarLegajoAutomatico')
     .addItem('Detener revisión automática', 'detenerLegajoAutomatico')
     .addSeparator()
+    .addItem('Volver a revisar las «SIN ACCESO»', 'reintentarSinAcceso')
     .addItem('Rehacer el resumen', 'rehacerResumenLegajo')
     .addToUi();
+}
+
+/**
+ * El script lee Drive con los permisos de quien lo corre (y el automático,
+ * con los de quien lo activó). Las carpetas que quedaron «SIN ACCESO» vuelven
+ * a PENDIENTE para que las revise otra persona que sí tenga acceso: ella usa
+ * esta opción y después «Revisar solo» desde su cuenta, en esta misma hoja.
+ */
+function reintentarSinAcceso() {
+  var libro = SpreadsheetApp.getActiveSpreadsheet();
+  var hojaT = libro.getSheetByName('TABLA');
+  if (!hojaT || hojaT.getLastRow() < 2) return;
+  // Si queda el automático de otra persona, volvería a chocar con las mismas carpetas.
+  detenerLegajoAutomatico_();
+  var rango = hojaT.getRange(2, COL_ESTADO, hojaT.getLastRow() - 1, 1);
+  var n = 0;
+  rango.setValues(rango.getValues().map(function (f) {
+    if (/^SIN ACCESO/.test(String(f[0]))) { n++; return ['PENDIENTE']; }
+    return f;
+  }));
+  actualizarResumen_(libro, n + ' carpetas «SIN ACCESO» volvieron a PENDIENTE (' + Session.getActiveUser().getEmail() + ').');
+  SpreadsheetApp.getUi().alert('Listo', n + ' carpetas vuelven a PENDIENTE.\n\n' +
+    'Ahora «Revisar solo (' + TRABAJADORES.length + ' en paralelo)» desde la cuenta que SÍ tiene acceso.',
+    SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 // ── 1. La tabla: las OC, cruzadas entre fuentes ──
