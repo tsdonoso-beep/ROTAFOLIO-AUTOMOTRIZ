@@ -683,6 +683,30 @@ async function subirADrive(
   return { estado: "nuevo", url: creado.data.webViewLink ?? null };
 }
 
+/**
+ * Reintenta una llamada a Drive si el cupo de la API se llenó («User rate
+ * limit exceeded», 403/429) —confirmado por el run #16 (29/09/2026): tumbó
+ * la corrida entera en el pendiente 47/100 justo ahí—. Ese cupo se despeja
+ * solo en unos segundos; perder el comprobante entero por eso, después de ya
+ * haberlo confirmado y bajado de SUNAT (lo caro), sería tirar todo por el
+ * paso más barato de reintentar.
+ */
+async function conReintentoDeCupo<T>(fn: () => Promise<T>, intentos = 4): Promise<T> {
+  let ultimo: unknown;
+  for (let i = 1; i <= intentos; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!/rate limit|quota|429/i.test(msg) || i === intentos) throw e;
+      ultimo = e;
+      console.log(`  · cupo de Drive lleno, reintento ${i}/${intentos} en ${5 * i}s: ${msg.split("\n")[0]}`);
+      await new Promise(r => setTimeout(r, 5000 * i));
+    }
+  }
+  throw ultimo;
+}
+
 const carpetasPorRuta = new Map<string, Promise<string>>();
 /** La carpeta para un origen y un período, cacheada. Igual que en descargar-cpe.mts. */
 async function carpetaDelLote(
@@ -802,55 +826,82 @@ try {
   await entrar(page);
 
   const drive = DEBUG ? null : clienteDrive();
-  let nuevos = 0, existentes = 0;
-  const comprobantes: Array<{ c: ComprobanteCpe; xmlUrl: string | null; pdfUrl: string | null }> = [];
+  let nuevos = 0, existentes = 0, confirmados = 0;
+  let comprobantes: Array<{ c: ComprobanteCpe; xmlUrl: string | null; pdfUrl: string | null }> = [];
+
+  // El run #16 (29/09/2026) mostró por qué guardar todo junto al final es
+  // frágil: un cupo de API lleno en el pendiente 47/100 tumbó la corrida
+  // entera, y como `guardarLote` recién se llamaba DESPUÉS del for, los 46
+  // confirmados y ya archivados en Drive antes de ese punto no llegaron a
+  // `cpe_comprobante` —trabajo hecho pero no guardado—. Ahora se vuelca a la
+  // base cada tantos confirmados, así una corrida grande solo arriesga el
+  // último lote parcial, no todo lo caminado.
+  const LOTE_GUARDADO = 20;
+  async function volcar(): Promise<void> {
+    if (comprobantes.length === 0) return;
+    const sb = await guardarLote(comprobantes);
+    if (sb) await publicarLaHojaDetalle(sb);
+    comprobantes = [];
+  }
 
   for (const [i, p] of aProcesar.entries()) {
     console.log(`\n── ${i + 1}/${aProcesar.length}: ${p.proveedorNombre ?? p.proveedorRuc} · ${p.tipoComprobante} ${p.serie}-${p.numero} ──`);
-    await abrirFormularioIndividual(page);
-    if (DEBUG) await radiografiaFormulario(page);
+    try {
+      await abrirFormularioIndividual(page);
+      if (DEBUG) await radiografiaFormulario(page);
 
-    const marco = await llenarFormulario(page, p);
-    await evidencia(page, `form-lleno-${p.serie}-${p.numero}`);
-    if (marco) {
-      await clicConsultar(marco);
-      await page.waitForTimeout(2000);
-      await evidencia(page, `resultado-${p.serie}-${p.numero}`);
-      if (DEBUG) {
-        await radiografiaResultado(page, `resultado-html-${p.serie}-${p.numero}`);
-      } else {
-        // El modal «Resultado» se abre DENTRO del mismo frame que ya
-        // teníamos (es una app de una sola página, sin navegar a otro
-        // lado), así que el `marco` de siempre sirve para buscar los
-        // botones de descarga.
-        const { xml: xmlArchivo, pdf: pdfArchivo } = await descargarXmlYPdf(page, marco);
-        const xmls = xmlArchivo ? xmlsDe(xmlArchivo) : [];
-        const c = xmls[0] ? leerComprobanteXml(xmls[0]) : null;
-
-        if (!c) {
-          console.log("  ⚠ no se pudo leer el XML de este comprobante; no se guarda nada de este.");
+      const marco = await llenarFormulario(page, p);
+      await evidencia(page, `form-lleno-${p.serie}-${p.numero}`);
+      if (marco) {
+        await clicConsultar(marco);
+        await page.waitForTimeout(2000);
+        await evidencia(page, `resultado-${p.serie}-${p.numero}`);
+        if (DEBUG) {
+          await radiografiaResultado(page, `resultado-html-${p.serie}-${p.numero}`);
         } else {
-          const origen = origenDe(c, RUC);
-          const periodo = periodoDe(c.fechaEmision);
-          const carpetaId = await carpetaDelLote(drive!, origen, periodo);
+          // El modal «Resultado» se abre DENTRO del mismo frame que ya
+          // teníamos (es una app de una sola página, sin navegar a otro
+          // lado), así que el `marco` de siempre sirve para buscar los
+          // botones de descarga.
+          const { xml: xmlArchivo, pdf: pdfArchivo } = await descargarXmlYPdf(page, marco);
+          const xmls = xmlArchivo ? xmlsDe(xmlArchivo) : [];
+          const c = xmls[0] ? leerComprobanteXml(xmls[0]) : null;
 
-          let xmlUrl: string | null = null;
-          let pdfUrl: string | null = null;
-          if (xmlArchivo) {
-            const r = await subirADrive(drive!, carpetaId, xmlArchivo);
-            if (r.estado === "nuevo") nuevos++; else existentes++;
-            xmlUrl = r.url;
+          if (!c) {
+            console.log("  ⚠ no se pudo leer el XML de este comprobante; no se guarda nada de este.");
+          } else {
+            const origen = origenDe(c, RUC);
+            const periodo = periodoDe(c.fechaEmision);
+            const carpetaId = await carpetaDelLote(drive!, origen, periodo);
+
+            let xmlUrl: string | null = null;
+            let pdfUrl: string | null = null;
+            if (xmlArchivo) {
+              const r = await conReintentoDeCupo(() => subirADrive(drive!, carpetaId, xmlArchivo));
+              if (r.estado === "nuevo") nuevos++; else existentes++;
+              xmlUrl = r.url;
+            }
+            if (pdfArchivo) {
+              const r = await conReintentoDeCupo(() => subirADrive(drive!, carpetaId, pdfArchivo));
+              if (r.estado === "nuevo") nuevos++; else existentes++;
+              pdfUrl = r.url;
+            }
+            comprobantes.push({ c, xmlUrl, pdfUrl });
+            confirmados++;
+            console.log(`  · confirmado y archivado: ${c.serie}-${c.numero}, ${c.moneda} ${c.total}.`);
           }
-          if (pdfArchivo) {
-            const r = await subirADrive(drive!, carpetaId, pdfArchivo);
-            if (r.estado === "nuevo") nuevos++; else existentes++;
-            pdfUrl = r.url;
-          }
-          comprobantes.push({ c, xmlUrl, pdfUrl });
-          console.log(`  · confirmado y archivado: ${c.serie}-${c.numero}, ${c.moneda} ${c.total}.`);
         }
       }
+    } catch (e) {
+      // Un pendiente puntual (SUNAT lento, un selector que no aparece esta
+      // vez) no debe tirar los 99 restantes: se anota, se sigue con el
+      // siguiente, y lo ya confirmado hasta acá igual se guarda en el
+      // próximo volcado.
+      console.log(`  ✗ este pendiente falló, se sigue con el resto: ${e instanceof Error ? e.message : e}`);
+      await evidencia(page, `error-${p.serie}-${p.numero}`);
     }
+
+    if (!DEBUG && comprobantes.length >= LOTE_GUARDADO) await volcar();
 
     // Espaciar las solicitudes: el mismo motivo que en descargar-cpe.mts, y
     // acá con más razón —una consulta por CADA comprobante, no una por mes,
@@ -862,10 +913,9 @@ try {
     console.log(`\nListo: se revisaron ${aProcesar.length} de ${lista.length} pendientes de ${PERIODO}.`);
     console.log("Modo depuración: revisa el artefacto 'capturas/' antes de correr con DEBUG=0.");
   } else {
+    await volcar();
     console.log(`\nArchivados en Drive: ${nuevos} nuevos, ${existentes} ya estaban.`);
-    const sb = await guardarLote(comprobantes);
-    if (sb) await publicarLaHojaDetalle(sb);
-    console.log(`Listo: se confirmaron ${comprobantes.length} de ${aProcesar.length} pendientes procesados (de ${lista.length} en ${PERIODO}).`);
+    console.log(`Listo: se confirmaron ${confirmados} de ${aProcesar.length} pendientes procesados (de ${lista.length} en ${PERIODO}).`);
   }
 } catch (e) {
   await evidencia(page, "error");
