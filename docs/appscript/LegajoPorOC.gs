@@ -1,10 +1,14 @@
 /**
- * Legajo por OC — la tabla objetivo de un proyecto
+ * Legajo por OC — la tabla objetivo de un proyecto (o de todo 2026)
  * --------------------------------------------------------------------------
  *
- * Arma, para UN proyecto (el piloto es EPT), una fila por OC con lo que
- * Contabilidad necesita para registrar la compra en CONCAR, y marca qué
- * documento está y cuál falta en la carpeta (legajo) de cada OC:
+ * Arma una fila por OC con lo que Contabilidad necesita para registrar la
+ * compra en CONCAR, y marca qué documento está y cuál falta en la carpeta
+ * (legajo) de cada OC. Dos formas de armar la lista de OC (menú):
+ *   · de UN proyecto (el piloto es EPT), cruzando sus cuatro fuentes;
+ *   · de TODO el cuadro de aprobaciones 2026: todos sus enlaces, de todas
+ *     las unidades de negocio.
+ * Los documentos que se buscan:
  *
  *   1 Factura · 2 OC · 3 SWIFT · 4 Guía de remisión · 5 DAM · 6 Requerimiento
  *   7 Contrato (CECO) · 8 Cotización · 9 Proforma · 10 Correos
@@ -37,9 +41,11 @@
  *    script usa nombres de funciones que chocarían con aquel).
  * 2. Extensiones → Apps Script → borra lo que haya, pega este archivo, guarda.
  * 3. Recarga la hoja: aparece el menú «Legajo por OC».
- * 4. «1. Armar tabla del proyecto» (la primera vez pide permisos).
- * 5. «Revisar solo cada 10 minutos»: recorre las carpetas por tandas y se
- *    detiene al terminar. El avance se ve en RESUMEN.
+ * 4. «1. Armar tabla del proyecto» o «1. Armar tabla de TODO el cuadro de
+ *    aprobaciones 2026» (la primera vez pide permisos). Para tener las dos,
+ *    usa dos hojas nuevas, cada una con este script: corren a la vez.
+ * 5. «Revisar solo (3 en paralelo)»: tres revisores recorren las carpetas a
+ *    la vez, por tandas, y se detienen al terminar. El avance, en RESUMEN.
  */
 
 // ── Configuración ──
@@ -59,8 +65,9 @@ var APROBACIONES_ID = '131xCspAwghR92k4nXAq2jtyDQgeXNJ1UQuYD1GFz-BA';
 var APROBACIONES_PESTANA = 'Cuadro de aprobaciones 1';
 var CG_ID = '1tsu4HEA_o_yWdvvJCF5zhlrW_ffzMXiqtzMiRzMlxCY';
 var CG_PESTANA = '3. Registro Compras Grupo';
-var EMPRESA = 'INROPRIN';        // las OC de Inroplas tienen otra numeración
-var MINUTOS_POR_TANDA = 4.5;     // Apps Script corta a los 6
+var EMPRESA = 'INROPRIN';        // (modo proyecto) las OC de Inroplas tienen otra numeración
+var MINUTOS_POR_TANDA = 4;       // Apps Script corta a los 6; el resto es para escribir
+var MINUTOS_ENTRE_TANDAS = 10;
 var LIMITE_ARCHIVOS = 800;       // más que esto: el enlace es de una carpeta general, no de la OC
 
 // Los 11 documentos, en el orden de la pizarra.
@@ -81,7 +88,7 @@ var DOCS = [
   { col: '11. Acta de conformidad', clave: 'ACTA', solo: 'SERVICIO' }
 ];
 
-var CAB_DATOS = ['OC', 'Aparece en', 'Procedencia', 'Área que la completa', 'Proveedor',
+var CAB_DATOS = ['OC', 'Unidad de negocio', 'Proyecto', 'Aparece en', 'Procedencia', 'Área que la completa', 'Proveedor',
   'RUC (CG)', 'N° Requerimiento', 'Centro de costo (CG)', 'Nombre del centro de costo (CG)',
   'Código SIDIGE (CG)', 'Ítems en el plan', 'Estado de compra (plan)',
   'Estatus (aprobaciones)', 'Legajo para pago (aprobaciones)', 'Comentario legajo incompleto',
@@ -96,6 +103,25 @@ var I_TIPO = CAB_DATOS.indexOf('Bien o servicio');
 var I_LINK = CAB_DATOS.indexOf('Enlace de la carpeta');
 var I_REQ = CAB_DATOS.indexOf('N° Requerimiento');
 var I_AREA = CAB_DATOS.indexOf('Área que la completa');
+var I_UNIDAD = CAB_DATOS.indexOf('Unidad de negocio');
+var I_APARECE = CAB_DATOS.indexOf('Aparece en');
+var I_REVISAR = CAB_DATOS.indexOf('Revisar el cruce');
+
+// Los revisores que corren a la vez. Cada uno toma una fila de cada tres.
+var TRABAJADORES = ['trabajadorLegajo1', 'trabajadorLegajo2', 'trabajadorLegajo3'];
+function trabajadorLegajo1() { revisarTanda_(0, TRABAJADORES.length); }
+function trabajadorLegajo2() { revisarTanda_(1, TRABAJADORES.length); }
+function trabajadorLegajo3() { revisarTanda_(2, TRABAJADORES.length); }
+
+var MODO_PROYECTO = 'PROYECTO', MODO_APROBACIONES = 'APROBACIONES';
+
+function modoActual_() {
+  return PropertiesService.getDocumentProperties().getProperty('LEGAJO_MODO') || MODO_PROYECTO;
+}
+
+function tituloDelModo_(modo) {
+  return modo === MODO_APROBACIONES ? 'todo el cuadro de aprobaciones 2026' : 'el proyecto ' + PROYECTO.nombre;
+}
 
 var CAB_ARCHIVOS = ['OC', 'Área', 'Enlace carpeta OC', 'Ubicación', 'Nombre del archivo',
   'Enlace del archivo', 'Tipo de archivo', 'Parece ser', 'Cuenta como', 'Pistas', 'Creado'];
@@ -104,19 +130,23 @@ var NACIONAL = 'Compras nacionales', COMEX = 'COMEX (importaciones)';
 
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('Legajo por OC')
-    .addItem('1. Armar tabla del proyecto', 'armarTablaLegajo')
+    .addItem('1. Armar tabla del proyecto ' + PROYECTO.nombre, 'armarTablaLegajo')
+    .addItem('1. Armar tabla de TODO el cuadro de aprobaciones 2026', 'armarTablaAprobaciones')
     .addItem('2. Revisar siguiente tanda', 'revisarTandaLegajo')
     .addSeparator()
-    .addItem('Revisar solo cada 10 minutos', 'activarLegajoAutomatico')
+    .addItem('Revisar solo (' + TRABAJADORES.length + ' en paralelo, cada ' + MINUTOS_ENTRE_TANDAS + ' min)', 'activarLegajoAutomatico')
     .addItem('Detener revisión automática', 'detenerLegajoAutomatico')
     .addSeparator()
     .addItem('Rehacer el resumen', 'rehacerResumenLegajo')
     .addToUi();
 }
 
-// ── 1. La tabla: las OC del proyecto, cruzadas entre las tres fuentes ──
+// ── 1. La tabla: las OC, cruzadas entre fuentes ──
 
-function armarTablaLegajo() {
+function armarTablaLegajo() { armarTablaCon_(MODO_PROYECTO); }
+function armarTablaAprobaciones() { armarTablaCon_(MODO_APROBACIONES); }
+
+function armarTablaCon_(modo) {
   var ui = SpreadsheetApp.getUi();
   var libro = SpreadsheetApp.getActiveSpreadsheet();
   var hojaT = libro.getSheetByName('TABLA');
@@ -125,37 +155,123 @@ function armarTablaLegajo() {
       'Armarla de nuevo borra TABLA y ARCHIVOS y empieza desde cero. ¿Seguir?', ui.ButtonSet.YES_NO);
     if (r !== ui.Button.YES) return;
   }
-  // Una tanda que siga corriendo escribiría encima de la tabla nueva.
+  // Una tanda que siga corriendo escribiría encima de la tabla nueva: se
+  // detiene el automático y se cambia la «generación», para que lo que
+  // traiga una tanda ya empezada se descarte al terminar.
   detenerLegajoAutomatico_();
+  var props = PropertiesService.getDocumentProperties();
+  props.setProperty('LEGAJO_GEN', String(Date.now()));
   var lock = LockService.getScriptLock();
-  libro.toast('Si hay una tanda corriendo, espero a que termine (hasta 5 minutos)…', 'Legajo por OC', 10);
-  if (!lock.tryLock(330000)) {
-    ui.alert('Hay una tanda ocupada', 'No terminó a tiempo. Espera unos minutos y vuelve a intentarlo.', ui.ButtonSet.OK);
+  if (!lock.tryLock(150000)) {
+    ui.alert('Hay una tanda escribiendo', 'Espera un par de minutos y vuelve a intentarlo.', ui.ButtonSet.OK);
     return;
   }
   try {
-    var n = armarTabla_(libro);
+    props.setProperty('LEGAJO_MODO', modo);
+    var n = armarTabla_(libro, modo);
     ui.alert('Tabla armada',
-      n.filas + ' OC del proyecto ' + PROYECTO.nombre + '.\n' +
+      n.filas + ' OC de ' + tituloDelModo_(modo) + '.\n' +
       n.conCarpeta + ' tienen enlace de carpeta y se van a revisar.\n\n' +
-      'Sigue con «Revisar solo cada 10 minutos».', ui.ButtonSet.OK);
+      'Sigue con «Revisar solo (' + TRABAJADORES.length + ' en paralelo)».', ui.ButtonSet.OK);
   } finally {
     lock.releaseLock();
   }
 }
 
-function armarTabla_(libro) {
+/** «OC 2601-0001 (II)» → «2601-0001»: para las OC que no tienen forma NNNN-AAAA (Inroplas). */
+function ocCruda_(texto) {
+  return String(texto == null ? '' : texto).replace(/\(.*?\)/g, '').replace(/^\s*O[CS]\s*/i, '')
+    .replace(/\s+/g, ' ').trim().toUpperCase();
+}
+
+function armarTabla_(libro, modo) {
+  var todo2026 = modo === MODO_APROBACIONES;
   var ocs = {}, orden = [];
-  var registro = function (oc) {
-    if (!ocs[oc]) {
-      ocs[oc] = { oc: oc, fuentes: {}, proc: [], prov: [], ruc: [], req: [], ceco: [], cecoNombre: [],
+  // En el modo proyecto todas son de EMPRESA; en el de todo 2026 la misma OC
+  // puede existir en Inroprin y en Inroplas, así que la unidad va en la clave.
+  var claveDe = function (unidad, oc) { return todo2026 ? normalizar_(unidad) + '|' + oc : oc; };
+  var registro = function (unidad, oc) {
+    var k = claveDe(unidad, oc);
+    if (!ocs[k]) {
+      ocs[k] = { oc: oc, unidad: [], proyecto: [], fuentes: {}, proc: [], prov: [], ruc: [], req: [], ceco: [], cecoNombre: [],
         sidige: [], items: 0, estado: [], estatus: [], legajo: [], coment: [], tipo: [], otroCeco: [], otroProyBase: [],
         links: { aprob: [], planCA: [], plan: [], cg: [] } };
-      orden.push(oc);
+      agregar_(ocs[k].unidad, unidad);
+      orden.push(k);
     }
-    return ocs[oc];
+    return ocs[k];
   };
+  var existe = function (unidad, oc) { return !!ocs[claveDe(unidad, oc)]; };
 
+  if (!todo2026) armarDesdeElPlan_(registro, existe);
+  armarDesdeAprobaciones_(registro, existe, todo2026);
+  armarDesdeControlDeGestion_(registro, existe, todo2026);
+
+  // Las filas. Un enlace por OC: primero el del cuadro de aprobaciones (lo
+  // pone Compras al pedir la aprobación), después el del plan, al final el de CG.
+  var conCarpeta = 0;
+  var filas = orden.map(function (k) {
+    var r = ocs[k];
+    var links = [].concat(r.links.aprob, r.links.planCA, r.links.plan, r.links.cg);
+    var ids = [];
+    links.forEach(function (u) { var id = idDeDrive_(u); if (id && ids.indexOf(id) === -1) ids.push(id); });
+    var enlace = '';
+    for (var i = 0; i < links.length; i++) if (idDeDrive_(links[i])) { enlace = links[i]; break; }
+    if (enlace) conCarpeta++;
+
+    var proc = procedencia_(r.proc);
+    var tipo = r.tipo.indexOf('SERVICIO') !== -1 ? 'Servicio' : r.tipo.indexOf('BIEN') !== -1 ? 'Bien' : '';
+    var fuentes = [];
+    if (r.fuentes.plan) fuentes.push('Plan de compras');
+    if (r.fuentes.base) fuentes.push('Base de OC');
+    if (r.fuentes.aprob) fuentes.push('Aprobaciones');
+    if (r.fuentes.cg) fuentes.push('Control de Gestión');
+
+    var revisar = [];
+    if (!todo2026) {
+      if (!r.fuentes.plan) revisar.push('no está en el plan de compras');
+      if (!r.fuentes.base) revisar.push('no está en la base de OC de Compras');
+      else if (!r.fuentes.baseProyecto) revisar.push('en la base de OC está con otro proyecto: ' + r.otroProyBase.join(' / '));
+      if (!r.fuentes.aprob) revisar.push('no está en los cuadros de aprobaciones revisados');
+    }
+    if (!r.fuentes.cg) revisar.push('no está en Control de Gestión');
+    else if (!todo2026 && !r.fuentes.cgProyecto) revisar.push('en Control de Gestión está con otro centro de costo: ' + r.otroCeco.join(' / '));
+    else if (!todo2026 && r.otroCeco.length) revisar.push('en Control de Gestión también está en: ' + r.otroCeco.join(' / '));
+    if (!enlace) revisar.push('sin enlace de carpeta');
+    if (ids.length > 1) revisar.push(ids.length + ' carpetas distintas entre las fuentes');
+    if (!proc) revisar.push('sin procedencia');
+
+    return [r.oc, r.unidad.join(' / '), r.proyecto.slice(0, 2).join(' / '), fuentes.join(' · '), proc,
+      proc === 'Importación' ? COMEX : proc === 'Nacional' ? NACIONAL : '',
+      r.prov.slice(0, 2).join(' / '), r.ruc.join(' / '), r.req.join(' / '), r.ceco.join(' / '),
+      r.cecoNombre.join(' / '), r.sidige.slice(0, 5).join(' / ') + (r.sidige.length > 5 ? ' …' : ''),
+      r.items || '', r.estado.join(' / '), r.estatus.join(' / '), r.legajo.join(' / '),
+      r.coment.join(' / '), tipo, enlace, revisar.join('; ')]
+      .concat([enlace ? 'PENDIENTE' : 'SIN CARPETA'], CAB_REVISION.slice(1).map(function () { return ''; }));
+  });
+  // Proyecto: primero las del plan. Todo 2026: por unidad y OC.
+  filas.sort(function (a, b) {
+    var pa = todo2026 ? a[I_UNIDAD] : (a[I_APARECE].indexOf('Plan') === 0 ? 0 : 1);
+    var pb = todo2026 ? b[I_UNIDAD] : (b[I_APARECE].indexOf('Plan') === 0 ? 0 : 1);
+    return (pa < pb ? -1 : pa > pb ? 1 : 0) || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+  });
+
+  var hojaT = prepararHoja_(libro, 'TABLA', CAB_TABLA);
+  prepararHoja_(libro, 'ARCHIVOS', CAB_ARCHIVOS);
+  if (filas.length) {
+    // Como texto: que «0115-2026» o un RUC no se conviertan en fecha o número.
+    hojaT.getRange(2, 1, filas.length, CAB_DATOS.length).setNumberFormat('@');
+    hojaT.getRange(2, CAB_TABLA.length, filas.length, 1).setNumberFormat('dd/mm/yyyy hh:mm');
+    hojaT.getRange(2, 1, filas.length, CAB_TABLA.length).setValues(filas);
+  }
+  hojaT.setFrozenColumns(1);
+  hojaT.getRange(1, COL_PRIMER_DOC, 1, DOCS.length).setBackground('#375623');
+  actualizarResumen_(libro, 'Tabla armada. Todavía no se revisa ninguna carpeta.');
+  return { filas: filas.length, conCarpeta: conCarpeta };
+}
+
+/** Modo proyecto: el plan de compras, la base de OC de Compras y el cuadro de aprobaciones del plan. */
+function armarDesdeElPlan_(registro, existe) {
   // a) El plan de compras: todo lo que está ahí es del proyecto.
   var plan = SpreadsheetApp.openById(PROYECTO.planId);
   var pestanasPlan = [
@@ -173,9 +289,10 @@ function armarTabla_(libro) {
       var proc = p.procFija || valor_(f, t.col(p.proc));
       var oc = ocNormalizada_(valor_(f, t.col(p.oc)), proc);
       if (!oc) return;
-      var r = registro(oc);
+      var r = registro(EMPRESA, oc);
       r.fuentes.plan = true;
       if (p.nombre === 'Plan de Compras') r.items++;
+      agregar_(r.proyecto, PROYECTO.nombre);
       agregar_(r.req, valor_(f, t.col(p.req)));
       agregar_(r.proc, proc);
       agregar_(r.prov, valor_(f, t.col(p.prov)));
@@ -199,8 +316,8 @@ function armarTabla_(libro) {
       var oc = ocNormalizada_(valor_(f, iOc), b.proc);
       if (!oc) return;
       var delProyecto = PROYECTO.patron.test(String(valor_(f, iProy)));
-      if (!delProyecto && !ocs[oc]) return;
-      var r = registro(oc);
+      if (!delProyecto && !existe(EMPRESA, oc)) return;
+      var r = registro(EMPRESA, oc);
       r.fuentes.base = true;
       if (delProyecto) r.fuentes.baseProyecto = true;
       else agregar_(r.otroProyBase, valor_(f, iProy));
@@ -224,148 +341,130 @@ function armarTabla_(libro) {
       if (caEmpresa >= 0 && normalizar_(f[caEmpresa]).indexOf(normalizar_(EMPRESA)) === -1) return;
       var oc = ocNormalizada_(valor_(f, ca.col(['N OC'])), valor_(f, ca.col(['procedencia'])));
       if (!oc) return;
-      var delProyecto = PROYECTO.patron.test(String(valor_(f, ca.col(['Proyecto']))));
-      if (!delProyecto && !ocs[oc]) return;
-      var r = registro(oc);
+      var proyecto = String(valor_(f, ca.col(['Proyecto'])) || '');
+      var delProyecto = PROYECTO.patron.test(proyecto);
+      if (!delProyecto && !existe(EMPRESA, oc)) return;
+      var r = registro(EMPRESA, oc);
       r.fuentes.aprob = true;
-      if (delProyecto) r.fuentes.planCA = true;
+      agregar_(r.proyecto, proyecto);
       agregar_(r.req, valor_(f, ca.col(['REQ N°'])));
       agregar_(r.proc, valor_(f, ca.col(['procedencia'])));
       agregar_(r.links.planCA, ca.url(k, caLink));
     });
   }
+}
 
-  // d) El cuadro de aprobaciones general (2026).
+/**
+ * El cuadro de aprobaciones general (2026). Modo proyecto: solo las OC del
+ * proyecto (o las que ya están). Todo 2026: todas, de todas las unidades.
+ */
+function armarDesdeAprobaciones_(registro, existe, todo2026) {
   var ap = leerTabla_(SpreadsheetApp.openById(APROBACIONES_ID), APROBACIONES_PESTANA, ['OC', 'Link de la carpeta OC'], true);
-  if (ap) {
-    ap.filas.forEach(function (f, k) {
-      if (normalizar_(valor_(f, ap.col(['Unidad de negocio']))) !== normalizar_(EMPRESA)) return;
-      var oc = ocNormalizada_(valor_(f, ap.col(['OC'])), valor_(f, ap.col(['Procedencia'])));
-      if (!oc) return;
-      var delProyecto = PROYECTO.patron.test(String(valor_(f, ap.col(['Proyecto']))));
-      if (!delProyecto && !ocs[oc]) return;
-      var r = registro(oc);
-      r.fuentes.aprob = true;
-      agregar_(r.req, valor_(f, ap.col(['N° Requerimiento'])));
-      agregar_(r.proc, valor_(f, ap.col(['Procedencia'])));
-      agregar_(r.prov, valor_(f, ap.col(['PROVEEDOR'])));
-      agregar_(r.estatus, valor_(f, ap.col(['Estatus Compra'])));
-      agregar_(r.legajo, valor_(f, ap.col(['LEGAJO PARA PAGO'])));
-      agregar_(r.coment, valor_(f, ap.col(['COMENTARIOS POR LEG. INCOMPLETO'])));
-      agregar_(r.tipo, /SERVICIO/i.test(String(valor_(f, ap.col(['Concepto'])))) ? 'SERVICIO' : '');
-      agregar_(r.links.aprob, ap.url(k, ap.col(['Link de la carpeta OC'])));
-    });
-  }
+  if (!ap) return;
+  ap.filas.forEach(function (f, k) {
+    var unidad = String(valor_(f, ap.col(['Unidad de negocio'])) || '').trim();
+    if (!todo2026 && normalizar_(unidad) !== normalizar_(EMPRESA)) return;
+    var cruda = valor_(f, ap.col(['OC']));
+    var proc = valor_(f, ap.col(['Procedencia']));
+    var oc = ocNormalizada_(cruda, proc) || (todo2026 ? ocCruda_(cruda) : '');
+    if (!oc) return;
+    var proyecto = String(valor_(f, ap.col(['Proyecto'])) || '');
+    if (!todo2026 && !PROYECTO.patron.test(proyecto) && !existe(EMPRESA, oc)) return;
+    var r = registro(todo2026 ? unidad : EMPRESA, oc);
+    r.fuentes.aprob = true;
+    agregar_(r.proyecto, proyecto);
+    agregar_(r.req, valor_(f, ap.col(['N° Requerimiento'])));
+    agregar_(r.proc, proc);
+    agregar_(r.prov, valor_(f, ap.col(['PROVEEDOR'])));
+    agregar_(r.estatus, valor_(f, ap.col(['Estatus Compra'])));
+    agregar_(r.legajo, valor_(f, ap.col(['LEGAJO PARA PAGO'])));
+    agregar_(r.coment, valor_(f, ap.col(['COMENTARIOS POR LEG. INCOMPLETO'])));
+    agregar_(r.tipo, /SERVICIO/i.test(String(valor_(f, ap.col(['Concepto'])))) ? 'SERVICIO' : '');
+    agregar_(r.links.aprob, ap.url(k, ap.col(['Link de la carpeta OC'])));
+  });
+}
 
-  // e) Control de Gestión: centro de costo, código SIDIGE y el cruce de vuelta.
+/**
+ * Control de Gestión: centro de costo, código SIDIGE y el cruce de vuelta.
+ * Modo proyecto: suma las OC del proyecto que solo están aquí. Todo 2026:
+ * solo completa las que ya vienen del cuadro de aprobaciones.
+ */
+function armarDesdeControlDeGestion_(registro, existe, todo2026) {
   var cg = leerTabla_(SpreadsheetApp.openById(CG_ID), CG_PESTANA, ['N° OC/OS', 'LINK DE CARPETA'], true);
-  if (cg) {
-    cg.filas.forEach(function (f, k) {
-      if (normalizar_(valor_(f, cg.col(['EMPRESA']))) !== normalizar_(EMPRESA)) return;
-      var oc = ocNormalizada_(valor_(f, cg.col(['N° OC/OS'])), valor_(f, cg.col(['PROCEDENCIA'])));
-      if (!oc) return;
-      var codigo = String(valor_(f, cg.col(['CODIGO CENTRO DE COSTO'])) || '').trim();
-      var nombre = String(valor_(f, cg.col(['CENTRO DE COSTO'])) || '').trim();
-      var delProyecto = PROYECTO.patron.test(codigo + ' ' + nombre);
-      if (!delProyecto && !ocs[oc]) return;
-      var r = registro(oc);
-      r.fuentes.cg = true;
-      if (delProyecto) {
-        r.fuentes.cgProyecto = true;
-        agregar_(r.ceco, codigo);
-        agregar_(r.cecoNombre, nombre);
-      } else {
-        agregar_(r.otroCeco, (codigo && codigo !== '-' ? codigo + ' ' : '') + nombre);
-      }
-      agregar_(r.ruc, String(valor_(f, cg.col(['RUC / DNI / RUT'])) || '').replace(/\.0$/, ''));
-      agregar_(r.prov, valor_(f, cg.col(['PROVEEDOR'])));
-      agregar_(r.req, valor_(f, cg.col(['N° REQUERIMIENTO'])));
-      agregar_(r.sidige, valor_(f, cg.col(['CODIGO SIDIGE'])));
-      agregar_(r.proc, valor_(f, cg.col(['PROCEDENCIA'])));
-      var tipoDoc = String(valor_(f, cg.col(['TIPO DE DOCUMENTO'])) || '');
-      agregar_(r.tipo, /SERVICIO/i.test(tipoDoc) ? 'SERVICIO' : /COMPRA/i.test(tipoDoc) ? 'BIEN' : '');
-      agregar_(r.links.cg, cg.url(k, cg.col(['LINK DE CARPETA'])));
-    });
-  }
-
-  // Las filas. Un enlace por OC: primero el del cuadro de aprobaciones (lo
-  // pone Compras al pedir la aprobación), después el del plan, al final el de CG.
-  var conCarpeta = 0;
-  var filas = orden.map(function (oc) {
-    var r = ocs[oc];
-    var links = [].concat(r.links.aprob, r.links.planCA, r.links.plan, r.links.cg);
-    var ids = [];
-    links.forEach(function (u) { var id = idDeDrive_(u); if (id && ids.indexOf(id) === -1) ids.push(id); });
-    var enlace = '';
-    for (var i = 0; i < links.length; i++) if (idDeDrive_(links[i])) { enlace = links[i]; break; }
-    if (enlace) conCarpeta++;
-
-    var proc = procedencia_(r.proc);
-    var tipo = r.tipo.indexOf('SERVICIO') !== -1 ? 'Servicio' : r.tipo.indexOf('BIEN') !== -1 ? 'Bien' : '';
-    var fuentes = [];
-    if (r.fuentes.plan) fuentes.push('Plan de compras');
-    if (r.fuentes.base) fuentes.push('Base de OC');
-    if (r.fuentes.aprob) fuentes.push('Aprobaciones');
-    if (r.fuentes.cg) fuentes.push('Control de Gestión');
-
-    var revisar = [];
-    if (!r.fuentes.plan) revisar.push('no está en el plan de compras');
-    if (!r.fuentes.base) revisar.push('no está en la base de OC de Compras');
-    else if (!r.fuentes.baseProyecto) revisar.push('en la base de OC está con otro proyecto: ' + r.otroProyBase.join(' / '));
-    if (!r.fuentes.aprob) revisar.push('no está en los cuadros de aprobaciones revisados');
-    if (!r.fuentes.cg) revisar.push('no está en Control de Gestión');
-    else if (!r.fuentes.cgProyecto) revisar.push('en Control de Gestión está con otro centro de costo: ' + r.otroCeco.join(' / '));
-    else if (r.otroCeco.length) revisar.push('en Control de Gestión también está en: ' + r.otroCeco.join(' / '));
-    if (!enlace) revisar.push('sin enlace de carpeta');
-    if (ids.length > 1) revisar.push(ids.length + ' carpetas distintas entre las fuentes');
-    if (!proc) revisar.push('sin procedencia');
-
-    return [oc, fuentes.join(' · '), proc, proc === 'Importación' ? COMEX : proc === 'Nacional' ? NACIONAL : '',
-      r.prov.slice(0, 2).join(' / '), r.ruc.join(' / '), r.req.join(' / '), r.ceco.join(' / '),
-      r.cecoNombre.join(' / '), r.sidige.slice(0, 5).join(' / ') + (r.sidige.length > 5 ? ' …' : ''),
-      r.items || '', r.estado.join(' / '), r.estatus.join(' / '), r.legajo.join(' / '),
-      r.coment.join(' / '), tipo, enlace, revisar.join('; ')]
-      .concat([enlace ? 'PENDIENTE' : 'SIN CARPETA'], CAB_REVISION.slice(1).map(function () { return ''; }));
+  if (!cg) return;
+  cg.filas.forEach(function (f, k) {
+    var empresa = String(valor_(f, cg.col(['EMPRESA'])) || '').trim();
+    if (!todo2026 && normalizar_(empresa) !== normalizar_(EMPRESA)) return;
+    var cruda = valor_(f, cg.col(['N° OC/OS']));
+    var oc = ocNormalizada_(cruda, valor_(f, cg.col(['PROCEDENCIA']))) || (todo2026 ? ocCruda_(cruda) : '');
+    if (!oc) return;
+    var unidad = todo2026 ? empresa : EMPRESA;
+    var codigo = String(valor_(f, cg.col(['CODIGO CENTRO DE COSTO'])) || '').trim();
+    var nombre = String(valor_(f, cg.col(['CENTRO DE COSTO'])) || '').trim();
+    var delProyecto = !todo2026 && PROYECTO.patron.test(codigo + ' ' + nombre);
+    if (!delProyecto && !existe(unidad, oc)) return;
+    var r = registro(unidad, oc);
+    r.fuentes.cg = true;
+    if (delProyecto || todo2026) {
+      r.fuentes.cgProyecto = true;
+      agregar_(r.ceco, codigo);
+      agregar_(r.cecoNombre, nombre);
+    } else {
+      agregar_(r.otroCeco, (codigo && codigo !== '-' ? codigo + ' ' : '') + nombre);
+    }
+    agregar_(r.ruc, String(valor_(f, cg.col(['RUC / DNI / RUT'])) || '').replace(/\.0$/, ''));
+    agregar_(r.prov, valor_(f, cg.col(['PROVEEDOR'])));
+    agregar_(r.req, valor_(f, cg.col(['N° REQUERIMIENTO'])));
+    agregar_(r.sidige, valor_(f, cg.col(['CODIGO SIDIGE'])));
+    agregar_(r.proc, valor_(f, cg.col(['PROCEDENCIA'])));
+    var tipoDoc = String(valor_(f, cg.col(['TIPO DE DOCUMENTO'])) || '');
+    agregar_(r.tipo, /SERVICIO/i.test(tipoDoc) ? 'SERVICIO' : /COMPRA/i.test(tipoDoc) ? 'BIEN' : '');
+    agregar_(r.links.cg, cg.url(k, cg.col(['LINK DE CARPETA'])));
   });
-  // Primero las del plan, después las que solo aparecen en otra fuente.
-  filas.sort(function (a, b) {
-    var pa = a[1].indexOf('Plan') === 0 ? 0 : 1, pb = b[1].indexOf('Plan') === 0 ? 0 : 1;
-    return pa - pb || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
-  });
-
-  var hojaT = prepararHoja_(libro, 'TABLA', CAB_TABLA);
-  prepararHoja_(libro, 'ARCHIVOS', CAB_ARCHIVOS);
-  if (filas.length) {
-    // Como texto: que «0115-2026» o un RUC no se conviertan en fecha o número.
-    hojaT.getRange(2, 1, filas.length, CAB_DATOS.length).setNumberFormat('@');
-    hojaT.getRange(2, CAB_TABLA.length, filas.length, 1).setNumberFormat('dd/mm/yyyy hh:mm');
-    hojaT.getRange(2, 1, filas.length, CAB_TABLA.length).setValues(filas);
-  }
-  hojaT.setFrozenColumns(1);
-  hojaT.getRange(1, COL_PRIMER_DOC, 1, DOCS.length).setBackground('#375623');
-  actualizarResumen_(libro, 'Tabla armada. Todavía no se revisa ninguna carpeta.');
-  return { filas: filas.length, conCarpeta: conCarpeta };
 }
 
 // ── 2. Revisar carpetas, por tandas ──
 
+/** Una tanda a mano, con todas las filas. Si ya corre el automático, no hace falta. */
 function revisarTandaLegajo() {
-  var lock = LockService.getScriptLock();
-  var libro = SpreadsheetApp.getActiveSpreadsheet();
-  if (!lock.tryLock(1000)) {
-    try { libro.toast('Ya hay una tanda corriendo. Sigue sola: revisa RESUMEN en unos minutos.', 'Legajo por OC', 10); } catch (e) {}
+  if (hayAutomatico_()) {
+    SpreadsheetApp.getActiveSpreadsheet().toast('Ya está revisando solo, en paralelo. El avance se ve en RESUMEN.', 'Legajo por OC', 10);
     return;
   }
+  revisarTanda_(0, 1);
+}
+
+/**
+ * Una tanda del revisor `k` de `n`: toma las filas PENDIENTE cuyo número,
+ * dividido entre n, deja resto k. Así los n revisores corren a la vez sin
+ * pisarse: cada uno escribe solo sus filas.
+ *
+ * Las carpetas se recorren SIN candado (es lo lento, y es lo que se hace en
+ * paralelo); solo la escritura va con candado, que dura segundos. Si la
+ * tabla se rearmó mientras tanto (cambió la «generación»), lo recorrido se
+ * descarta en vez de escribirse encima de la tabla nueva.
+ */
+function revisarTanda_(k, n) {
+  var libro = SpreadsheetApp.getActiveSpreadsheet();
+  var props = PropertiesService.getDocumentProperties();
+  // Un revisor no se superpone consigo mismo (si una tanda se alargó).
+  var marca = 'LEGAJO_OCUPADO_' + k + '_' + n;
+  if (Date.now() - Number(props.getProperty(marca) || 0) < 7 * 60000) {
+    try { libro.toast('Esa tanda todavía corre. Revisa RESUMEN en unos minutos.', 'Legajo por OC', 10); } catch (e) {}
+    return;
+  }
+  props.setProperty(marca, String(Date.now()));
   try {
     var inicio = Date.now();
+    var generacion = props.getProperty('LEGAJO_GEN') || '';
     var hojaT = libro.getSheetByName('TABLA');
     var hojaA = libro.getSheetByName('ARCHIVOS');
-    if (!hojaT || hojaT.getLastRow() < 2) throw new Error('Primero «1. Armar tabla del proyecto».');
+    if (!hojaT || hojaT.getLastRow() < 2) throw new Error('Primero «1. Armar tabla».');
 
     var tabla = hojaT.getRange(2, 1, hojaT.getLastRow() - 1, CAB_TABLA.length).getValues();
     var archivos = [], resultados = {}, hechas = 0, cache = {}, cacheArriba = {};
 
-    for (var i = 0; i < tabla.length; i++) {
+    for (var i = k; i < tabla.length; i += n) {
       if (tabla[i][COL_ESTADO - 1] !== 'PENDIENTE') continue;
       if ((Date.now() - inicio) / 60000 > MINUTOS_POR_TANDA) break;
       var f = tabla[i];
@@ -382,7 +481,7 @@ function revisarTandaLegajo() {
         var claves = [claveDoc_(a.parece)];
         // «scan001.pdf» dentro de «FACTURA Y GUÍA» cuenta para las dos.
         a.enCarpeta.forEach(function (p) { claves.push(claveDoc_(p)); });
-        claves = claves.filter(function (c, i, t) { return c && t.indexOf(c) === i; });
+        claves = claves.filter(function (c, j, t) { return c && t.indexOf(c) === j; });
         // Un PDF o imagen que no dice qué es, pero lleva el número de la OC:
         // es la OC. (Un Excel con el número suele ser el costeo, no la OC.)
         if (!claves.length && a.parece === 'OTRO' && /PDF|Imagen/.test(a.tipo) && ocNum &&
@@ -397,28 +496,35 @@ function revisarTandaLegajo() {
       hechas++;
     }
 
-    // Todo junto al final: si la tanda se corta, no queda una OC marcada
-    // como revisada sin sus archivos.
-    if (archivos.length) {
-      hojaA.getRange(hojaA.getLastRow() + 1, 1, archivos.length, CAB_ARCHIVOS.length).setValues(archivos);
+    // Escribir: con candado, porque los otros revisores también agregan
+    // filas a ARCHIVOS. Todo junto al final: si la tanda se corta, no queda
+    // una OC marcada como revisada sin sus archivos.
+    var lock = LockService.getScriptLock();
+    if (!lock.tryLock(60000)) throw new Error('Otra tanda ocupó la hoja más de un minuto; esta se reintenta sola.');
+    try {
+      if ((props.getProperty('LEGAJO_GEN') || '') !== generacion) return; // la tabla se rearmó
+      if (archivos.length) {
+        hojaA.getRange(hojaA.getLastRow() + 1, 1, archivos.length, CAB_ARCHIVOS.length).setValues(archivos);
+      }
+      Object.keys(resultados).forEach(function (j) {
+        escribirRevision_(hojaT, Number(j) + 2, tabla[j], resultados[j]);
+      });
+      // Lo pendiente se cuenta de nuevo: los otros revisores también avanzaron.
+      var pendientes = hojaT.getRange(2, COL_ESTADO, hojaT.getLastRow() - 1, 1).getValues()
+        .filter(function (v) { return v[0] === 'PENDIENTE'; }).length;
+      if (pendientes === 0) detenerLegajoAutomatico_();
+      var texto = 'Revisor ' + (k + 1) + ' de ' + n + ': ' + hechas + ' OC, ' + archivos.length +
+        ' archivos. Faltan ' + pendientes + ' en total' + (pendientes === 0 ? ' — TERMINADO.' : '.');
+      actualizarResumen_(libro, texto);
+      try { libro.toast(texto, 'Legajo por OC', 10); } catch (e) {}
+    } finally {
+      lock.releaseLock();
     }
-    Object.keys(resultados).forEach(function (k) {
-      escribirRevision_(hojaT, Number(k) + 2, tabla[k], resultados[k]);
-    });
-
-    var pendientes = tabla.filter(function (f, k) {
-      return f[COL_ESTADO - 1] === 'PENDIENTE' && !resultados[k];
-    }).length;
-    if (pendientes === 0) detenerLegajoAutomatico_();
-    var texto = hechas + ' OC revisadas en esta tanda, ' + archivos.length + ' archivos. Faltan ' +
-      pendientes + (pendientes === 0 ? ' — TERMINADO.' : '.');
-    actualizarResumen_(libro, texto);
-    libro.toast(texto, 'Legajo por OC', 10);
   } catch (e) {
     anotarError_(libro, 'ERROR: ' + (e.message || e));
     throw e;
   } finally {
-    lock.releaseLock();
+    props.deleteProperty(marca);
   }
 }
 
@@ -647,19 +753,25 @@ function datosDeArchivo_(f, ubicacion, pistaCarpeta) {
 
 // ── Revisión automática ──
 
+/**
+ * Cada revisor tiene su reloj cada MINUTOS_ENTRE_TANDAS minutos, y además
+ * un arranque único al minuto (escalonados) para no esperar el primer reloj.
+ */
 function activarLegajoAutomatico() {
   var libro = SpreadsheetApp.getActiveSpreadsheet();
   var hojaT = libro.getSheetByName('TABLA');
   if (!hojaT || hojaT.getLastRow() < 2) {
-    SpreadsheetApp.getUi().alert('Falta un paso', 'Primero usa «1. Armar tabla del proyecto».',
+    SpreadsheetApp.getUi().alert('Falta un paso', 'Primero usa «1. Armar tabla».',
       SpreadsheetApp.getUi().ButtonSet.OK);
     return;
   }
   detenerLegajoAutomatico_();
-  ScriptApp.newTrigger('revisarTandaLegajo').timeBased().everyMinutes(10).create();
-  libro.toast('Empieza la primera tanda (unos 5 minutos). Después sigue sola cada 10 minutos ' +
-    'y se detiene al terminar. El avance se ve en RESUMEN.', 'Legajo por OC', 15);
-  revisarTandaLegajo();
+  TRABAJADORES.forEach(function (fn, k) {
+    ScriptApp.newTrigger(fn).timeBased().everyMinutes(MINUTOS_ENTRE_TANDAS).create();
+    ScriptApp.newTrigger(fn).timeBased().after(60000 + k * 20000).create();
+  });
+  libro.toast('En un minuto arrancan ' + TRABAJADORES.length + ' revisores a la vez. Siguen solos cada ' +
+    MINUTOS_ENTRE_TANDAS + ' minutos y se detienen al terminar. El avance se ve en RESUMEN.', 'Legajo por OC', 15);
 }
 
 function detenerLegajoAutomatico() {
@@ -667,9 +779,17 @@ function detenerLegajoAutomatico() {
   SpreadsheetApp.getActiveSpreadsheet().toast('Revisión automática detenida.', 'Legajo por OC', 5);
 }
 
+// «revisarTandaLegajo» es el reloj de la versión anterior (un solo revisor).
 function detenerLegajoAutomatico_() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (t.getHandlerFunction() === 'revisarTandaLegajo') ScriptApp.deleteTrigger(t);
+    var fn = t.getHandlerFunction();
+    if (fn === 'revisarTandaLegajo' || TRABAJADORES.indexOf(fn) !== -1) ScriptApp.deleteTrigger(t);
+  });
+}
+
+function hayAutomatico_() {
+  return ScriptApp.getProjectTriggers().some(function (t) {
+    return TRABAJADORES.indexOf(t.getHandlerFunction()) !== -1;
   });
 }
 
@@ -690,19 +810,22 @@ function actualizarResumen_(libro, resultado) {
 
   var cruce = { total: tabla.length, plan: 0, aprob: 0, cg: 0, soloFuera: 0, sinAprob: 0, sinCg: 0,
     sinBase: 0, otroCeco: 0, sinCarpeta: 0, variasCarpetas: 0 };
-  var rev = { pendientes: 0, revisadas: 0, sinAcceso: 0, vacias: 0, grandes: 0 };
+  var rev = { pendientes: 0, revisadas: 0, sinAcceso: 0, vacias: 0, grandes: 0, subidas: 0 };
   var areas = [NACIONAL, COMEX, 'Total'];
   var cuenta = {};
   areas.forEach(function (a) { cuenta[a] = { ocs: 0, docs: DOCS.map(function () { return { si: 0, aplica: 0 }; }) }; });
 
+  var porUnidad = {};
   tabla.forEach(function (f) {
-    var aparece = String(f[1]), revisar = String(f[CAB_DATOS.length - 1]);
+    var aparece = String(f[I_APARECE]), revisar = String(f[I_REVISAR]);
     if (aparece.indexOf('Plan') !== -1) cruce.plan++; else cruce.soloFuera++;
     if (aparece.indexOf('Aprobaciones') !== -1) cruce.aprob++; else cruce.sinAprob++;
     if (aparece.indexOf('Control') !== -1) cruce.cg++; else cruce.sinCg++;
     if (aparece.indexOf('Base de OC') === -1) cruce.sinBase++;
     if (/otro centro de costo/.test(revisar)) cruce.otroCeco++;
     if (/carpetas distintas/.test(revisar)) cruce.variasCarpetas++;
+    var unidad = String(f[I_UNIDAD] || '(sin unidad)');
+    porUnidad[unidad] = (porUnidad[unidad] || 0) + 1;
 
     var estado = String(f[COL_ESTADO - 1]);
     if (estado === 'SIN CARPETA') { cruce.sinCarpeta++; return; }
@@ -711,6 +834,7 @@ function actualizarResumen_(libro, resultado) {
     if (/^SIN ACCESO/.test(estado)) { rev.sinAcceso++; return; }
     if (/^VACÍA/.test(estado)) rev.vacias++;
     if (/^MUY GRANDE/.test(estado)) rev.grandes++;
+    if (/subcarpeta/.test(estado)) rev.subidas++;
 
     [f[I_AREA] || '', 'Total'].forEach(function (a) {
       if (!cuenta[a]) return;
@@ -724,31 +848,37 @@ function actualizarResumen_(libro, resultado) {
     });
   });
 
+  var modo = modoActual_();
   var pct = function (c) { return c.aplica ? Math.round(100 * c.si / c.aplica) + '%  (' + c.si + ' de ' + c.aplica + ')' : '—'; };
-  var filas = [
-    ['Legajo por OC — ' + PROYECTO.nombre, '', '', ''],
-    ['', '', '', ''],
-    ['Cruce de fuentes', '', '', ''],
-    ['OC en la tabla', cruce.total, '', ''],
-    ['Están en el plan de compras', cruce.plan, '', ''],
-    ['NO están en el plan (solo en otra fuente)', cruce.soloFuera, '', ''],
-    ['NO están en la base de OC de Compras', cruce.sinBase, '', ''],
-    ['NO están en los cuadros de aprobaciones revisados', cruce.sinAprob, '', ''],
-    ['NO están en Control de Gestión', cruce.sinCg, '', ''],
-    ['En Control de Gestión con otro centro de costo', cruce.otroCeco, '', ''],
-    ['Con carpetas distintas entre fuentes', cruce.variasCarpetas, '', ''],
-    ['Sin enlace de carpeta', cruce.sinCarpeta, '', ''],
-    ['', '', '', ''],
-    ['Revisión de carpetas', '', '', ''],
-    ['Revisadas', rev.revisadas, '', ''],
-    ['Pendientes', rev.pendientes, '', ''],
-    ['Sin acceso', rev.sinAcceso, '', ''],
-    ['Vacías', rev.vacias, '', ''],
-    ['Enlace a una carpeta general (muy grande)', rev.grandes, '', ''],
-    ['', '', '', ''],
-    ['Documento (% de las OC a las que les corresponde)', NACIONAL, COMEX, 'Total'],
-    ['OC revisadas', cuenta[NACIONAL].ocs, cuenta[COMEX].ocs, cuenta.Total.ocs]
-  ];
+  var filas = [], negritas = [];
+  var titulo = function (t, b, c, d) { negritas.push(filas.length + 1); filas.push([t, b || '', c || '', d || '']); };
+  var fila = function (t, v) { filas.push([t, v, '', '']); };
+  filas.push(['Legajo por OC — ' + tituloDelModo_(modo), '', '', ''], ['', '', '', '']);
+  titulo('Cruce de fuentes');
+  fila('OC en la tabla', cruce.total);
+  if (modo === MODO_APROBACIONES) {
+    Object.keys(porUnidad).sort().forEach(function (u) { fila('   ' + u, porUnidad[u]); });
+  } else {
+    fila('Están en el plan de compras', cruce.plan);
+    fila('NO están en el plan (solo en otra fuente)', cruce.soloFuera);
+    fila('NO están en la base de OC de Compras', cruce.sinBase);
+    fila('NO están en los cuadros de aprobaciones revisados', cruce.sinAprob);
+  }
+  fila('NO están en Control de Gestión', cruce.sinCg);
+  if (modo !== MODO_APROBACIONES) fila('En Control de Gestión con otro centro de costo', cruce.otroCeco);
+  fila('Con carpetas distintas entre fuentes', cruce.variasCarpetas);
+  fila('Sin enlace de carpeta', cruce.sinCarpeta);
+  filas.push(['', '', '', '']);
+  titulo('Revisión de carpetas');
+  fila('Revisadas', rev.revisadas);
+  fila('Pendientes', rev.pendientes);
+  fila('Sin acceso', rev.sinAcceso);
+  fila('Vacías', rev.vacias);
+  fila('El enlace era de una subcarpeta (se revisó desde la carpeta de la OC)', rev.subidas);
+  fila('Enlace a una carpeta general (muy grande)', rev.grandes);
+  filas.push(['', '', '', '']);
+  titulo('Documento (% de las OC a las que les corresponde)', NACIONAL, COMEX, 'Total');
+  filas.push(['OC revisadas', cuenta[NACIONAL].ocs, cuenta[COMEX].ocs, cuenta.Total.ocs]);
   DOCS.forEach(function (d, j) {
     filas.push([d.col + (d.opcional ? ' (opcional)' : ''),
       pct(cuenta[NACIONAL].docs[j]), pct(cuenta[COMEX].docs[j]), pct(cuenta.Total.docs[j])]);
@@ -759,7 +889,7 @@ function actualizarResumen_(libro, resultado) {
   h.clear();
   h.getRange(1, 1, filas.length, 4).setValues(filas);
   h.getRange('A1').setFontWeight('bold').setFontSize(14);
-  [3, 14, 21].forEach(function (r) { h.getRange(r, 1, 1, 4).setFontWeight('bold'); });
+  negritas.forEach(function (r) { h.getRange(r, 1, 1, 4).setFontWeight('bold'); });
   h.getRange(filas.length - 1, 2).setNumberFormat('dd/mm/yyyy hh:mm');
   h.setColumnWidth(1, 380);
   h.setColumnWidths(2, 3, 190);

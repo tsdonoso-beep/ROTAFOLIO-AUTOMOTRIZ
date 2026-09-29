@@ -412,14 +412,31 @@ Las OC nacionales (4 dígitos, `0172-2026`) y las de importación (3 dígitos,
 `172-2026`) son **numeraciones distintas** que se repiten. El script las
 separa por la procedencia; no hay que juntarlas.
 
+El mismo script también arma la lista con **todo el cuadro de aprobaciones
+2026** (todas sus OC y enlaces, de todas las unidades de negocio), cruzada con
+Control de Gestión. Como ahí la misma OC puede existir en Inroprin y en
+Inroplas, la unidad va en la clave.
+
+Si el enlace apunta a una subcarpeta del legajo («01 PROVEEDOR»), se sube a
+la carpeta de la OC. Si ni así hay factura, se miran los archivos de la
+carpeta de arriba que llevan el número de la OC.
+
 ### Cómo se usa
 
 1. Una hoja **nueva** en tu unidad → Extensiones → Apps Script → pega el
    archivo (no en el proyecto de la captura: los nombres chocarían).
 2. Para otro proyecto, cambia `PROYECTO` al principio (el de Especializado
    está escrito al lado).
-3. Recarga → menú **Legajo por OC** → **1. Armar tabla del proyecto** →
-   **Revisar solo cada 10 minutos**.
+3. Recarga → menú **Legajo por OC** → **1. Armar tabla del proyecto EPT** o
+   **1. Armar tabla de TODO el cuadro de aprobaciones 2026** → **Revisar solo
+   (3 en paralelo)**. Para tener las dos, una hoja nueva para cada una.
+
+La revisión corre con **tres revisores a la vez**: cada uno toma una OC de
+cada tres, recorre sus carpetas sin bloquear a los otros y solo se turnan
+para escribir. Ojo con la cuota de Google: los relojes de un usuario tienen
+un tope diario de tiempo de ejecución (unas 6 horas en cuentas de empresa, 90
+minutos en Gmail). Si aparece «Service using too much computer time», se
+sigue solo al día siguiente.
 
 ## Si algo falla
 
