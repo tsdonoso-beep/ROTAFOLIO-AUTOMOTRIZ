@@ -371,6 +371,56 @@ CONCAR sale **solo si la equivalencia está confirmada** en
    `OrdenarCPE.gs`).
 3. Recarga la hoja → menú **Base de datos** → **Subir captura a la base**.
 
+## Legajo por OC (la tabla objetivo de un proyecto)
+
+`LegajoPorOC.gs` arma, para **un** proyecto (el piloto es EPT), una fila por
+OC con los 11 documentos que Contabilidad necesita para registrar la compra
+en CONCAR, y marca cuál está y cuál falta en la carpeta de cada OC:
+
+| # | Documento | Le corresponde a |
+|---|---|---|
+| 1 | Factura | todas |
+| 2 | OC | todas |
+| 3 | SWIFT | solo importaciones |
+| 4 | Guía de remisión | bienes (no servicios) |
+| 5 | DAM | solo importaciones |
+| 6 | Requerimiento | todas (basta el N° del plan) |
+| 7 | Contrato (CECO) | uno por centro de costo, no por OC |
+| 8 | Cotización | todas |
+| 9 | Proforma | opcional |
+| 10 | Correos | opcional |
+| 11 | Acta de conformidad | solo servicios |
+
+Marcas: **✓ n** (hay n archivos; el enlace abre el primero), **✗** (falta),
+**—** (no le corresponde), **○** (opcional y no está).
+
+Las OC salen de cuatro fuentes, cruzadas en los dos sentidos:
+
+- **Plan de compras** del proyecto (Plan de Compras y SEGUIMIENTO
+  NACIONALES / IMPORTACIONES): la fuente de verdad.
+- **Base de OC de Compras**, que viene dentro del plan (BD_NAC 26, BASE DE
+  DATOS NACIONAL / IMPORTACIONES): RUC, requerimiento y código SIDIGE.
+- **Cuadros de aprobaciones**: el del plan (2025) y el general (2026), con el
+  enlace de la carpeta.
+- **Control de Gestión**: centro de costo.
+
+La columna «Revisar el cruce» dice qué OC está en una fuente y no en otra.
+RESUMEN da el % de cada documento por área: **Compras nacionales** y
+**COMEX**.
+
+Las OC nacionales (4 dígitos, `0172-2026`) y las de importación (3 dígitos,
+`172-2026`) son **numeraciones distintas** que se repiten. El script las
+separa por la procedencia; no hay que juntarlas.
+
+### Cómo se usa
+
+1. Una hoja **nueva** en tu unidad → Extensiones → Apps Script → pega el
+   archivo (no en el proyecto de la captura: los nombres chocarían).
+2. Para otro proyecto, cambia `PROYECTO` al principio (el de Especializado
+   está escrito al lado).
+3. Recarga → menú **Legajo por OC** → **1. Armar tabla del proyecto** →
+   **Revisar solo cada 10 minutos**.
+
 ## Si algo falla
 
 **«La hoja no trae estas columnas…»** — cambiaron los títulos en la fuente. El
