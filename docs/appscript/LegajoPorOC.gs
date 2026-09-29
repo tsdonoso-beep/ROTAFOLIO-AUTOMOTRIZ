@@ -76,7 +76,7 @@ var LIMITE_ARCHIVOS = 800;       // más que esto: el enlace es de una carpeta g
 // solpack oc150-2026.pdf», «scan001.pdf»), solo si a la OC le falta factura,
 // guía, DAM o acta. Necesita el servicio «Drive API» (Servicios + → Drive API).
 var LEER_DOCUMENTOS = true;
-var LEER_POR_OC = 4;             // cuántos archivos como mucho se leen por OC
+var LEER_POR_OC = 6;             // cuántos archivos como mucho se leen por OC (para antes si ya no falta nada)
 var CARPETA_TEMPORAL = '_lectura_legajo_temporal';
 
 // Los 11 documentos, en el orden de la pizarra.
@@ -147,6 +147,8 @@ function onOpen() {
     .addItem('Detener revisión automática', 'detenerLegajoAutomatico')
     .addSeparator()
     .addItem('Volver a revisar las «SIN ACCESO»', 'reintentarSinAcceso')
+    .addItem('Volver a revisar las que NO tienen factura', 'reintentarSinFactura')
+    .addItem('Probar la lectura por dentro (OCR)', 'probarLectura')
     .addItem('Rehacer el resumen', 'rehacerResumenLegajo')
     .addToUi();
 }
@@ -158,58 +160,95 @@ function onOpen() {
  * esta opción y después «Revisar solo» desde su cuenta, en esta misma hoja.
  */
 function reintentarSinAcceso() {
-  var libro = SpreadsheetApp.getActiveSpreadsheet();
-  var hojaT = libro.getSheetByName('TABLA');
-  if (!hojaT || hojaT.getLastRow() < 2) return;
-  // Si queda el automático de otra persona, volvería a chocar con las mismas carpetas.
-  detenerLegajoAutomatico_();
-  var rango = hojaT.getRange(2, COL_ESTADO, hojaT.getLastRow() - 1, 1);
-  var n = 0;
-  rango.setValues(rango.getValues().map(function (f) {
-    if (/^SIN ACCESO/.test(String(f[0]))) { n++; return ['PENDIENTE']; }
-    return f;
-  }));
-  actualizarResumen_(libro, n + ' carpetas «SIN ACCESO» volvieron a PENDIENTE (' + Session.getActiveUser().getEmail() + ').');
-  SpreadsheetApp.getUi().alert('Listo', n + ' carpetas vuelven a PENDIENTE.\n\n' +
-    'Ahora «Revisar solo (' + TRABAJADORES.length + ' en paralelo)» desde la cuenta que SÍ tiene acceso.',
-    SpreadsheetApp.getUi().ButtonSet.OK);
+  reintentar_(function (f) { return /^SIN ACCESO/.test(String(f[COL_ESTADO - 1])); }, '«SIN ACCESO»',
+    'desde la cuenta que SÍ tiene acceso');
 }
 
-// ── 1. La tabla: las OC, cruzadas entre fuentes ──
+/** Para después de activar la lectura por dentro: solo las OC con la factura en ✗. */
+function reintentarSinFactura() {
+  var iFactura = COL_PRIMER_DOC - 1; // «1. Factura» es la primera de las 11
+  reintentar_(function (f) { return String(f[iFactura]) === '✗'; }, 'sin factura',
+    'con el servicio «Drive API» activado, para que lea por dentro los PDF escaneados');
+}
 
-function armarTablaLegajo() { armarTablaCon_(MODO_PROYECTO); }
-function armarTablaAprobaciones() { armarTablaCon_(MODO_APROBACIONES); }
-
-function armarTablaCon_(modo) {
+/**
+ * Devuelve a PENDIENTE las filas que cumplen `condicion`, y borra de
+ * ARCHIVOS lo que se había anotado de ellas (si no, saldrían dos veces).
+ */
+function reintentar_(condicion, que, consejo) {
   var ui = SpreadsheetApp.getUi();
   var libro = SpreadsheetApp.getActiveSpreadsheet();
   var hojaT = libro.getSheetByName('TABLA');
-  if (hojaT && hojaT.getLastRow() > 1) {
-    var r = ui.alert('Ya hay una tabla',
-      'Armarla de nuevo borra TABLA y ARCHIVOS y empieza desde cero. ¿Seguir?', ui.ButtonSet.YES_NO);
-    if (r !== ui.Button.YES) return;
-  }
-  // Una tanda que siga corriendo escribiría encima de la tabla nueva: se
-  // detiene el automático y se cambia la «generación», para que lo que
-  // traiga una tanda ya empezada se descarte al terminar.
+  if (!hojaT || hojaT.getLastRow() < 2) return;
+  // Si queda el automático (de otra persona o de antes), se detiene.
   detenerLegajoAutomatico_();
-  var props = PropertiesService.getDocumentProperties();
-  props.setProperty('LEGAJO_GEN', String(Date.now()));
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(150000)) {
     ui.alert('Hay una tanda escribiendo', 'Espera un par de minutos y vuelve a intentarlo.', ui.ButtonSet.OK);
     return;
   }
   try {
-    props.setProperty('LEGAJO_MODO', modo);
-    var n = armarTabla_(libro, modo);
-    ui.alert('Tabla armada',
-      n.filas + ' OC de ' + tituloDelModo_(modo) + '.\n' +
-      n.conCarpeta + ' tienen enlace de carpeta y se van a revisar.\n\n' +
-      'Sigue con «Revisar solo (' + TRABAJADORES.length + ' en paralelo)».', ui.ButtonSet.OK);
+    var tabla = hojaT.getRange(2, 1, hojaT.getLastRow() - 1, CAB_TABLA.length).getValues();
+    var claves = {}, n = 0;
+    var estados = tabla.map(function (f) {
+      if (!condicion(f)) return [f[COL_ESTADO - 1]];
+      claves[f[0] + '|' + f[I_LINK]] = true;
+      n++;
+      return ['PENDIENTE'];
+    });
+    hojaT.getRange(2, COL_ESTADO, estados.length, 1).setValues(estados);
+
+    var hojaA = libro.getSheetByName('ARCHIVOS');
+    if (n && hojaA && hojaA.getLastRow() > 1) {
+      var filas = hojaA.getRange(2, 1, hojaA.getLastRow() - 1, CAB_ARCHIVOS.length).getValues();
+      var quedan = filas.filter(function (a) { return !claves[a[0] + '|' + a[2]]; });
+      if (quedan.length < filas.length) {
+        hojaA.getRange(2, 1, filas.length, CAB_ARCHIVOS.length).clearContent();
+        if (quedan.length) hojaA.getRange(2, 1, quedan.length, CAB_ARCHIVOS.length).setValues(quedan);
+      }
+    }
+    actualizarResumen_(libro, n + ' OC ' + que + ' volvieron a PENDIENTE (' + Session.getActiveUser().getEmail() + ').');
   } finally {
     lock.releaseLock();
   }
+  ui.alert('Listo', n + ' OC ' + que + ' vuelven a PENDIENTE.\n\n' +
+    'Ahora «Revisar solo (' + TRABAJADORES.length + ' en paralelo)», ' + consejo + '.', ui.ButtonSet.OK);
+}
+
+/**
+ * Prueba la lectura por dentro con un archivo de ARCHIVOS que no dice qué
+ * es, y muestra lo que encontró. Sirve para confirmar que el servicio Drive
+ * API y los permisos están bien antes de dejarlo corriendo.
+ */
+function probarLectura() {
+  var ui = SpreadsheetApp.getUi();
+  var lectura = prepararLectura_();
+  if (!lectura.activa) {
+    ui.alert('La lectura NO está activa', 'Falta el servicio «Drive API».\n\nEn Apps Script: a la izquierda, ' +
+      '«Servicios» (+) → busca «Drive API» → Agregar. Guarda y vuelve a probar.', ui.ButtonSet.OK);
+    return;
+  }
+  var hojaA = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('ARCHIVOS');
+  var filas = hojaA && hojaA.getLastRow() > 1 ? hojaA.getRange(2, 1, hojaA.getLastRow() - 1, CAB_ARCHIVOS.length).getValues() : [];
+  var elegido = null;
+  for (var i = 0; i < filas.length && !elegido; i++) {
+    var nombre = textoPlano_(filas[i][4]);
+    if (/PDF|Imagen/.test(filas[i][6]) && /(^| )(DOCS?|DOSC|SCAN)( |$)/.test(nombre)) elegido = filas[i];
+  }
+  for (var j = 0; j < filas.length && !elegido; j++) if (/PDF|Imagen/.test(filas[j][6])) elegido = filas[j];
+  if (!elegido) { ui.alert('Sin archivos', 'Primero revisa algunas carpetas, para tener archivos en ARCHIVOS.', ui.ButtonSet.OK); return; }
+  var r = leerPorDentro_({ id: idDeDrive_(elegido[5]) || idDeArchivo_(elegido[5]), tipo: elegido[6] }, lectura);
+  ui.alert(r.error ? 'No se pudo leer' : 'La lectura funciona',
+    'Archivo: ' + elegido[4] + ' (OC ' + elegido[0] + ')\n\n' +
+    (r.error ? 'Error: ' + r.error + (lectura.aviso ? '\n\n' + lectura.aviso : '') :
+      'Encontró: ' + (r.claves.length ? r.claves.map(nombreDeClave_).join(', ') : '(ningún documento reconocible)') +
+      (r.tipo ? '\nComprobante: ' + r.tipo + ' ' + (r.serie || '(sin serie legible)') : '')), ui.ButtonSet.OK);
+}
+
+/** El ID de un enlace de archivo de Drive: …/file/d/ID/…, …?id=ID. */
+function idDeArchivo_(url) {
+  var m = /\/d\/([\w-]{20,})/.exec(String(url || '')) || /[?&]id=([\w-]{20,})/.exec(String(url || ''));
+  return m ? m[1] : '';
 }
 
 /** «OC 2601-0001 (II)» → «2601-0001»: para las OC que no tienen forma NNNN-AAAA (Inroplas). */
@@ -535,9 +574,14 @@ function revisarTanda_(k, n) {
         for (var c = 0; c < candidatos.length && lectura.activa; c++) {
           if ((Date.now() - inicio) / 60000 > MINUTOS_POR_TANDA + 0.5) break;
           var a = candidatos[c];
-          if (!(a.id in lectura.hechas)) lectura.hechas[a.id] = leerPorDentro_(a.id, lectura);
-          var leidos = lectura.hechas[a.id];
-          if (leidos && leidos.length) { a.claves = leidos; a.leido = true; }
+          if (!(a.id in lectura.hechas)) lectura.hechas[a.id] = leerPorDentro_(a, lectura);
+          var leido = lectura.hechas[a.id];
+          if (leido && leido.claves.length) {
+            a.claves = leido.claves;
+            a.leido = true;
+            if (leido.serie) a.serie = leido.serie;
+            if (leido.tipo) a.tipoCpe = leido.tipo;
+          }
           if (!documentosQueFaltan_(res.archivos, f).length) break; // ya no falta nada que leer
         }
       }
@@ -546,7 +590,8 @@ function revisarTanda_(k, n) {
       res.archivos.forEach(function (a) {
         a.claves.forEach(function (c) { (porDoc[c] = porDoc[c] || []).push(a); });
         archivos.push([f[0], f[I_AREA], f[I_LINK], a.ubicacion, a.nombre, a.url, a.tipo, a.parece,
-          a.claves.map(nombreDeClave_).join(', ') + (a.leido ? ' (leído por dentro)' : ''), a.pistas, a.creado]);
+          a.claves.map(nombreDeClave_).join(', ') + (a.leido ? ' (leído por dentro' +
+            (a.tipoCpe ? ': ' + a.tipoCpe + (a.serie ? ' ' + a.serie : '') : '') + ')' : ''), a.pistas, a.creado]);
       });
       resultados[i] = { estado: res.estado, detalle: res.detalle, n: res.archivos.length, porDoc: porDoc };
       hechas++;
@@ -591,7 +636,12 @@ function escribirRevision_(hoja, fila, datos, res) {
   var falta = [];
   var celdas = DOCS.map(function (d) {
     var hallados = res.porDoc[d.clave] || [];
-    if (hallados.length) return rico_('✓ ' + hallados.length, hallados[0].url);
+    if (hallados.length) {
+      // En la factura, la serie-número (del nombre o leída): la que Contabilidad busca.
+      var conSerie = d.clave === 'FACTURA' ? hallados.filter(function (a) { return a.serie; })[0] : null;
+      if (conSerie) return rico_('✓ ' + hallados.length + ' · ' + conSerie.serie, conSerie.url);
+      return rico_('✓ ' + hallados.length, hallados[0].url);
+    }
     if (res.estado === 'SIN ACCESO') return rico_('?');
     if (d.clave === 'REQ' && req) return rico_('✓ N° ' + req.split(' / ')[0]);
     var aplica = !(d.solo === 'IMPO' && proc === 'Nacional') &&
@@ -642,7 +692,7 @@ function documentosQueFaltan_(archivos, f) {
 }
 
 // Palabras de nombres que no dicen nada: «docs», «scan», «CamScanner»…
-var NOMBRES_GENERICOS = ['DOC', 'DOCS', 'DOCUMENTO', 'DOCUMENTOS', 'SCAN', 'ESCANEO', 'ESCANEADO', 'CAMSCANNER',
+var NOMBRES_GENERICOS = ['DOC', 'DOCS', 'DOSC', 'DCOS', 'DOCUMENTO', 'DOCUMENTOS', 'SCAN', 'ESCANEO', 'ESCANEADO', 'CAMSCANNER',
   'IMG', 'IMAGEN', 'ADJUNTO', 'ADJUNTOS', 'WHATSAPP', 'SUSTENTO', 'SUSTENTOS', 'ARCHIVO', 'NUEVO'];
 
 /**
@@ -654,7 +704,7 @@ var NOMBRES_GENERICOS = ['DOC', 'DOCS', 'DOCUMENTO', 'DOCUMENTOS', 'SCAN', 'ESCA
  */
 function candidatosALeer_(archivos) {
   var puntaje = function (a) {
-    if (!/PDF|Imagen/.test(a.tipo) || a.leido) return -1;
+    if (!/PDF|Imagen|Documento de Google/.test(a.tipo) || a.leido) return -1;
     var palabras = textoPlano_(a.nombre).split(' ');
     var generico = palabras.some(function (p) { return NOMBRES_GENERICOS.indexOf(p) !== -1; });
     if (a.parece === 'OTRO' || / \(por la carpeta\)$/.test(a.parece) || generico) return 2;
@@ -688,9 +738,10 @@ function prepararLectura_() {
  * texto, borra la copia y dice qué documentos trae. El original no se toca.
  * Un error de permiso apaga la lectura por el resto de la tanda.
  */
-function leerPorDentro_(id, lectura) {
-  var copia = null;
+function leerPorDentro_(a, lectura) {
+  var copia = null, id = a.id;
   try {
+    if (a.tipo === 'Documento de Google') return documentosEnTexto_(DocumentApp.openById(id).getBody().getText());
     var v2 = typeof Drive.Files.insert === 'function'; // el servicio puede estar en v2 o v3
     copia = v2
       ? Drive.Files.copy({ title: 'lectura ' + id, parents: [{ id: lectura.temporal }] }, id,
@@ -704,7 +755,7 @@ function leerPorDentro_(id, lectura) {
       lectura.activa = false;
       lectura.aviso = 'falta un permiso para leer PDF (' + msg.slice(0, 80) + '). Corre «autorizarLecturaLegajo» desde el editor.';
     }
-    return [];
+    return { claves: [], error: msg.slice(0, 150) };
   } finally {
     if (copia) {
       try { Drive.Files.remove(copia.id); } catch (e) {
@@ -744,24 +795,67 @@ function textoDeDocumento_(idDoc) {
 }
 
 /**
- * Qué documentos trae un texto leído. Un PDF puede traer varios (factura en
- * la hoja 1 y guía en la 2). Se pide el rasgo propio de cada uno, no solo la
- * palabra: una factura CITA su guía («Tipo de G.R.: Guía de Remisión
- * Remitente, T001-73313»), pero solo la guía trae punto de partida y de
- * llegada; y una OC dice «factura a 30 días» sin ser una factura.
+ * Qué documentos trae un texto leído, y la serie-número del comprobante. Un
+ * PDF puede traer varios (factura en la hoja 1 y guía en la 2). Se pide el
+ * rasgo propio de cada uno, no solo la palabra: una factura CITA su guía
+ * («Tipo de G.R.: Guía de Remisión Remitente, T001-73313»), pero solo la guía
+ * trae punto de partida y de llegada; y una OC dice «factura a 30 días» sin
+ * ser una factura.
+ *   → { claves: ['FACTURA', 'GUIA'], tipo: 'FACTURA', serie: 'F001-113668' }
  */
 function documentosEnTexto_(texto) {
   var P = String(texto || '').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ');
   var hay = [];
-  var serieFactura = /(?:^|[^A-Z0-9])F[A-Z0-9]{3}\s*[-–—]\s*\d{1,8}(?!\d)/.test(P.replace(/F([A-Z]?)O(\d)/g, 'F$10$2'));
-  if (/FACTURA\s+ELECTRONICA/.test(P) || (/\bFACTURA\b/.test(P) && serieFactura && /R\.?\s*U\.?\s*C/.test(P)) ||
-    /COMMERCIAL\s+INVOICE|\bINVOICE\s*(NO\b|N[°º]|#|NUMBER|DATE)/.test(P)) hay.push('FACTURA');
+  var cpe = comprobanteEnTexto_(P);
+  if (cpe.tipo) hay.push('FACTURA');
   if (/PUNTO\s+DE\s+PARTIDA|PUNTO\s+DE\s+LLEGADA|MOTIVO\s+DEL?\s+TRASLADO|DATOS\s+DEL\s+TRASLADO/.test(P)) hay.push('GUIA');
   if (/DECLARACION\s+ADUANERA\s+DE\s+MERCANCIAS|\bDAM\b[^A-Z]{0,20}\d{3}\s*-\s*20\d\d\s*-\s*10\s*-\s*\d{3,6}/.test(P)) hay.push('DAM');
   if (/ACTA\s+DE\s+(CONFORMIDAD|RECEPCION)|CONFORMIDAD\s+DEL?\s+SERVICIO/.test(P)) hay.push('ACTA');
   if (/\bMT\s?103\b|SWIFT\s+(COPY|MESSAGE)|:32A:/.test(P)) hay.push('SWIFT');
   if (!hay.length && /^.{0,300}ORDEN\s+DE\s+(COMPRA|SERVICIO)/.test(P)) hay.push('OC');
-  return hay;
+  return { claves: hay, tipo: cpe.tipo, serie: cpe.serie };
+}
+
+// «FACTURA» aunque el OCR la parta o confunda letras: «FACTUR A», «FACTURA»,
+// «FAC TURA», «FACIURA», «FACTUPA».
+var RE_FACTURA = /F\s?A\s?[CG]\s?[TI1]\s?U\s?[RP]\s?A/;
+
+/**
+ * El comprobante que trae un texto (ya en mayúsculas y sin tildes): tipo y
+ * serie-número. Reconoce las electrónicas (F001-00113668, con los errores
+ * típicos del OCR: FO01, F0O1, «F001 - 113668», «F001 N° 113668»), las
+ * físicas (FACTURA 001- N° 0031388) y la «commercial invoice» del exterior.
+ * Las series de guía (T001, EG07) se saltan: un comprobante suele citarlas.
+ */
+function comprobanteEnTexto_(P) {
+  var esFactura = RE_FACTURA.test(P), esBoleta = /BOLETA\s+DE\s+VENTA/.test(P);
+  var esRH = /RECIBO\s+POR\s+HONORARIOS/.test(P);
+  var esNota = /NOTA\s+DE\s+(CREDITO|DEBITO)\s+ELECTRONICA/.test(P);
+  // Serie electrónica: letra + 3, con guion o «N°» antes del número.
+  var re = /(?:^|[^A-Z0-9])([FBE][A-Z0-9]{3})\s*(?:[-–—_]\s*(?:N\s*[°ºO.]\s*)?|N\s*[°º.]\s*)0*(\d{1,8})(?!\d)/g, m, serie = '';
+  while ((m = re.exec(P))) {
+    var s = m[1][0] + m[1].slice(1).replace(/O/g, '0').replace(/[IL]/g, '1');
+    if (!/^[FBE][A-Z]?\d{2,3}$/.test(s) || /^EG/.test(s)) continue;
+    serie = s + '-' + m[2];
+    break;
+  }
+  // Factura física: «FACTURA … 001 - N° 0031388».
+  if (!serie && (esFactura || esBoleta)) {
+    var f = /(?:FACTURA|BOLETA)[^]{0,80}?(?:^|[^A-Z0-9])(\d{3,4})\s*[-–—]\s*(?:N\s*[°ºO.]\s*)?0*(\d{3,8})(?!\d)/.exec(P);
+    if (f && !/^20\d\d$/.test(f[1])) serie = f[1] + '-' + f[2];
+  }
+  var tipo = '';
+  if (esNota) tipo = /CREDITO/.test(P) ? 'NOTA DE CRÉDITO' : 'NOTA DE DÉBITO';
+  else if (esRH && /^E/.test(serie)) tipo = 'RECIBO POR HONORARIOS';
+  else if (esFactura && (/F\s?A\s?C\s?T\s?U\s?R\s?A\s+E\s?L\s?E\s?C\s?T\s?R\s?O\s?N\s?I\s?C\s?A/.test(P) ||
+    (serie && /R\s?\.?\s?U\s?\.?\s?C/.test(P)))) tipo = 'FACTURA';
+  else if (esBoleta && /^B/.test(serie)) tipo = 'BOLETA';
+  else if (/COMMERCIAL\s+INVOICE|\bINVOICE\s*(NO\b|N[°º]|#|NUMBER|DATE)/.test(P)) {
+    tipo = 'INVOICE';
+    var inv = /INVOICE\s*(?:NO\.?|N[°º]|#|NUMBER)\s*[:.]?\s*([A-Z0-9][A-Z0-9\/-]{2,20})/.exec(P);
+    serie = inv ? inv[1] : '';
+  }
+  return { tipo: tipo, serie: tipo ? serie : '' };
 }
 
 function nombreDeClave_(clave) {
@@ -943,7 +1037,7 @@ function datosDeArchivo_(f, ubicacion, pistaCarpeta) {
   var enCarpeta = / \(por la carpeta\)$/.test(c.parece) ?
     pistasEn_(textoPlano_(pistaCarpeta)).map(function (p) { return p.parece; }) : [];
   return { id: id, ubicacion: ubicacion, nombre: nombre, url: url, tipo: tipoLegible_(mime, nombre),
-    parece: c.parece, enCarpeta: enCarpeta, pistas: c.pistas.join(', '), creado: f.getDateCreated() };
+    parece: c.parece, serie: c.serie, enCarpeta: enCarpeta, pistas: c.pistas.join(', '), creado: f.getDateCreated() };
 }
 
 // ── Revisión automática ──
@@ -959,6 +1053,13 @@ function activarLegajoAutomatico() {
     SpreadsheetApp.getUi().alert('Falta un paso', 'Primero usa «1. Armar tabla».',
       SpreadsheetApp.getUi().ButtonSet.OK);
     return;
+  }
+  if (LEER_DOCUMENTOS && typeof Drive === 'undefined') {
+    var ui = SpreadsheetApp.getUi();
+    var r = ui.alert('Falta activar la lectura por dentro',
+      'Sin el servicio «Drive API» no se leen los PDF escaneados («DOCS proveedor OC…»), y ahí suele estar la factura.\n\n' +
+      'Para activarlo: Apps Script → «Servicios» (+) → «Drive API» → Agregar.\n\n¿Seguir igual, sin leerlos?', ui.ButtonSet.YES_NO);
+    if (r !== ui.Button.YES) return;
   }
   detenerLegajoAutomatico_();
   TRABAJADORES.forEach(function (fn, k) {
@@ -1280,6 +1381,9 @@ var TIPO_SUNAT = { '01': 'FACTURA', '03': 'BOLETA', '07': 'NOTA DE CRÉDITO', '0
  */
 function serieEnNombre_(nombre) {
   var t = String(nombre || '').toUpperCase().replace(/\.[A-Z0-9]{2,5}$/, '');
+  // «01F0010031388»: el tipo de SUNAT (01, 03, 07, 08) pegado a serie y número.
+  var pegado = /(?:^|[^A-Z0-9])0[1378]([FBE][A-Z]?\d{2,3})(\d{4,8})(?!\d)/.exec(t);
+  if (pegado && pegado[1].length === 4) return pegado[1] + '-' + pegado[2].replace(/^0+(?=\d)/, '');
   var m = /(?:^|[^A-Z0-9])([FBE][A-Z0-9]{3})(\s*[-_ ]?\s*)(\d{1,19})(?!\d)/.exec(t);
   if (!m || !/\d/.test(m[1])) return '';
   if (!/[-_ ]/.test(m[2]) && !/^[FBE][A-Z]?0\d{1,2}$/.test(m[1])) return '';

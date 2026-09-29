@@ -429,6 +429,14 @@ cuenta para las dos. La factura se reconoce por «FACTURA ELECTRÓNICA» (o
 «factura» + serie F… + RUC, o «commercial invoice»); la guía, por el punto de
 partida y de llegada, no por la palabra: la factura cita su guía. Necesita el
 servicio **Drive API** (Servicios + → Drive API); sin él, funciona sin leer.
+La serie-número que lee (F001-113668, con los errores típicos del OCR como
+«FO01» o «FACTUR A», y también facturas físicas «001- N° 0031388») queda en
+la celda de la factura: «✓ 1 · F001-113668». Un nombre como
+«01F0010031388.pdf» (tipo pegado a serie y número) ya se reconoce sin leer.
+
+Menú: **Probar la lectura por dentro (OCR)** confirma que Drive API y los
+permisos están bien; **Volver a revisar las que NO tienen factura** repite solo
+esas OC (y limpia sus filas viejas de ARCHIVOS).
 
 ### Cómo se usa
 
