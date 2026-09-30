@@ -110,11 +110,50 @@ async function autenticarRobot(sb: ReturnType<typeof clienteSupabase>) {
   if (error) { console.error("✗ No se pudo entrar como el robot:", error.message); process.exit(1); }
 }
 
-/** La lista de RUC a consultar: los que no están en el padrón, o llevan más de DIAS_VIGENCIA sin revisarse. */
+/**
+ * La lista de RUC a consultar: los que no están en el padrón, o llevan más de
+ * DIAS_VIGENCIA sin revisarse — con los proveedores del año en curso PRIMERO.
+ *
+ * Dos cosas que se vieron el 30/09/2026:
+ *   • la función devuelve de a 1000 filas como máximo (tope de PostgREST) y
+ *     había 1 293 pendientes: se pagina, o parte de la lista ni aparecía;
+ *   • el SIRE ya trae septiembre–diciembre de 2025 (762 proveedores que solo
+ *     están ahí): sin priorizar, el cupo diario (MAX_CONSULTAS) se gastaba en
+ *     ellos antes que en los de 2026. PERIODO_DESDE (por omisión, enero del año
+ *     en curso) decide qué va primero; lo demás igual se consulta después.
+ */
 async function rucsPendientes(sb: ReturnType<typeof clienteSupabase>): Promise<string[]> {
-  const { data, error } = await sb.rpc("rucs_por_actualizar_en_padron", { p_dias_vigencia: DIAS_VIGENCIA });
-  if (error) { console.error("✗ No se pudo leer la lista de RUC pendientes:", error.message); return []; }
-  return (data as Array<{ ruc: string }>).map(r => r.ruc).filter(Boolean);
+  const todos: string[] = [];
+  for (let desde = 0; ; desde += 1000) {
+    const { data, error } = await sb
+      .rpc("rucs_por_actualizar_en_padron", { p_dias_vigencia: DIAS_VIGENCIA })
+      .range(desde, desde + 999);
+    if (error) { console.error("✗ No se pudo leer la lista de RUC pendientes:", error.message); break; }
+    // Solo RUC de 11 dígitos: el SIRE trae un proveedor «0» (basura) que hacía perder 30 s en cada corrida.
+    const filas = (data as Array<{ ruc: string }>).map(r => r.ruc).filter(r => /^\d{11}$/.test(r ?? ""));
+    todos.push(...filas);
+    if (filas.length < 1000) break;
+  }
+  const periodoDesde = process.env.PERIODO_DESDE?.trim() || `${new Date().getFullYear()}01`;
+  const recientes = await proveedoresDesde(sb, periodoDesde);
+  const primero = todos.filter(r => recientes.has(r));
+  console.log(`${todos.length} RUC pendientes; ${primero.length} con comprobantes desde ${periodoDesde} van primero.`);
+  return [...primero, ...todos.filter(r => !recientes.has(r))];
+}
+
+/** Los RUC de proveedores con comprobantes en el SIRE desde un período (paginado por id). */
+async function proveedoresDesde(sb: ReturnType<typeof clienteSupabase>, periodo: string): Promise<Set<string>> {
+  const rucs = new Set<string>();
+  let ultimo: string | null = null;
+  for (;;) {
+    let q = sb.from("comprobantes_sunat").select("id, proveedor_ruc").gte("periodo", periodo);
+    if (ultimo) q = q.gt("id", ultimo);
+    const { data, error } = await q.order("id").limit(1000);
+    if (error) { console.error("⚠ No se pudo leer los proveedores recientes:", error.message); return rucs; }
+    for (const f of data ?? []) if (f.proveedor_ruc) rucs.add(f.proveedor_ruc);
+    if ((data ?? []).length < 1000) return rucs;
+    ultimo = data![data!.length - 1].id;
+  }
 }
 
 /** Guarda un resultado apenas se consulta —no al final del lote—, para no perder lo ya hecho si algo falla después. */
