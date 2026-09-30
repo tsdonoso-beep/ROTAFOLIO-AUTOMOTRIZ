@@ -1,4 +1,8 @@
-# Confirmar comprobantes serie no-E001, uno por uno, contra SUNAT
+# Confirmar comprobantes serie no-E001, uno por uno, contra SUNAT — POR PANTALLAS
+#
+# RESPALDO desde el 30/09/2026: el cron diario pasó a sunat-cpe-api.yml (la
+# misma consulta por la API de SUNAT, ~100 veces más rápida). Este queda solo
+# para correrlo a mano, por si la API deja de servir.
 #
 # `descargar-cpe.yml` trae por rango de fechas, pero esa pantalla solo ve
 # serie E001 (confirmado el 28/09/2026 contra el SIRE: agosto trajo 559
@@ -65,11 +69,9 @@ on:
         description: "Cuántos pendientes procesar en esta corrida. 0 = todos los que falten."
         required: false
         default: "3"
-  schedule:
-    # 8:30am en Lima (UTC-5 todo el año): media hora después de descargar-cpe.yml
-    # y sunat-diario.yml, para no competir por la misma cuenta de SOL con ellos
-    # ni con las corridas manuales de la noche.
-    - cron: "30 13 * * *"
+  # SIN cron desde el 30/09/2026: el horario de las 8:30 lo tomó «SUNAT CPE
+  # por API» (sunat-cpe-api.yml), que baja lo mismo por la API de SUNAT, sin
+  # pantallas. Este queda para correrlo a mano, como respaldo.
 
 permissions:
   contents: read

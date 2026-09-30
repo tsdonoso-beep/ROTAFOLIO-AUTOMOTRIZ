@@ -1,0 +1,129 @@
+# Confirmar los CPE no-E001 por la API de SUNAT (api-cpe), sin pantallas
+#
+# Reemplaza en el cron a «SUNAT consultar CPE individual» (consultar-cpe-
+# individual.yml), que llenaba la pantalla «Nueva Consulta» uno por uno
+# (~20-30 s cada uno, ~20% de éxito desde el 29/09/2026). Esta vía entra a SOL
+# una vez, toma el token con que esa misma pantalla llama a
+# api-cpe.sunat.gob.pe y baja el XML y el PDF directo: ~300 ms por XML, 8 en
+# paralelo, ~88% a la primera y el resto se recupera reintentando. Probado el
+# 30/09/2026 en local: 2 342 de 2 362 (agosto+septiembre) en 5 min de SUNAT;
+# Drive (~80/min) es el cuello de botella. Cómo funciona por dentro:
+# docs/pipeline-cpe-local.md. El script es el mismo que se corre en local
+# (scripts/local/cpe.mts).
+#
+# El workflow viejo queda solo para correrlo a mano, como respaldo: si SUNAT
+# cambia la API, la vía por pantallas (VIA=ui) sigue disponible también aquí.
+
+name: SUNAT CPE por API
+
+on:
+  schedule:
+    # 8:30am en Lima (UTC-5): media hora después de «SUNAT diario» (8:00), que
+    # es el que trae de SIRE los pendientes nuevos de cada día.
+    - cron: "30 13 * * *"
+  workflow_dispatch:
+    inputs:
+      periodo:
+        description: "Período(s) yyyymm separados por coma, o «todos». Vacío = mes anterior + actual."
+        required: false
+        default: ""
+      modo:
+        description: "nuevos = lo que el SIRE tiene y la base no · pdf = rellenar el PDF de lo ya guardado sin PDF."
+        type: choice
+        options: [nuevos, pdf]
+        default: nuevos
+      workers:
+        description: "Pedidos a SUNAT en paralelo."
+        required: false
+        default: "8"
+      limite:
+        description: "Cuántos procesar (0 = todos los pendientes)."
+        required: false
+        default: "0"
+      via:
+        description: "api (rápida) · ui (respaldo: llena la pantalla, como el workflow viejo)."
+        type: choice
+        options: [api, ui]
+        default: api
+
+permissions:
+  contents: read
+
+# El MISMO grupo que consultar-cpe-individual.yml: los dos usan la cuenta
+# secundaria de SOL, y dos sesiones a la vez pueden hacer que SUNAT cierre una.
+concurrency:
+  group: consultar-cpe-individual
+  cancel-in-progress: false
+
+jobs:
+  cpe:
+    runs-on: ubuntu-latest
+    # 2 362 comprobantes tardaron ~30 min en local (casi todo, Drive). Un día
+    # normal son decenas; el tope cubre un backlog grande pedido a mano.
+    timeout-minutes: 180
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - run: npx playwright install --with-deps chromium
+
+      - name: Calcular los períodos (mes anterior + actual, en hora de Lima)
+        id: periodos
+        run: |
+          if [ -n "${{ inputs.periodo }}" ]; then
+            echo "valor=${{ inputs.periodo }}" >> "$GITHUB_OUTPUT"
+          else
+            actual=$(TZ=America/Lima date +%Y%m)
+            anterior=$(TZ=America/Lima date -d "$(TZ=America/Lima date +%Y-%m-01) -1 day" +%Y%m)
+            echo "valor=${anterior},${actual}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Bajar XML y PDF por la API, archivar en Drive y guardar en la base
+        env:
+          SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
+          SUNAT_SOL_USUARIO: ${{ secrets.SUNAT_SOL_USUARIO }}
+          SUNAT_SOL_CLAVE: ${{ secrets.SUNAT_SOL_CLAVE }}
+          SUNAT_INROPRIN_USUARIO: ${{ secrets.SUNAT_INROPRIN_USUARIO }}
+          SUNAT_INROPRIN_CLAVE: ${{ secrets.SUNAT_INROPRIN_CLAVE }}
+          SUNAT_DRIVE_FOLDER: ${{ secrets.SUNAT_DRIVE_FOLDER }}
+          GOOGLE_SA_EMAIL: ${{ secrets.GOOGLE_SA_EMAIL }}
+          GOOGLE_SA_PRIVATE_KEY: ${{ secrets.GOOGLE_SA_PRIVATE_KEY }}
+          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          PROJECT_URL: ${{ secrets.PROJECT_URL }}
+          ANON_KEY: ${{ secrets.ANON_KEY }}
+          ROBOT_CORREO: ${{ secrets.ROBOT_CORREO }}
+          ROBOT_CLAVE: ${{ secrets.ROBOT_CLAVE }}
+          # En una corrida por cron los inputs vienen vacíos: se usan los valores por omisión.
+          PERIODO: ${{ steps.periodos.outputs.valor }}
+          MODO: ${{ inputs.modo || 'nuevos' }}
+          VIA: ${{ inputs.via || 'api' }}
+          WORKERS: ${{ inputs.workers || '8' }}
+          LIMITE: ${{ inputs.limite || '0' }}
+          ORDEN: reciente
+          BARRA: "0"
+        run: node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/local/cpe.mts
+
+      - name: Estado final por etapa
+        if: always()
+        run: node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/local/estado.mts 1 || true
+
+      # Bitácoras (eventos, intentos, errores HTTP crudos, estado por etapa).
+      # Los XML/PDF no: ya quedaron en Drive, y si algo no subió, la próxima
+      # corrida lo vuelve a bajar.
+      - name: Subir bitácoras
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bitacoras-cpe-api
+          path: logs/
+          if-no-files-found: warn
+          retention-days: 14

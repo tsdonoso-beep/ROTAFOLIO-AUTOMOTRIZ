@@ -18,11 +18,6 @@
 | **`GUIA-DEL-REPOSITORIO.md`** | Este archivo: el índice general. |
 | `README.md` | Apunta a esta guía. |
 
-No hay memoria oculta en otro lado: el contexto del proyecto vive en los
-comentarios del código (muy detallados: cada archivo explica el *por qué* en
-su encabezado), en los mensajes de commit y en los documentos listados en la
-[sección 13](#13-índice-de-la-documentación-existente).
-
 ---
 
 ## 1. Qué es este repositorio
@@ -47,8 +42,10 @@ Empresa: **INDUSTRIAS ROLAND PRINT S.A.C. — INROPRIN**, RUC `20512201611`.
 ## 2. Mapa de carpetas
 
 ```
-.github/workflows/   Los 5 workflows de SUNAT (ver sección 4)
+.github/workflows/   Los 6 workflows de SUNAT (ver sección 4)
 scripts/             Lo que corren esos workflows (Node + Playwright)
+  local/             Pipeline de CPE por la API de SUNAT: laptop y «SUNAT CPE por API»
+                     (docs/pipeline-cpe-local.md)
 app/                 La aplicación web (Next.js, App Router)
   (app)/             Pantallas con sesión: memos, revisar, caja, movilidad,
                      liquidaciones, contabilidad, tablero, sistema/sunat…
@@ -65,6 +62,7 @@ lib/                 Lógica compartida por la app Y los scripts (sección 9)
   supabase/          Clientes de la base (navegador y servidor)
   word/              Generación del memo en .docx
 db/migrations/       42 migraciones SQL, en orden (001 → 042)
+db/database.full.sql Todas las migraciones en un archivo (GENERADO: pnpm db:consolidar)
 db/carga/            Carga inicial del padrón de personas
 docs/                Documentos de detalle (sección 13)
 docs/appscript/      Código de Google Apps Script (se pega a mano en cada hoja)
@@ -105,9 +103,9 @@ que es la evidencia para diagnosticar cuando algo falla.
 |---|---|---|
 | 08:00 | **SUNAT diario** | Pide al SIRE la lista de compras (mes actual y anterior) |
 | 08:00 | **SUNAT descargar XML** | Baja XML/PDF de serie **E001** de ayer y hoy |
-| 08:30 | **SUNAT consultar CPE individual** | Confirma y baja los **no-E001**, uno por uno (100 por día) |
+| 08:30 | **SUNAT CPE por API** | Baja XML y PDF de los **no-E001** directo de la API de SUNAT (mes anterior + actual, todos los pendientes) |
 | 09:00 | **SUNAT padrón de RUC** | Consulta la condición de los RUC nuevos o vencidos |
-| Noche | *(a mano)* consultar CPE individual | Quien mantiene esto avanza el backlog de a lotes |
+| —     | *(a mano)* consultar CPE individual | Respaldo por pantallas, sin cron desde el 30/09/2026 |
 
 ### 4.2 Ficha de cada workflow
 
@@ -147,7 +145,18 @@ que es la evidencia para diagnosticar cuando algo falla.
 - **Cuándo:** solo manual. Tope 330 min.
 - Detalle: `docs/extraer-boletas-y-rangos-largos.md`.
 
+#### SUNAT CPE por API — `sunat-cpe-api.yml` → `scripts/local/cpe.mts`
+- **Qué hace:** lo mismo que el siguiente, pero sin pantallas: entra a SOL una
+  vez, toma el token de la app «Nueva Consulta» y baja XML y PDF directo de
+  `api-cpe.sunat.gob.pe`, 8 a la vez. ~300 ms por XML y ~88% a la primera (el
+  resto se reintenta). Colas separadas SUNAT → PDF → Drive → Supabase, con el
+  estado de cada etapa. **Es el mismo script que se corre en una laptop.**
+- **Cuándo:** cron 08:30 (mes anterior + actual) + manual (`periodo`, `modo`
+  nuevos/pdf, `workers`, `limite`, `via`). Tope 180 min.
+- Detalle, comandos locales y diagnóstico: **`docs/pipeline-cpe-local.md`**.
+
 #### SUNAT consultar CPE individual — `consultar-cpe-individual.yml` → `scripts/consultar-cpe-individual.mts`
+- **Respaldo desde el 30/09/2026, solo manual**: el cron lo tomó el de arriba.
 - **Qué hace:** para cada comprobante **no-E001** que el SIRE dice que existe
   y que todavía no está en `cpe_comprobante`, entra a SOL → «Nueva Consulta de
   comprobantes de pago», llena RUC + tipo + serie + número, abre el modal
@@ -433,7 +442,11 @@ Comprobantes de compra tipo 01/07/08 (sin la basura "tipo 53" del SIRE):
 
 ## 12. Cómo hacer las tareas comunes
 
-### Correr un lote manual de no-E001
+### Bajar no-E001 (lo normal: por la API)
+Actions → **SUNAT CPE por API** → Run workflow (vacío = mes anterior + actual),
+o en una laptop `pnpm cpe:local` — todo en `docs/pipeline-cpe-local.md`.
+
+### Correr un lote manual de no-E001 por pantallas (respaldo)
 Actions → **SUNAT consultar CPE individual** → Run workflow →
 `debug` **desmarcado**, `periodo` 202609 (o el que toque), `orden` antiguo,
 `limite` 100. Para solo probar: `debug` marcado y `limite` 3.
@@ -493,6 +506,7 @@ de SOL (`descargar`, `extraer`, `individual`).
 | Documento | Tema | Estado |
 |---|---|---|
 | `docs/proceso-viaticos.md` | El proceso de negocio de viáticos, roles, tipos de memo, decisiones | Vigente |
+| **`docs/pipeline-cpe-local.md`** | Pipeline de CPE por la API de SUNAT: cómo funciona, correrlo en local y en Actions, diagnóstico | **Vigente** |
 | `docs/cron-sunat.md` | Puesta en marcha de SUNAT diario (robot, secretos) | Vigente |
 | `docs/descarga-cpe-y-detalle-de-items.md` | Diseño de la descarga de XML y el detalle de ítems | Vigente (diseño original) |
 | `docs/scraper-cpe-hallazgos-tecnicos.md` | Grilla virtual del portal, carreras, botón Imprimir | Vigente |
@@ -507,13 +521,15 @@ de SOL (`descargar`, `extraer`, `individual`).
 
 ## 14. Pendientes y problemas conocidos
 
-- **Backlog no-E001 enero–agosto (~8 800):** decidir si se rellena y a qué
-  ritmo. El cron solo cubre el mes actual y el anterior.
+- **Backlog no-E001:** desde el 30/09/2026 se rellena por la API (`scripts/local/`).
+  Agosto–septiembre hecho (2 342 de 2 362); marzo–julio en curso; enero–febrero
+  pendiente. Estado, pendientes y comandos para continuar:
+  **`docs/pipeline-cpe-local.md` §9-10**.
 - **E001 de enero:** nunca se bajó; se resuelve con una corrida de «SUNAT
   extraer rango».
 - **SUNAT inestable desde el 29/09:** «Error del Servidor, reintentar en 5
-  minutos» en buena parte de las consultas individuales. No depende de
-  nosotros; lo fallido se reintenta solo.
+  minutos». Era un 500 de la consulta de cabecera: por la API se va directo al
+  XML y los 500 que quedan son intermitentes (se reintentan solos).
 - **`descargar-cpe.yml` no tiene `concurrency`:** si alguien lo corre a mano a
   la vez que otro workflow que usa la cuenta de SOL, pueden pisarse las
   sesiones.

@@ -7,7 +7,12 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test --experimental-strip-types lib/dominio/__tests__/*.test.ts lib/ocr/__tests__/*.test.ts lib/export/__tests__/*.test.ts lib/sunat/__tests__/*.test.ts lib/drive/__tests__/*.test.ts lib/word/__tests__/*.test.ts"
+    "test": "node --test --experimental-strip-types lib/dominio/__tests__/*.test.ts lib/ocr/__tests__/*.test.ts lib/export/__tests__/*.test.ts lib/sunat/__tests__/*.test.ts lib/drive/__tests__/*.test.ts lib/word/__tests__/*.test.ts scripts/local/__tests__/*.test.mts",
+    "cpe:local": "node --env-file-if-exists=.env.local --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/local/cpe.mts",
+    "cpe:sondeo": "node --env-file-if-exists=.env.local --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/local/sondear-api.mts",
+    "cpe:hojas": "node --env-file-if-exists=.env.local --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/local/estado-hojas.mts",
+    "db:consolidar": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/local/consolidar-db.mts",
+    "cpe:estado": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/local/estado.mts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.6",
