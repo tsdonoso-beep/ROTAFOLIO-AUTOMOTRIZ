@@ -88,6 +88,8 @@ export class Tuberia {
     await dormir(retrasoMs);
     this.b.log("info", w.id, "arranca");
     while (!this.detener) {
+      // Sin nada que hacer se termina, aunque haya una pausa en curso (antes se esperaba la pausa entera con la cola vacía).
+      if (!this.quedaTrabajo()) break;
       if (Date.now() < this.pausaHasta) {
         w.estado = "pausa";
         w.desde = Date.now();
