@@ -60,7 +60,7 @@ on:
           factura y nota (FE/NC/ND) y cuatro de boleta (BVE/NC-BVE/ND-BVE). Un
           nombre que no esté en esa lista corta la corrida antes del login.
         required: false
-        default: "FE Emitidas,FE Recibidas,NC Emitidas,NC Recibidas,ND Emitidas,ND Recibidas,BVE Emitidas,BVE Recibidas,NC-BVE Emitidas,ND-BVE Emitidas"
+        default: "FE Emitidas,NC Emitidas,NC Recibidas,ND Emitidas,ND Recibidas,BVE Emitidas,BVE Recibidas,NC-BVE Emitidas,ND-BVE Emitidas"
       rango_prueba_imprimir:
         description: >-
           Prueba puntual, apagada si se deja vacía: además de la consulta
@@ -144,7 +144,10 @@ jobs:
           DEBUG: ${{ github.event_name == 'schedule' && '0' || (inputs.debug && '1' || '0') }}
           FECHA_INICIO: ${{ github.event_name == 'schedule' && steps.rango.outputs.desde || inputs.fecha_inicio }}
           FECHA_FIN: ${{ github.event_name == 'schedule' && steps.rango.outputs.hasta || inputs.fecha_fin }}
-          TIPOS_CONSULTA: ${{ inputs.tipo_consulta || 'FE Emitidas,FE Recibidas,NC Emitidas,NC Recibidas,ND Emitidas,ND Recibidas,BVE Emitidas,BVE Recibidas,NC-BVE Emitidas,ND-BVE Emitidas' }}
+          # Sin «FE Recibidas» desde el 30/09/2026: las facturas E001 recibidas las
+          # baja «SUNAT CPE por API» (sunat-cpe-api.yml), ~100 veces más rápido.
+          # Aquí quedan lo emitido, las notas y las boletas, que la API no cubre.
+          TIPOS_CONSULTA: ${{ inputs.tipo_consulta || 'FE Emitidas,NC Emitidas,NC Recibidas,ND Emitidas,ND Recibidas,BVE Emitidas,BVE Recibidas,NC-BVE Emitidas,ND-BVE Emitidas' }}
           PROBAR_IMPRIMIR: ${{ inputs.rango_prueba_imprimir && '1' || '0' }}
           RANGO_PRUEBA_IMPRIMIR: ${{ inputs.rango_prueba_imprimir }}
         # con-bitacora: hora y nivel en cada línea y logs/<script>-<fecha>/ (eventos, HTTP con error, resumen).

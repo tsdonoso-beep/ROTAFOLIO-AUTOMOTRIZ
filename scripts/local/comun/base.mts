@@ -98,7 +98,11 @@ export async function pendientes(b: Bitacora): Promise<Pendiente[]> {
     proveedorRuc: x.proveedor_ruc, proveedorNombre: x.proveedor_nombre, tipoComprobante: x.tipo_comprobante,
     serie: x.serie, numero: x.numero, fechaEmision: x.fecha_emision, periodo: x.periodo,
   })).filter(p => !vistos.has(clave(p)));
-  const final = lista.filter(p => !noExisten.has(clave(p)));
+  // Notas de crédito/débito serie E: la API responde 404 a todas (sondeo del
+  // 30/09/2026, 6/6), no porque no existan. Las sigue bajando «descargar XML»
+  // por pantallas; aquí no se piden para no anotarlas como «no existe».
+  const sinNotasE = lista.filter(p => !(/^E/i.test(p.serie) && (p.tipoComprobante === "07" || p.tipoComprobante === "08")));
+  const final = sinNotasE.filter(p => !noExisten.has(clave(p)));
   if (final.length < lista.length) b.log("info", "cola", `se saltan ${lista.length - final.length} que SUNAT ya dijo que no existen (REINTENTAR_NO_EXISTE=1 para pedirlos igual)`);
   return final;
 }

@@ -108,6 +108,10 @@ pnpm cpe:sondeo
 # Lo nuevo de agosto y septiembre (por omisión), 8 a la vez
 pnpm cpe:local
 
+# Solo E001, o todas las series; solo ciertos proveedores
+SERIES=todas PERIODO=202601,202602 pnpm cpe:local
+VIA=ui WORKERS=1 RUCS=20127765279 PERIODO=202609 pnpm cpe:local
+
 # Otros meses; lo más reciente primero (si hay que cortar, lo último queda completo)
 WORKERS=8 ORDEN=reciente PERIODO=202603,202604,202605 pnpm cpe:local
 
@@ -139,6 +143,7 @@ Windows en «Nunca». Si se suspende, la corrida se congela.
 | Variable | Por omisión | Qué hace |
 |---|---|---|
 | `PERIODO` | `202608,202609` | Meses `yyyymm` separados por coma, o `todos` |
+| `SERIES` · `TIPOS` · `RUCS` | `noE` · `01,07,08` · (todos) | Qué series (`noE`/`E`/`todas`), qué tipos y qué proveedores pedir |
 | `MODO` | `nuevos` | `nuevos` = lo del SIRE que no está en la base · `pdf` = rellenar PDF |
 | `VIA` | `api` | `ui` = por pantallas (respaldo, lento) |
 | `WORKERS` | `8` | Pedidos a SUNAT en paralelo |
@@ -252,21 +257,30 @@ En orden de impacto, con lo que se midió el 30/09/2026:
    (clasificación, reintentos, colas con trabajadores falsos) y un lint que
    atrapa la sintaxis que rompía la ejecución en Node.
 
-## 9. Pendientes (al 30/09/2026, 13:20)
+## 9. Pendientes (al 30/09/2026, 16:30)
 
-| # | Qué | Cómo |
+**Cobertura** (no-E001, 2026): 96.3% al cierre del 30/09 — de 0% en enero–agosto esa misma mañana.
+
+| # | Qué | Estado / cómo |
 |---|---|---|
-| 1 | **Terminar marzo–julio** si la corrida de hoy no alcanzó a subir todo a Drive | Volver a correr el mismo comando (§10): toma solo lo que no está en la base |
-| 2 | **Enero y febrero** no-E001 (~1 600) | §10, paso 2 |
-| 3 | **Rellenar PDF** de lo guardado sin PDF | `MODO=pdf` (§10, paso 3) |
-| 4 | **RUC 20100047218** (FE01/FI01/FN01/FC03): 500 siempre por API | Probar por pantallas: `VIA=ui WORKERS=1 PERIODO=… pnpm cpe:local` |
-| 5 | **Agotados de marzo–julio** (59) | Se reintentan solos en la próxima corrida; si vuelven a agotarse, revisar si son del mismo RUC |
-| 6 | **E001 de enero** (180, nunca bajados) | Workflow «SUNAT extraer rango» 01/01–31/01, o extender este script a serie E |
-| 7 | **Validar el workflow en GitHub** | Actions → SUNAT CPE por API → Run workflow con `limite` 5. Si SUNAT bloquea los servidores de GitHub, volver a correr desde una laptop |
-| 8 | **Drive es el cuello (~70-80/min)** | Ideas: subir a Drive después de guardar en la base (que la hoja no espere a Drive), o más `SUBIDAS` hasta que aparezca «User rate limit» |
-| 9 | **Llevar las mismas estrategias** a «descargar XML», «extraer rango» y «padrón de RUC» | Colas por etapa, sondeo previo, logs crudos |
-| 10 | **Aplicar la migración 043** (lecturas de cpe_comprobante sin timeout) | Supabase → SQL Editor → pegar `db/migrations/043_…sql` → Run. Mientras tanto el script lee lo guardado vía `detalle_cpe` y funciona igual |
-| 11 | **Hoja «COBERTURA»** desactualizada y cortada en 1 000 filas | Es de la app web (límite de PostgREST) |
+| 1 | **BCP (RUC 20100047218)**, ~120 | SUNAT da «Error del Servidor» por la API **y** por pantallas, siempre. No depende de nosotros: pedirlos al banco o dejarlos como excepción |
+| 2 | **Migración 044** (borra 109 filas vacías, leídas de la constancia CDR) | Pendiente: alguien con acceso al SQL Editor de Supabase. No es urgente: no salen en las hojas ni traban el pipeline |
+| 3 | **Validar «SUNAT CPE por API» en GitHub** | Actions → Run workflow con `limite` 5, o esperar el cron de las 8:30. Si SUNAT rechaza a GitHub, correrlo desde una laptop |
+| 4 | **Septiembre–diciembre 2025** | El SIRE ya los tiene (3 250). Decisión de Contabilidad. Ojo: `PERIODO=todos` ya los incluye |
+| 5 | **Notas de crédito E001** por la API | 404 siempre: siguen por «descargar XML» |
+| 6 | **Drive es el cuello (~70-100/min)** | Idea: guardar en la base antes de subir a Drive |
+| 7 | **Padrón de RUC** | SUNAT publica el padrón reducido como archivo (393 MB, estado y condición de todos los RUC, sin captcha). Buen contribuyente y agentes no están como archivo |
+| 8 | **Hoja «COBERTURA»** desactualizada y cortada en 1 000 filas | Es de la app web |
+
+**Hecho el 30/09:** migración 043; E001 de enero y facturas E001 recibidas pasadas a la API (el cron de la API las toma y «descargar XML» ya no); lector de XML arreglado para zips con constancia + factura (COESTI); logs al estilo nuevo en todos los workflows; filtros `RUCS`, `SERIES`, `TIPOS`; `pnpm sire:local`.
+
+### Qué baja cada workflow desde el 30/09/2026
+
+| Workflow | Qué baja |
+|---|---|
+| **SUNAT CPE por API** (8:30) | Todo lo recibido que está en el SIRE: facturas y notas de serie F…, facturas E001 |
+| **SUNAT descargar XML** (8:00) | Lo que la API no cubre: emitido (tus ventas), notas E001 recibidas, boletas |
+| **SUNAT diario** (8:00) | La lista del SIRE (qué existe). ~2 min, casi todo espera a SUNAT |
 
 ## 10. Para continuar en otra laptop (entrega del 30/09/2026)
 

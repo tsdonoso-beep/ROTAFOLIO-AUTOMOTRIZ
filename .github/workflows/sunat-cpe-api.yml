@@ -40,6 +40,11 @@ on:
         description: "Cuántos procesar (0 = todos los pendientes)."
         required: false
         default: "0"
+      series:
+        description: "todas · noE (solo las que la consulta por rango no trae) · E (solo E001)."
+        type: choice
+        options: [todas, noE, E]
+        default: todas
       via:
         description: "api (rápida) · ui (respaldo: llena la pantalla, como el workflow viejo)."
         type: choice
@@ -109,6 +114,10 @@ jobs:
           WORKERS: ${{ inputs.workers || '8' }}
           LIMITE: ${{ inputs.limite || '0' }}
           ORDEN: reciente
+          # Todas las series: también las facturas E001 recibidas, que antes bajaba
+          # descargar-cpe por pantallas (sondeo del 30/09/2026: 29/29 por la API,
+          # salvo 500 intermitentes). Las notas E001 la API no las sirve: siguen allá.
+          SERIES: ${{ inputs.series || 'todas' }}
           BARRA: "0"
         run: node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/local/cpe.mts
 
