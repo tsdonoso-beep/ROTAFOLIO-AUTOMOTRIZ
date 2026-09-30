@@ -1,7 +1,7 @@
 -- ════════════════════════════════════════════════════════════════
 -- database.full.sql — GENERADO, no editar a mano (pnpm db:consolidar)
--- 43 migraciones: 001_esquema_inicial.sql → 043_lectura_de_cpe_sin_evaluar_por_fila.sql
--- huella: 1b3d298b443526a2
+-- 44 migraciones: 001_esquema_inicial.sql → 044_quitar_cpe_leidos_de_la_constancia.sql
+-- huella: 1ca9979308b739e5
 --
 -- Aplicar sobre una base VACÍA (proyecto nuevo de Supabase): SQL Editor →
 -- pegar todo → Run. Para una base existente, aplicar solo las migraciones
@@ -6028,4 +6028,35 @@ drop policy if exists cpe_cuota_lectura on cpe_cuota;
 create policy cpe_cuota_lectura on cpe_cuota for select using (
   (select seguridad.puede_ver_todo())
 );
+
+
+-- ┌──────────────────────────────────────────────────────────────
+-- │ 044_quitar_cpe_leidos_de_la_constancia.sql
+-- └──────────────────────────────────────────────────────────────
+
+-- Quitar los comprobantes guardados desde la constancia (CDR) en vez de la factura
+--
+-- Algunos emisores que envían por un OSE (COESTI vía Carvajal, entre otros)
+-- entregan un zip con DOS XML: la constancia de recepción («R-…xml», un
+-- ApplicationResponse) y la factura. Los scripts tomaban el primero, y
+-- guardar_cpe recibió la constancia: filas sin RUC del emisor, sin tipo, sin
+-- total y sin ítems (109 al 30/09/2026). Desde el mismo día los scripts eligen
+-- el XML del comprobante (lib/sunat/cpe-xml.ts → documentoPrincipal) y se
+-- niegan a guardar uno sin RUC/serie/número.
+--
+-- Estas filas no se pueden corregir en el lugar (su identidad es justo lo que
+-- falta): se borran, y la próxima corrida de `pnpm cpe:local` vuelve a bajar
+-- esos comprobantes —siguen pendientes contra el SIRE— y los guarda bien. Sus
+-- archivos en Drive se reconocen por nombre y no se duplican.
+--
+-- Idempotente: en una base nueva, o ya limpia, no borra nada.
+
+delete from cpe_cuota
+ where comprobante_id in (select id from cpe_comprobante where proveedor_ruc is null and tipo_comprobante is null);
+
+delete from cpe_item
+ where comprobante_id in (select id from cpe_comprobante where proveedor_ruc is null and tipo_comprobante is null);
+
+delete from cpe_comprobante
+ where proveedor_ruc is null and tipo_comprobante is null;
 

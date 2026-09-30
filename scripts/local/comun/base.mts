@@ -136,6 +136,25 @@ export async function pendientesSinPdf(b: Bitacora): Promise<Pendiente[]> {
  */
 async function yaGuardados(b: Bitacora): Promise<Array<Pendiente & { conPdf: boolean }>> {
   const t0 = Date.now();
+  // Directo de la tabla (rápido desde la migración 043): trae también los
+  // comprobantes sin ítems, que detalle_cpe no muestra y se volverían a bajar.
+  try {
+    const c = await base();
+    type Fila = { id: string; proveedor_ruc: string | null; tipo_comprobante: string | null; serie: string | null; numero: string | null; fecha_emision: string | null; periodo: string | null; pdf_drive_url: string | null };
+    const filas = await todas<Fila>(b, "cpe_comprobante", (despues, tamano) => {
+      let q = c.from("cpe_comprobante").select("id, proveedor_ruc, tipo_comprobante, serie, numero, fecha_emision, periodo, pdf_drive_url").eq("empresa_ruc", RUC);
+      if (despues) q = q.gt("id", despues);
+      return q.order("id").limit(tamano);
+    });
+    const lista = filas.filter(x => x.proveedor_ruc && x.serie && x.numero).map(x => ({
+      proveedorRuc: x.proveedor_ruc!, proveedorNombre: null, tipoComprobante: x.tipo_comprobante ?? "", serie: x.serie!, numero: x.numero!,
+      fechaEmision: x.fecha_emision, periodo: x.periodo, conPdf: !!x.pdf_drive_url,
+    }));
+    b.log("info", "base", `ya guardados: ${lista.length} comprobantes (de la tabla, en ${((Date.now() - t0) / 1000).toFixed(0)} s)`);
+    return lista;
+  } catch (e) {
+    b.log("aviso", "base", `la tabla no respondió (${e instanceof Error ? e.message : e}); se usa detalle_cpe`);
+  }
   const filas = await detalleCpeCompleto(await base(), null);
   const m = new Map<string, Pendiente & { conPdf: boolean }>();
   for (const d of filas) {

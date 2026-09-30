@@ -33,7 +33,7 @@ import { google } from "googleapis";
 import { createClient } from "@supabase/supabase-js";
 import { normalizarClavePrivada, correoDeServicio, carpeta, publicarHoja } from "../lib/drive/servidor.ts";
 import { leerZip } from "../lib/sunat/zip.ts";
-import { leerComprobanteXml, type ComprobanteCpe } from "../lib/sunat/cpe-xml.ts";
+import { documentoPrincipal, leerComprobanteXml, type ComprobanteCpe } from "../lib/sunat/cpe-xml.ts";
 import { prepararLote, origenDe, periodoDe, identidad, type DocLote } from "../lib/sunat/cpe-importacion.ts";
 import {
   conMenuDeBoletas, consultaDe, normalizar, tandasPorMes, periodosDelRango, nombreDeHojaDelRango,
@@ -1209,7 +1209,8 @@ try {
       // después—.
       for (const fila of filas) {
         const xmls = fila.xml ? xmlsDe(fila.xml) : [];
-        const c = xmls[0] ? leerComprobanteXml(xmls[0]) : null;
+        const doc = documentoPrincipal(xmls); // no la constancia (CDR) que algunos zips traen primero
+        const c = doc ? leerComprobanteXml(doc) : null;
         const origen = c ? origenDe(c, RUC) : "OTRO";
         const periodo = c ? periodoDe(c.fechaEmision) : null;
         const carpetaId = await carpetaDelLote(drive!, origen, periodo);

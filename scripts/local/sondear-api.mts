@@ -20,7 +20,7 @@ import { crearBitacora, vigilarProceso, primeraLinea, type Bitacora } from "./co
 import { pendientes } from "./comun/base.mts";
 import { xmlsDe } from "./comun/drive.mts";
 import type { Pendiente } from "./comun/tipos.mts";
-import { leerComprobanteXml } from "../../lib/sunat/cpe-xml.ts";
+import { leerComprobanteXml, documentoPrincipal } from "../../lib/sunat/cpe-xml.ts";
 import { abrirNavegador, nuevoContexto, entrar, abrirFormulario, Token } from "./sol/sesion.mts";
 import { ClienteApi } from "./api/cliente.mts";
 
@@ -51,7 +51,7 @@ async function pruebaXml(api: ClienteApi, p: Pendiente, prueba: string) {
   if (archivo) {
     writeFileSync(join(SALIDA, archivo.nombre), archivo.datos);
     try {
-      const c = leerComprobanteXml(xmlsDe(archivo)[0] ?? "");
+      const c = leerComprobanteXml(documentoPrincipal(xmlsDe(archivo)) ?? "");
       nota = `${archivo.nombre} ${archivo.datos.length} B · leído: ${c.serie}-${c.numero} ${c.moneda} ${c.total}, ${c.items.length} ítems`;
     } catch (e) { nota = `${archivo.nombre}: bajó pero no se pudo leer (${primeraLinea(e)})`; }
   }

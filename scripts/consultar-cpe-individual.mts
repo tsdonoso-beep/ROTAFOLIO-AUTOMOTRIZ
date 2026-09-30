@@ -41,7 +41,7 @@ import { google } from "googleapis";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { normalizarClavePrivada, correoDeServicio, carpeta, publicarHoja } from "../lib/drive/servidor.ts";
 import { leerZip } from "../lib/sunat/zip.ts";
-import { leerComprobanteXml, type ComprobanteCpe } from "../lib/sunat/cpe-xml.ts";
+import { documentoPrincipal, leerComprobanteXml, type ComprobanteCpe } from "../lib/sunat/cpe-xml.ts";
 import { prepararLote, origenDe, periodoDe, identidad } from "../lib/sunat/cpe-importacion.ts";
 import { filasItemsSunat, filaDetalleDesdeRpc, detalleCpeCompleto, TIPOS_ITEMS } from "../lib/export/items-sunat.ts";
 
@@ -936,7 +936,8 @@ try {
           // botones de descarga.
           const { xml: xmlArchivo, pdf: pdfArchivo } = await descargarXmlYPdf(page, marco);
           const xmls = xmlArchivo ? xmlsDe(xmlArchivo) : [];
-          const c = xmls[0] ? leerComprobanteXml(xmls[0]) : null;
+          const doc = documentoPrincipal(xmls); // no la constancia (CDR) que algunos zips traen primero
+          const c = doc ? leerComprobanteXml(doc) : null;
 
           if (!c) {
             console.log("  ⚠ no se pudo leer el XML de este comprobante; no se guarda nada de este.");

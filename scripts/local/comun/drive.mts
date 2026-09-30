@@ -6,7 +6,7 @@ import { Readable } from "node:stream";
 import { google } from "googleapis";
 import { normalizarClavePrivada, correoDeServicio, carpeta } from "../../../lib/drive/servidor.ts";
 import { leerZip } from "../../../lib/sunat/zip.ts";
-import { leerComprobanteXml } from "../../../lib/sunat/cpe-xml.ts";
+import { leerComprobanteXml, documentoPrincipal } from "../../../lib/sunat/cpe-xml.ts";
 import { origenDe, periodoDe } from "../../../lib/sunat/cpe-importacion.ts";
 import { RUC, CARPETA_DRIVE } from "./config.mts";
 import { dormir, type Bitacora } from "./bitacora.mts";
@@ -96,9 +96,10 @@ export async function archivar(b: Bitacora, etiqueta: string, periodo: string | 
   writeFileSync(join(dirLocal, xml.nombre), xml.datos);
   if (pdf) writeFileSync(join(dirLocal, pdf.nombre), pdf.datos);
   try {
-    const xmls = xmlsDe(xml);
-    if (!xmls[0]) throw new Error(`«${xml.nombre}» no trae XML (${xml.datos.length} bytes)`);
-    const c = leerComprobanteXml(xmls[0]);
+    const doc = documentoPrincipal(xmlsDe(xml));
+    if (!doc) throw new Error(`«${xml.nombre}» no trae el XML del comprobante (${xml.datos.length} bytes)`);
+    const c = leerComprobanteXml(doc);
+    if (!c.proveedorRuc || !c.serie || !c.numero) throw new Error(`«${xml.nombre}»: el XML no dice RUC/serie/número; no se guarda para no dejar una fila vacía`);
     const carpetaId = await reintentable(b, `carpeta ${etiqueta}`, () => carpetaDe(origenDe(c, RUC), periodoDe(c.fechaEmision)));
     const [rx, rp] = await Promise.all([
       reintentable(b, `xml ${etiqueta}`, () => subir(carpetaId, xml)),
