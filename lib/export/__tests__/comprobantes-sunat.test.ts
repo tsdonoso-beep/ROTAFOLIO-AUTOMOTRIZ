@@ -142,7 +142,7 @@ describe("las columnas de impuestos", () => {
 
   test("siguen calzando las celdas con los títulos", () => {
     const f = filasComprobantesSunat([c()]);
-    assert.equal(f[0].length, 31);
+    assert.equal(f[0].length, 36);
     assert.equal(f[1].length, f[0].length);
     assert.equal(f[0][9], "Base imponible");
     assert.equal(f[0][10], "IGV");
@@ -176,9 +176,9 @@ describe("la condición del RUC, al final de la hoja", () => {
 
 // La OC en cuya carpeta de Drive está la factura, y su centro de costo.
 describe("la OC y el centro de costo, al final de la hoja", () => {
-  test("sin vínculo con una OC, las seis columnas quedan vacías", () => {
+  test("sin vínculo con una OC, las once columnas quedan vacías", () => {
     const f = filasComprobantesSunat([c()])[1];
-    assert.deepEqual(f.slice(25), ["", "", "", "", "", ""]);
+    assert.deepEqual(f.slice(25), ["", "", "", "", "", "", "", "", "", "", ""]);
   });
 
   test("con vínculo muestra la OC, el centro de costo, el código CONCAR, las alertas y el archivo que lo confirmó", () => {
@@ -190,6 +190,19 @@ describe("la OC y el centro de costo, al final de la hoja", () => {
     assert.deepEqual(f.slice(25), [
       "0115-2026", "PROY-2025-079-5 PRONIED - TALLERES ESPECIALIZADO", "30016", "factura anterior a la OC",
       "FACTURA F001-18178.pdf", "https://drive.google.com/file/d/xyz/view",
+      "", "", "", "", "",
+    ]);
+  });
+
+  test("con el legajo de la OC, van la situación del pago, el comprador, el área, el legajo y la carpeta", () => {
+    const f = filasComprobantesSunat([c({
+      ocCarpeta: "0115-2026", situacionPagoOc: "PAGADA", compradorOc: "Alfio Luna",
+      areaOc: "Compras nacionales", legajoOc: "Falta: Guía de remisión",
+      carpetaOcUrl: "https://drive.google.com/drive/folders/abc",
+    })])[1];
+    assert.deepEqual(f.slice(31), [
+      "PAGADA", "Alfio Luna", "Compras nacionales", "Falta: Guía de remisión",
+      "https://drive.google.com/drive/folders/abc",
     ]);
   });
 
@@ -200,7 +213,7 @@ describe("la OC y el centro de costo, al final de la hoja", () => {
 
   test("sin archivo que lo confirme, esas dos columnas quedan vacías aunque haya OC", () => {
     const f = filasComprobantesSunat([c({ ocCarpeta: "0024-2026" })])[1];
-    assert.deepEqual(f.slice(29), ["", ""]);
+    assert.deepEqual(f.slice(29, 31), ["", ""]);
   });
 
   test("cabeceras y tipos siguen del mismo largo", () => {
@@ -208,6 +221,8 @@ describe("la OC y el centro de costo, al final de la hoja", () => {
     assert.deepEqual(CABECERAS_SUNAT.slice(25), [
       "OC (carpeta)", "Centro de costo (CG)", "Código CONCAR", "Revisar vínculo OC",
       "Archivo que confirma la OC", "Enlace del archivo (OC)",
+      "Situación del pago (OC)", "Comprador (OC)", "Área que completa el legajo",
+      "Legajo de la OC", "Carpeta de la OC",
     ]);
   });
 });

@@ -57,6 +57,12 @@ export interface FilaDetalleCpe {
   archivoOc?: string | null;
   /** Su enlace, para verificar el vínculo sin buscarlo a mano. */
   archivoOcUrl?: string | null;
+  /** Del legajo por OC: situación del pago, comprador, área, legajo y carpeta. */
+  situacionPagoOc?: string | null;
+  compradorOc?: string | null;
+  areaOc?: string | null;
+  legajoOc?: string | null;
+  carpetaOcUrl?: string | null;
 }
 
 // El orden importa: lo que se busca primero —de qué comprobante es, qué se
@@ -73,6 +79,8 @@ export const CABECERAS_ITEMS = [
   // Al final, para no correr lo que alguien ya tenga armado encima.
   "OC (carpeta)", "Centro de costo (CG)", "Código CONCAR",
   "Archivo que confirma la OC", "Enlace del archivo (OC)",
+  "Situación del pago (OC)", "Comprador (OC)", "Área que completa el legajo",
+  "Legajo de la OC", "Carpeta de la OC",
 ];
 
 export const TIPOS_ITEMS: TipoColumna[] = [
@@ -109,6 +117,11 @@ export const TIPOS_ITEMS: TipoColumna[] = [
   "texto",  // Código CONCAR
   "texto",  // Archivo que confirma la OC
   "texto",  // Enlace del archivo (OC)
+  "texto",  // Situación del pago (OC)
+  "texto",  // Comprador (OC)
+  "texto",  // Área que completa el legajo
+  "texto",  // Legajo de la OC
+  "texto",  // Carpeta de la OC
 ];
 
 /** Lo mínimo de un `SupabaseClient` que hace falta para paginar un RPC. */
@@ -190,6 +203,11 @@ export function filaDetalleDesdeRpc(d: Record<string, unknown>): FilaDetalleCpe 
     codigoConcar: (d.codigo_concar as string) ?? null,
     archivoOc: (d.archivo_oc as string) ?? null,
     archivoOcUrl: (d.archivo_oc_url as string) ?? null,
+    situacionPagoOc: (d.situacion_pago_oc as string) ?? null,
+    compradorOc: (d.comprador_oc as string) ?? null,
+    areaOc: (d.area_oc as string) ?? null,
+    legajoOc: (d.legajo_oc as string) ?? null,
+    carpetaOcUrl: (d.carpeta_oc_url as string) ?? null,
   };
 }
 
@@ -238,6 +256,11 @@ export function filasItemsSunat(filas: FilaDetalleCpe[]): string[][] {
       f.codigoConcar ?? "",
       f.archivoOc ?? "",
       f.archivoOcUrl ?? "",
+      f.situacionPagoOc ?? "",
+      f.compradorOc ?? "",
+      f.areaOc ?? "",
+      f.legajoOc ?? "",
+      f.carpetaOcUrl ?? "",
     ]),
   ];
 }

@@ -49,6 +49,16 @@ export interface ComprobanteHistorico {
   archivoOc?: string | null;
   /** Su enlace, para verificar el vínculo sin buscarlo a mano. */
   archivoOcUrl?: string | null;
+  /**
+   * Lo que el legajo por OC sabe de esa OC (del cuadro de aprobaciones, en
+   * vivo): si ya se pagó, quién la compró, qué área debe completar su
+   * legajo y qué documento le falta. Vacío si la OC no está en el legajo.
+   */
+  situacionPagoOc?: string | null;
+  compradorOc?: string | null;
+  areaOc?: string | null;
+  legajoOc?: string | null;
+  carpetaOcUrl?: string | null;
 }
 
 /**
@@ -99,6 +109,9 @@ export const CABECERAS_SUNAT = [
   "Condición SUNAT", "Buen Contribuyente", "Agente de Retención", "Agente de Percepción",
   "OC (carpeta)", "Centro de costo (CG)", "Código CONCAR", "Revisar vínculo OC",
   "Archivo que confirma la OC", "Enlace del archivo (OC)",
+  // Del legajo por OC (cuadro de aprobaciones), también al final.
+  "Situación del pago (OC)", "Comprador (OC)", "Área que completa el legajo",
+  "Legajo de la OC", "Carpeta de la OC",
 ];
 
 /**
@@ -152,6 +165,11 @@ export const TIPOS_SUNAT: TipoColumna[] = [
   "texto",  // Revisar vínculo OC
   "texto",  // Archivo que confirma la OC
   "texto",  // Enlace del archivo (OC)
+  "texto",  // Situación del pago (OC)
+  "texto",  // Comprador (OC)
+  "texto",  // Área que completa el legajo
+  "texto",  // Legajo de la OC
+  "texto",  // Carpeta de la OC
 ];
 
 const NOMBRE_TIPO: Record<string, string> = {
@@ -232,6 +250,11 @@ export function filasComprobantesSunat(
       c.alertasOc ?? "",
       c.archivoOc ?? "",
       c.archivoOcUrl ?? "",
+      c.situacionPagoOc ?? "",
+      c.compradorOc ?? "",
+      c.areaOc ?? "",
+      c.legajoOc ?? "",
+      c.carpetaOcUrl ?? "",
       ];
     }),
   ];

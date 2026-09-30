@@ -13,7 +13,9 @@
  *
  * ── Instalación ──
  * 1. En el proyecto de Apps Script de la hoja: + → Script → «VistaLegajo» →
- *    pega este archivo. Y + → HTML → «VistaLegajo» → pega VistaLegajo.html.
+ *    pega este archivo. Y + → HTML → «TableroLegajo» → pega TableroLegajo.html
+ *    (Apps Script no deja dos archivos con el mismo nombre, aunque uno sea
+ *    .gs y el otro .html: por eso el HTML se llama distinto).
  * 2. Para verlo dentro de la hoja: menú «Legajo por OC» → «Abrir el tablero».
  * 3. Para tener un enlace propio (y compartirlo con Contabilidad):
  *    Implementar → Nueva implementación → tipo «Aplicación web» →
@@ -24,14 +26,14 @@
  */
 
 function doGet() {
-  return HtmlService.createHtmlOutputFromFile('VistaLegajo')
+  return HtmlService.createHtmlOutputFromFile('TableroLegajo')
     .setTitle('Legajo por OC · Control documentario')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
 /** Desde el menú de la hoja: el tablero en una ventana grande. */
 function abrirTableroLegajo() {
-  var html = HtmlService.createHtmlOutputFromFile('VistaLegajo').setWidth(1280).setHeight(860);
+  var html = HtmlService.createHtmlOutputFromFile('TableroLegajo').setWidth(1280).setHeight(860);
   SpreadsheetApp.getUi().showModelessDialog(html, 'Legajo por OC · Control documentario');
 }
 

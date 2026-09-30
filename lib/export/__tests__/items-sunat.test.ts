@@ -63,15 +63,27 @@ describe("filasItemsSunat", () => {
       ocCarpeta: "0115-2026", centroCostoCg: "PROY-2025-079-5", codigoConcar: "30016",
       archivoOc: "FACTURA F001-18178.pdf", archivoOcUrl: "https://drive.google.com/file/d/xyz/view",
     })])[1];
-    assert.deepEqual(r.slice(28), [
+    assert.deepEqual(r.slice(28, 33), [
       "0115-2026", "PROY-2025-079-5", "30016", "FACTURA F001-18178.pdf", "https://drive.google.com/file/d/xyz/view",
     ]);
     assert.equal(r.length, CABECERAS_ITEMS.length);
     assert.equal(CABECERAS_ITEMS.length, TIPOS_ITEMS.length);
   });
 
-  test("sin OC vinculada, esas cinco columnas quedan vacías", () => {
-    assert.deepEqual(filasItemsSunat([fila()])[1].slice(28), ["", "", "", "", ""]);
+  test("sin OC vinculada, esas diez columnas quedan vacías", () => {
+    assert.deepEqual(filasItemsSunat([fila()])[1].slice(28), ["", "", "", "", "", "", "", "", "", ""]);
+  });
+
+  test("el legajo de la OC va al final, y llega de detalle_cpe en snake_case", () => {
+    const f = filaDetalleDesdeRpc({
+      oc_carpeta: "0115-2026", situacion_pago_oc: "APROBADA, PAGO PENDIENTE", comprador_oc: "Omar Luque",
+      area_oc: "COMEX (importaciones)", legajo_oc: "Completo", carpeta_oc_url: "https://drive.google.com/drive/folders/abc",
+    });
+    const r = filasItemsSunat([fila(f)])[1];
+    assert.deepEqual(r.slice(33), [
+      "APROBADA, PAGO PENDIENTE", "Omar Luque", "COMEX (importaciones)", "Completo",
+      "https://drive.google.com/drive/folders/abc",
+    ]);
   });
 
   test("la fila cruda de detalle_cpe trae la OC en snake_case", () => {

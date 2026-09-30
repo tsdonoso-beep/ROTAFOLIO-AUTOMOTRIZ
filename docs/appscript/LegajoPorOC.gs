@@ -184,7 +184,7 @@ var NACIONAL = 'Compras nacionales', COMEX = 'COMEX (importaciones)';
 
 function onOpen() {
   var menu = SpreadsheetApp.getUi().createMenu('Legajo por OC');
-  // El tablero (VistaLegajo.gs + VistaLegajo.html), si está en el proyecto.
+  // El tablero (VistaLegajo.gs + TableroLegajo.html), si está en el proyecto.
   if (typeof abrirTableroLegajo === 'function') menu.addItem('📊 Abrir el tablero', 'abrirTableroLegajo').addSeparator();
   menu
     .addItem('1. Armar tabla del proyecto ' + PROYECTO.nombre, 'armarTablaLegajo')
@@ -201,8 +201,12 @@ function onOpen() {
     .addItem('Volver a revisar las «SIN ACCESO»', 'reintentarSinAcceso')
     .addItem('Volver a revisar las que NO tienen factura', 'reintentarSinFactura')
     .addItem('Probar la lectura por dentro (OCR)', 'probarLectura')
-    .addItem('Rehacer el resumen', 'rehacerResumenLegajo')
-    .addToUi();
+    .addItem('Rehacer el resumen', 'rehacerResumenLegajo');
+  // La subida a la base (SubirLegajo.gs), si está en el proyecto.
+  if (typeof subirLegajoALaBase === 'function') {
+    menu.addSeparator().addItem('Subir el legajo a la base (hojas de SUNAT)', 'subirLegajoALaBase');
+  }
+  menu.addToUi();
 }
 
 /**
@@ -865,7 +869,7 @@ function revisarTanda_(k, n) {
       // Lo pendiente se cuenta de nuevo: los otros revisores también avanzaron.
       var pendientes = hojaT.getRange(2, COL_ESTADO, hojaT.getLastRow() - 1, 1).getValues()
         .filter(function (v) { return v[0] === 'PENDIENTE'; }).length;
-      if (pendientes === 0) detenerLegajoAutomatico_();
+      if (pendientes === 0) { detenerLegajoAutomatico_(); programarSubidaDelLegajo_(); }
       var texto = 'Revisor ' + (k + 1) + ' de ' + n + ': ' + hechas + ' OC, ' + archivos.length +
         ' archivos, ' + Object.keys(lectura.hechas).length + ' leídos por dentro. Faltan ' + pendientes +
         ' en total' + (pendientes === 0 ? ' — TERMINADO.' : '.') + (lectura.aviso ? ' OJO: ' + lectura.aviso : '');
@@ -1364,7 +1368,26 @@ function actualizarDesdeElCuadro_() {
     lock.releaseLock();
   }
   if (c.pendientes) arrancarRevisores_();
+  else programarSubidaDelLegajo_(); // sin carpetas por revisar, igual cambió el estatus de las OC
   return c;
+}
+
+/**
+ * La subida del legajo a la base (SubirLegajo.gs), en su propia ejecución
+ * un minuto después: la tanda que termina ya gastó casi todo su tiempo.
+ * Solo si SubirLegajo.gs está en el proyecto y tiene sus credenciales.
+ */
+function programarSubidaDelLegajo_() {
+  if (typeof subirLegajo_ !== 'function' || !hayCredencialesDeLaBase_()) return;
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'subidaAutomaticaDelLegajo') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('subidaAutomaticaDelLegajo').timeBased().after(60000).create();
+}
+
+function subidaAutomaticaDelLegajo() {
+  var r = subirLegajo_();
+  actualizarResumen_(SpreadsheetApp.getActiveSpreadsheet(), r.error ? 'ERROR al subir el legajo a la base: ' + r.error : r.texto);
 }
 
 function programarActualizacionNocturna() {
@@ -1512,6 +1535,7 @@ function actualizarResumen_(libro, resultado) {
   filas.push(['', '', '', ''],
     ['Última actualización desde el cuadro', props.getProperty('LEGAJO_ULTIMA_ACTUALIZACION') || '(todavía ninguna)', '', ''],
     ['Actualización cada noche', hayActualizacionNocturna_() ? 'SÍ, a las ' + HORA_NOCTURNA + ':00' : 'NO (menú: «Programar actualización cada noche»)', '', ''],
+    ['Última subida a la base (hojas de SUNAT)', props.getProperty('LEGAJO_ULTIMA_SUBIDA') || '(todavía ninguna)', '', ''],
     ['Última tanda', new Date(), '', ''], ['Resultado de la última tanda', resultado, '', '']);
 
   var h = libro.getSheetByName('RESUMEN') || libro.insertSheet('RESUMEN');

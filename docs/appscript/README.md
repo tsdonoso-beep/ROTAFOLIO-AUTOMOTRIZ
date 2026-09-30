@@ -477,7 +477,7 @@ sigue solo al día siguiente.
 
 ## Tablero del legajo (vista para Contabilidad)
 
-`VistaLegajo.gs` + `VistaLegajo.html` van en el **mismo proyecto** que
+`VistaLegajo.gs` + `TableroLegajo.html` van en el **mismo proyecto** que
 `LegajoPorOC.gs` (usan sus constantes) y solo leen TABLA y RESUMEN. Muestran:
 
 - **La lectura**: si la actualización de las 8 PM está programada, cuánto
@@ -495,11 +495,48 @@ sigue solo al día siguiente.
 ### Cómo se usa
 
 1. En el proyecto de Apps Script de la hoja: **+ → Script** «VistaLegajo»
-   (pega el `.gs`) y **+ → HTML** «VistaLegajo» (pega el `.html`).
+   (pega el `.gs`) y **+ → HTML** «TableroLegajo» (pega `TableroLegajo.html`).
+   Apps Script no deja que un `.gs` y un `.html` se llamen igual: por eso
+   tienen nombres distintos.
 2. Dentro de la hoja: menú **Legajo por OC → 📊 Abrir el tablero**.
 3. Enlace propio para compartir: **Implementar → Nueva implementación →
    Aplicación web**, «Ejecutar como: Yo» y acceso para tu organización. El
    estado de los relojes que muestra es el de quien lo implementó.
+
+## El legajo en las hojas de SUNAT
+
+`SubirLegajo.gs` va en el **mismo proyecto** que `LegajoPorOC.gs` y manda el
+legajo de Inroprin (la empresa con comprobantes de SUNAT) a la base: una
+fila por OC (tabla `oc_legajo`) y los archivos que traen la factura o una
+serie-número (tabla `oc_archivo`, origen `LEGAJO`). No toca lo que subió la
+captura de carpetas: cada una reemplaza solo lo suyo (migración 042).
+
+La base cruza esos archivos con SUNAT y COMPROBANTES SUNAT y el DETALLE
+suman al final cinco columnas:
+
+| Columna | De dónde sale |
+| --- | --- |
+| Situación del pago (OC) | la misma del legajo: PAGADA, APROBADA PAGO PENDIENTE, FALTA APROBACIÓN, ANULADA… |
+| Comprador (OC) | el cuadro de aprobaciones |
+| Área que completa el legajo | Compras nacionales o COMEX (importaciones) |
+| Legajo de la OC | «Completo», «Falta: Guía de remisión, DAM», «Sin acceso a la carpeta» o «Por revisar» |
+| Carpeta de la OC | el enlace de la carpeta en Drive |
+
+Además, el centro de costo sale del legajo (que distingue nacional de
+importación) y «Alertas» avisa si la OC está anulada en el cuadro.
+
+### Cómo se usa
+
+1. En el proyecto de Apps Script de la hoja: **+ → Script** «SubirLegajo» y
+   pega el archivo.
+2. Engranaje → **Propiedades del script**: `SUPABASE_URL`,
+   `SUPABASE_ANON_KEY`, `ROBOT_CORREO`, `ROBOT_CLAVE` (las mismas de
+   `SubirCapturaOC.gs`).
+3. Menú **Legajo por OC → Subir el legajo a la base (hojas de SUNAT)**. Al
+   terminar dice cuántas OC y archivos subió y cuántas facturas quedaron
+   unidas con su OC.
+4. Desde ahí se sube solo cada noche, cuando los revisores terminan. Las
+   columnas aparecen con la siguiente publicación diaria de las hojas.
 
 ## Si algo falla
 
