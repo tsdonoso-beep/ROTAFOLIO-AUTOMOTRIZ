@@ -59,7 +59,12 @@ const CLAVE = pedir("SUNAT_SOL_CLAVE", "SUNAT_INROPRIN_CLAVE");
 const USUARIO_SOL = USUARIO.startsWith(RUC) ? USUARIO.slice(RUC.length) : USUARIO;
 
 const DEBUG = process.env.DEBUG !== "0";
-const PERIODO = process.env.PERIODO?.trim() || "202609";
+// Vacío = todos los períodos con pendientes, del más antiguo al más nuevo
+// (`pendientes()` ordena por fecha de emisión sin filtrar por período cuando
+// no se pide uno). Así el cron diario no necesita que nadie le actualice el
+// período a mano cada mes: mientras haya algo viejo sin confirmar, sigue por
+// ahí; cuando se pone al día, sigue solo con lo que vaya entrando.
+const PERIODO = process.env.PERIODO?.trim() || "";
 // 0 = sin tope. En depuración, unos pocos alcanzan para ver la pantalla de
 // resultado; en descarga real, se deja crecer una vez que la fase 2 exista.
 const LIMITE = Number(process.env.LIMITE?.trim() || (DEBUG ? "3" : "0"));
@@ -458,6 +463,11 @@ function calificadorTipoComprobante(serie: string): string {
  * de verdad. Sin este filtro, esas filas se cuelan primero (van ordenadas
  * por fecha) y la consulta las manda con un RUC que nunca va a encontrar
  * nada.
+ *
+ * `periodo` vacío = todos: sin el `.eq("periodo", …)` en ninguna de las dos
+ * consultas, para que «ya está en cpe_comprobante» se calcule contra TODOS
+ * los períodos y no solo contra uno —si no, un comprobante de agosto ya
+ * confirmado se vería como pendiente de nuevo en una corrida sin período—.
  */
 async function pendientes(periodo: string): Promise<Pendiente[]> {
   const url = process.env.SUPABASE_URL || process.env.PROJECT_URL;
@@ -470,22 +480,24 @@ async function pendientes(periodo: string): Promise<Pendiente[]> {
   });
   if (eLogin) { console.error("✗ No se pudo entrar a la base:", eLogin.message); process.exit(1); }
 
-  const { data: sire, error: e1 } = await sb
+  let consultaSire = sb
     .from("comprobantes_sunat")
     .select("proveedor_ruc, proveedor_nombre, tipo_comprobante, serie, numero, fecha_emision, total, moneda")
     .eq("empresa_ruc", RUC)
-    .eq("periodo", periodo)
     .not("serie", "ilike", "E%")
     .in("tipo_comprobante", ["01", "07", "08"])
     .neq("proveedor_ruc", "0")
     .order("fecha_emision");
+  if (periodo) consultaSire = consultaSire.eq("periodo", periodo);
+  const { data: sire, error: e1 } = await consultaSire;
   if (e1) { console.error("✗ No se pudo leer comprobantes_sunat:", e1.message); process.exit(1); }
 
-  const { data: yaEstan, error: e2 } = await sb
+  let consultaYaEstan = sb
     .from("cpe_comprobante")
     .select("proveedor_ruc, tipo_comprobante, serie, numero")
-    .eq("empresa_ruc", RUC)
-    .eq("periodo", periodo);
+    .eq("empresa_ruc", RUC);
+  if (periodo) consultaYaEstan = consultaYaEstan.eq("periodo", periodo);
+  const { data: yaEstan, error: e2 } = await consultaYaEstan;
   if (e2) { console.error("✗ No se pudo leer cpe_comprobante:", e2.message); process.exit(1); }
 
   const identidad = (c: { proveedor_ruc: string | null; tipo_comprobante: string | null; serie: string | null; numero: string | null }) =>
@@ -853,9 +865,10 @@ const contexto = await navegador.newContext({
 const page = await contexto.newPage();
 
 try {
+  const etiquetaPeriodo = PERIODO || "todos los períodos";
   const lista = await pendientes(PERIODO);
   const aProcesar = LIMITE > 0 ? lista.slice(0, LIMITE) : lista;
-  console.log(`Pendientes de serie no-E001 en ${PERIODO}: ${lista.length}. Se procesan: ${aProcesar.length}${DEBUG ? " (depuración)" : ""}.`);
+  console.log(`Pendientes de serie no-E001 en ${etiquetaPeriodo}: ${lista.length}. Se procesan: ${aProcesar.length}${DEBUG ? " (depuración)" : ""}.`);
   if (aProcesar.length === 0) { console.log("Nada que hacer."); process.exit(0); }
 
   await entrar(page);
@@ -945,12 +958,12 @@ try {
   }
 
   if (DEBUG) {
-    console.log(`\nListo: se revisaron ${aProcesar.length} de ${lista.length} pendientes de ${PERIODO}.`);
+    console.log(`\nListo: se revisaron ${aProcesar.length} de ${lista.length} pendientes de ${etiquetaPeriodo}.`);
     console.log("Modo depuración: revisa el artefacto 'capturas/' antes de correr con DEBUG=0.");
   } else {
     await volcar();
     console.log(`\nArchivados en Drive: ${nuevos} nuevos, ${existentes} ya estaban.`);
-    console.log(`Listo: se confirmaron ${confirmados} de ${aProcesar.length} pendientes procesados (de ${lista.length} en ${PERIODO}).`);
+    console.log(`Listo: se confirmaron ${confirmados} de ${aProcesar.length} pendientes procesados (de ${lista.length} en ${etiquetaPeriodo}).`);
   }
 } catch (e) {
   await evidencia(page, "error");

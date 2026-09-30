@@ -16,6 +16,22 @@
 # `guardar_cpe`. Con debug=true (por omisión) no baja ni guarda nada: solo
 # entra, llena el formulario y sube capturas + HTML, para fijar selectores
 # sin arriesgar una corrida larga.
+#
+# CRON (agregado el 30/09/2026, tras terminar septiembre a mano): corre solo
+# de día —13:30 UTC, 8:30am en Lima, media hora después de `descargar-cpe.yml`
+# y `sunat-diario.yml` (ambos a las 8am)— porque quien mantiene esto sigue
+# corriéndolo a mano por las noches para adelantar el resto del backlog, y
+# las dos cosas juntas chocarían: es la MISMA cuenta secundaria de SOL
+# (`SUNAT_SOL_USUARIO`) que ya usa `descargar-cpe.mts`, y dos sesiones de
+# Playwright con el mismo usuario al mismo tiempo son pedir que SUNAT cierre
+# una de las dos. `concurrency` de abajo es el cinturón de seguridad aparte:
+# si una corrida (cron o manual) sigue viva cuando debería arrancar otra, la
+# nueva espera en cola en vez de pisar a la que está corriendo.
+#
+# Sin `periodo`, el cron toma TODOS los pendientes ordenados por fecha de
+# emisión —lo más viejo primero—, no un mes fijo: así no hace falta tocar
+# este archivo cada vez que se pasa de mes, y en cuanto el backlog viejo se
+# termine sigue solo con lo que `sunat-diario.yml` vaya trayendo cada día.
 
 name: SUNAT consultar CPE individual
 
@@ -28,16 +44,28 @@ on:
         required: false
         default: true
       periodo:
-        description: "Período a revisar, yyyymm."
+        description: "Período a revisar, yyyymm. Vacío = todos los pendientes, del más antiguo al más nuevo."
         required: false
-        default: "202609"
+        default: ""
       limite:
         description: "Cuántos pendientes procesar en esta corrida. 0 = todos los que falten."
         required: false
         default: "3"
+  schedule:
+    # 8:30am en Lima (UTC-5 todo el año): media hora después de descargar-cpe.yml
+    # y sunat-diario.yml, para no competir por la misma cuenta de SOL con ellos
+    # ni con las corridas manuales de la noche.
+    - cron: "30 13 * * *"
 
 permissions:
   contents: read
+
+# Nunca dos corridas de este workflow a la vez —cron o manual—: comparten la
+# misma cuenta de SOL, y una segunda sesión simultánea puede hacer que SUNAT
+# cierre la primera a la mitad. La que llega después espera en cola.
+concurrency:
+  group: consultar-cpe-individual
+  cancel-in-progress: false
 
 jobs:
   consultar:
@@ -81,9 +109,13 @@ jobs:
           ANON_KEY: ${{ secrets.ANON_KEY }}
           ROBOT_CORREO: ${{ secrets.ROBOT_CORREO }}
           ROBOT_CLAVE: ${{ secrets.ROBOT_CLAVE }}
+          # inputs.* viene vacío en una corrida por cron (no hay formulario
+          # que los llene): debug queda en falso solo (nunca hay que abrir un
+          # dropdown de "Sin definir"), y el límite cae al de un cron, no al
+          # "3" de depuración manual.
           DEBUG: ${{ inputs.debug && '1' || '0' }}
-          PERIODO: ${{ inputs.periodo || '202609' }}
-          LIMITE: ${{ inputs.limite || '3' }}
+          PERIODO: ${{ inputs.periodo }}
+          LIMITE: ${{ inputs.limite || (github.event_name == 'schedule' && '100' || '3') }}
         run: node --experimental-strip-types scripts/consultar-cpe-individual.mts
 
       - name: Subir capturas
