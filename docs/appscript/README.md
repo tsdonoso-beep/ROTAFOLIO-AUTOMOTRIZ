@@ -412,10 +412,25 @@ Las OC nacionales (4 dígitos, `0172-2026`) y las de importación (3 dígitos,
 `172-2026`) son **numeraciones distintas** que se repiten. El script las
 separa por la procedencia; no hay que juntarlas.
 
-El mismo script también arma la lista con **todo el cuadro de aprobaciones
-2026** (todas sus OC y enlaces, de todas las unidades de negocio), cruzada con
-Control de Gestión. Como ahí la misma OC puede existir en Inroprin y en
-Inroplas, la unidad va en la clave.
+El mismo script también arma la lista de **todas las OC 2026**. Cada fuente
+aporta lo suyo:
+
+| Fuente | Qué aporta |
+|---|---|
+| **Base de datos nacionales 2026** de Compras (pestaña `BD-2026`, `NACIONALES_ID`) | La lista completa de OC **nacionales** de Inroprin: se arma sola con los archivos de OC de cada comprador. Proyecto, RUC, requerimiento; y, si la OC no pasó por el cuadro, fecha, comprador, moneda y forma de pago. |
+| **Cuadro de aprobaciones 2026** | Las **importaciones** y las OC de las otras unidades; de las nacionales que pasaron por él, la aprobación, la situación del pago y el enlace de la carpeta. |
+| **Control de Gestión** (Registro Compras Grupo) | Solo el **centro de costo** y la **carpeta** cuando el cuadro no la trae. No agrega OC. |
+
+El cuadro tiene más o menos la mitad de las OC nacionales: las compras de los
+proyectos PRONIED y los gastos administrativos chicos no pasan por él. Esas
+salen con la situación del pago «NO ESTÁ EN EL CUADRO DE APROBACIONES» (no se
+cuentan como «sin pagar»: el pago no se sabe). Y si una OC nacional de
+Inroprin está en el cuadro pero no en la base de nacionales, «Revisar el
+cruce» lo avisa (suele ser un número mal escrito). Quien corre el script
+necesita acceso de lectura a la base de nacionales.
+
+Como la misma OC puede existir en Inroprin y en Inroplas, la unidad va en la
+clave. «1296.1-2025» y «1296.2-2025» son partes de la OC 1296.
 
 Si el enlace apunta a una subcarpeta del legajo («01 PROVEEDOR»), se sube a
 la carpeta de la OC. Si ni así hay factura, se miran los archivos de la
@@ -435,7 +450,7 @@ la celda de la factura: «✓ 1 · F001-113668». Un nombre como
 «01F0010031388.pdf» (tipo pegado a serie y número) ya se reconoce sin leer.
 
 **En vivo, cada noche.** «Programar actualización cada noche (20:00)» vuelve
-a leer el cuadro de aprobaciones a las 8 PM (zona horaria del proyecto de
+a leer las fuentes (base de nacionales, cuadro de aprobaciones y CG) a las 8 PM (zona horaria del proyecto de
 Apps Script): suma las OC nuevas, actualiza estatus, aprobaciones y montos, y
 conserva lo ya revisado. Solo vuelven a revisarse las carpetas nuevas, las que
 cambiaron de enlace, las sin acceso, las que aún no tienen factura y las que
@@ -465,7 +480,7 @@ esas OC (y limpia sus filas viejas de ARCHIVOS).
 2. Para otro proyecto, cambia `PROYECTO` al principio (el de Especializado
    está escrito al lado).
 3. Recarga → menú **Legajo por OC** → **1. Armar tabla del proyecto EPT** o
-   **1. Armar tabla de TODO el cuadro de aprobaciones 2026** → **Revisar solo
+   **1. Armar tabla de TODAS las OC 2026 (base de nacionales + cuadro)** → **Revisar solo
    (3 en paralelo)**. Para tener las dos, una hoja nueva para cada una.
 
 La revisión corre con **tres revisores a la vez**: cada uno toma una OC de

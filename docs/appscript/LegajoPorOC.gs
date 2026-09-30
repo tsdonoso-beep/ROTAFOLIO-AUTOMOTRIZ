@@ -6,8 +6,11 @@
  * compra en CONCAR, y marca qué documento está y cuál falta en la carpeta
  * (legajo) de cada OC. Dos formas de armar la lista de OC (menú):
  *   · de UN proyecto (el piloto es EPT), cruzando sus cuatro fuentes;
- *   · de TODO el cuadro de aprobaciones 2026: todos sus enlaces, de todas
- *     las unidades de negocio.
+ *   · de TODAS las OC 2026: las nacionales de Inroprin salen de la base de
+ *     datos nacionales de Compras (tiene todas las que se emiten); las
+ *     importaciones y las de las otras unidades, del cuadro de aprobaciones.
+ *     La carpeta sale del cuadro o, si la OC no está ahí, de Control de
+ *     Gestión, que también da el centro de costo.
  * Los documentos que se buscan:
  *
  *   1 Factura · 2 OC · 3 SWIFT · 4 Guía de remisión · 5 DAM · 6 Requerimiento
@@ -53,7 +56,7 @@
  *    leer el cuadro de aprobaciones (que está en vivo), se suman las OC
  *    nuevas, se actualizan estatus, aprobaciones y montos, y se revisan solo
  *    las carpetas nuevas o con faltantes. Lo ya revisado se conserva. Para
- *    hacerlo en el momento: «Actualizar ahora desde el cuadro».
+ *    hacerlo en el momento: «Actualizar ahora desde las fuentes».
  *
  * Las columnas del cuadro se buscan por su NOMBRE (o uno parecido), no por
  * su posición: si Compras agrega o mueve columnas, se siguen encontrando. La
@@ -77,6 +80,15 @@ var APROBACIONES_ID = '131xCspAwghR92k4nXAq2jtyDQgeXNJ1UQuYD1GFz-BA';
 var APROBACIONES_PESTANA = 'Cuadro de aprobaciones 1';
 var CG_ID = '1tsu4HEA_o_yWdvvJCF5zhlrW_ffzMXiqtzMiRzMlxCY';
 var CG_PESTANA = '3. Registro Compras Grupo';
+// (modo todo 2026) La base de datos nacionales de Compras: TODAS las OC
+// nacionales que se emiten (se arma sola con los archivos de OC de cada
+// comprador). El cuadro de aprobaciones solo tiene las que pasan por
+// aprobación, más o menos la mitad. Las importaciones siguen saliendo del
+// cuadro. No trae la carpeta: esa sale del cuadro o, si no está ahí, de CG.
+var NACIONALES_ID = '13KLLpcFPGlC11ilTIw8thDio9XdV-TnQ1jlZSosVE7M';
+var NACIONALES_PESTANA = 'BD-2026';
+var NACIONALES_EMPRESA = /^INDUSTRIAS ROLAND PRINT/i; // las filas de Inroprin (los consorcios tienen su propio RUC)
+var NACIONALES_UNIDAD = 'Inroprin';                   // como se llama la unidad en el cuadro de aprobaciones
 var EMPRESA = 'INROPRIN';        // (modo proyecto) las OC de Inroplas tienen otra numeración
 var MINUTOS_POR_TANDA = 4;       // Apps Script corta a los 6; el resto es para escribir
 var MINUTOS_ENTRE_TANDAS = 10;
@@ -174,13 +186,15 @@ function modoActual_() {
 }
 
 function tituloDelModo_(modo) {
-  return modo === MODO_APROBACIONES ? 'todo el cuadro de aprobaciones 2026' : 'el proyecto ' + PROYECTO.nombre;
+  return modo === MODO_APROBACIONES ? 'todas las OC 2026 (base de nacionales + cuadro de aprobaciones)' : 'el proyecto ' + PROYECTO.nombre;
 }
 
 var CAB_ARCHIVOS = ['OC', 'Área', 'Enlace carpeta OC', 'Ubicación', 'Nombre del archivo',
   'Enlace del archivo', 'Tipo de archivo', 'Parece ser', 'Cuenta como', 'Pistas', 'Creado'];
 
 var NACIONAL = 'Compras nacionales', COMEX = 'COMEX (importaciones)';
+// La situación del pago de una OC que no pasó por el cuadro de aprobaciones.
+var SIN_CUADRO = 'NO ESTÁ EN EL CUADRO DE APROBACIONES';
 
 function onOpen() {
   var menu = SpreadsheetApp.getUi().createMenu('Legajo por OC');
@@ -188,10 +202,10 @@ function onOpen() {
   if (typeof abrirTableroLegajo === 'function') menu.addItem('📊 Abrir el tablero', 'abrirTableroLegajo').addSeparator();
   menu
     .addItem('1. Armar tabla del proyecto ' + PROYECTO.nombre, 'armarTablaLegajo')
-    .addItem('1. Armar tabla de TODO el cuadro de aprobaciones 2026', 'armarTablaAprobaciones')
+    .addItem('1. Armar tabla de TODAS las OC 2026 (base de nacionales + cuadro)', 'armarTablaAprobaciones')
     .addItem('2. Revisar siguiente tanda', 'revisarTandaLegajo')
     .addSeparator()
-    .addItem('Actualizar ahora desde el cuadro (conserva lo revisado)', 'actualizarAhora')
+    .addItem('Actualizar ahora desde las fuentes (conserva lo revisado)', 'actualizarAhora')
     .addItem('Programar actualización cada noche (' + HORA_NOCTURNA + ':00)', 'programarActualizacionNocturna')
     .addItem('Quitar actualización nocturna', 'quitarActualizacionNocturna')
     .addSeparator()
@@ -367,6 +381,7 @@ function armarTabla_(libro, modo, conservar) {
 
   if (!todo2026) armarDesdeElPlan_(registro, existe);
   var mapeo = armarDesdeAprobaciones_(registro, existe, todo2026);
+  if (todo2026) armarDesdeNacionales_(registro, existe, elegir);
   armarDesdeControlDeGestion_(registro, existe, todo2026, elegir);
 
   // Las filas, como {columna: valor}. Un enlace por OC: primero el del cuadro
@@ -385,7 +400,7 @@ function armarTabla_(libro, modo, conservar) {
     var proc = procedencia_(r.proc);
     var fuentes = [];
     if (r.fuentes.plan) fuentes.push('Plan de compras');
-    if (r.fuentes.base) fuentes.push('Base de OC');
+    if (r.fuentes.base) fuentes.push(todo2026 ? 'Base de nacionales' : 'Base de OC');
     if (r.fuentes.aprob) fuentes.push('Aprobaciones');
     if (r.fuentes.cg) fuentes.push('Control de Gestión');
 
@@ -396,6 +411,8 @@ function armarTabla_(libro, modo, conservar) {
       else if (!r.fuentes.baseProyecto) revisar.push('en la base de OC está con otro proyecto: ' + r.otroProyBase.join(' / '));
       if (!r.fuentes.aprob) revisar.push('no está en los cuadros de aprobaciones revisados');
     }
+    if (todo2026 && !r.fuentes.base && normalizar_(r.unidad.join(' ')) === normalizar_(NACIONALES_UNIDAD) &&
+        proc === 'Nacional') revisar.push('no está en la base de datos nacionales de Compras');
     if (!r.fuentes.cg) revisar.push('no está en Control de Gestión');
     else if (!todo2026 && !r.fuentes.cgProyecto) revisar.push('en Control de Gestión está con otro centro de costo: ' + r.otroCeco.join(' / '));
     else if (!todo2026 && r.otroCeco.length) revisar.push('en Control de Gestión también está en: ' + r.otroCeco.join(' / '));
@@ -422,7 +439,8 @@ function armarTabla_(libro, modo, conservar) {
       var lista = r.cuadro[c.col] || [];
       o[c.col] = c.numero && lista.length === 1 && !isNaN(Number(lista[0])) && lista[0] !== '' ? Number(lista[0]) : lista.join(' / ');
     });
-    o['Situación del pago'] = situacionDelPago_(o);
+    // La que solo viene de la base de nacionales no tiene aprobación ni pago que leer.
+    o['Situación del pago'] = todo2026 && !r.fuentes.aprob ? SIN_CUADRO : situacionDelPago_(o);
     o['Bien o servicio'] = r.tipo.indexOf('SERVICIO') !== -1 ? 'Servicio' : r.tipo.indexOf('BIEN') !== -1 ? 'Bien' : '';
     o['Enlace de la carpeta'] = enlace;
     o['Revisar el cruce'] = revisar.join('; ');
@@ -487,7 +505,7 @@ function armarTabla_(libro, modo, conservar) {
   escribirColumnas_(libro, mapeo);
 
   var texto = conservar
-    ? 'Actualizado desde el cuadro: ' + cuenta.filas + ' OC (' + cuenta.nuevas + ' nuevas, ' + cuenta.quitadas +
+    ? 'Actualizado desde las fuentes: ' + cuenta.filas + ' OC (' + cuenta.nuevas + ' nuevas, ' + cuenta.quitadas +
       ' ya no están). ' + cuenta.conservadas + ' conservan su revisión; ' + cuenta.pendientes + ' por revisar.'
     : 'Tabla armada. Todavía no se revisa ninguna carpeta.';
   PropertiesService.getDocumentProperties().setProperty('LEGAJO_ULTIMA_ACTUALIZACION',
@@ -713,9 +731,53 @@ function armarDesdeAprobaciones_(registro, existe, todo2026) {
 }
 
 /**
+ * (Todo 2026) La base de datos nacionales de Compras: suma las OC nacionales
+ * de Inroprin que no pasaron por el cuadro de aprobaciones, y a las que sí
+ * pasaron les completa proyecto, RUC y requerimiento. Viene una fila por
+ * producto: la misma OC se repite y se junta. A las que no están en el
+ * cuadro les pone lo que la base sabe de la compra (fecha, comprador,
+ * moneda, forma de pago); la aprobación y el pago no los tiene.
+ */
+function armarDesdeNacionales_(registro, existe, elegir) {
+  var t = leerTabla_(SpreadsheetApp.openById(NACIONALES_ID), NACIONALES_PESTANA, ['N° OC/OS', 'RAZON SOCIAL'], true);
+  if (!t) throw new Error('No se encontró la base de datos nacionales (pestaña «' + NACIONALES_PESTANA +
+    '» con las columnas «N° OC/OS» y «RAZON SOCIAL»). ¿Quien corre el script tiene acceso a esa hoja?');
+  var i = {
+    empresa: t.col(['EMPRESA']), oc: t.col(['N° OC/OS']), req: t.col(['N° REQUERIMIENTO']), ruc: t.col(['RUC']),
+    prov: t.col(['RAZON SOCIAL']), proyecto: t.col(['PROYECTO']), tipo: t.col(['TIPO DE DOCUMENTO']),
+    fecha: t.col(['FECHA']), comprador: t.col(['ELABORADO']), moneda: t.col(['MONEDA']), pago: t.col(['FORMA DE PAGO'])
+  };
+  var unidad = NACIONALES_UNIDAD;
+  t.filas.forEach(function (f) {
+    if (!NACIONALES_EMPRESA.test(String(valor_(f, i.empresa) || '').trim())) return;
+    var oc = ocNormalizada_(valor_(f, i.oc), 'NACIONAL');
+    if (!oc) return;
+    var prov = String(valor_(f, i.prov) || '');
+    // Si el cuadro ya la trae, se completa esa (si el número se repite, la
+    // del proveedor parecido); si no, es una OC nueva.
+    var r = existe(unidad, oc) ? elegir(unidad, oc, prov)
+      : registro(unidad, oc, 'N|' + palabrasDeTitulo_(prov).slice(0, 2).join(' '));
+    if (!r) return; // el número se repite en el cuadro y no se sabe de cuál es
+    r.fuentes.base = true;
+    agregar_(r.proyecto, valor_(f, i.proyecto));
+    agregar_(r.req, valor_(f, i.req));
+    agregar_(r.ruc, String(valor_(f, i.ruc) || '').replace(/\.0$/, ''));
+    agregar_(r.prov, prov);
+    agregar_(r.proc, 'NACIONAL');
+    var tipoDoc = String(valor_(f, i.tipo) || '');
+    agregar_(r.tipo, /SERVICIO/i.test(tipoDoc) ? 'SERVICIO' : /COMPRA/i.test(tipoDoc) ? 'BIEN' : '');
+    if (r.fuentes.aprob) return; // lo de la compra ya vino del cuadro
+    [['Fecha OC', i.fecha], ['Comprador', i.comprador], ['Moneda', i.moneda], ['Forma de pago', i.pago]]
+      .forEach(function (c) { agregar_(r.cuadro[c[0]] || (r.cuadro[c[0]] = []), valor_(f, c[1])); });
+  });
+}
+
+/**
  * Control de Gestión: centro de costo, código SIDIGE y el cruce de vuelta.
  * Modo proyecto: suma las OC del proyecto que solo están aquí. Todo 2026:
- * solo completa las que ya vienen del cuadro de aprobaciones.
+ * solo completa las que ya vienen del cuadro de aprobaciones o de la base de
+ * datos nacionales: les pone el centro de costo y, si el cuadro no la trae,
+ * la carpeta.
  */
 function armarDesdeControlDeGestion_(registro, existe, todo2026, elegir) {
   var cg = leerTabla_(SpreadsheetApp.openById(CG_ID), CG_PESTANA, ['N° OC/OS', 'LINK DE CARPETA'], true);
@@ -1346,7 +1408,7 @@ function actualizacionNocturna() {
 function actualizarAhora() {
   var ui = SpreadsheetApp.getUi();
   var c = actualizarDesdeElCuadro_();
-  ui.alert('Actualizado desde el cuadro', c.filas + ' OC en total: ' + c.nuevas + ' nuevas, ' + c.quitadas +
+  ui.alert('Actualizado desde las fuentes', c.filas + ' OC en total: ' + c.nuevas + ' nuevas, ' + c.quitadas +
     ' que ya no están en el cuadro.\n' + c.conservadas + ' conservan su revisión.\n' + c.pendientes +
     ' por revisar' + (c.pendientes ? ': los revisores arrancan en un minuto.' : '.'), ui.ButtonSet.OK);
 }
@@ -1449,7 +1511,7 @@ function actualizarResumen_(libro, resultado) {
     hojaT.getRange(2, 1, hojaT.getLastRow() - 1, CAB_TABLA.length).getValues() : [];
 
   var cruce = { total: tabla.length, plan: 0, aprob: 0, cg: 0, soloFuera: 0, sinAprob: 0, sinCg: 0,
-    sinBase: 0, otroCeco: 0, sinCarpeta: 0, variasCarpetas: 0 };
+    sinBase: 0, otroCeco: 0, sinCarpeta: 0, variasCarpetas: 0, enNacionales: 0, faltanEnNacionales: 0 };
   var rev = { pendientes: 0, revisadas: 0, sinAcceso: 0, vacias: 0, grandes: 0, subidas: 0 };
   var areas = [NACIONAL, COMEX, 'Total'];
   var cuenta = {};
@@ -1464,6 +1526,8 @@ function actualizarResumen_(libro, resultado) {
     if (aparece.indexOf('Aprobaciones') !== -1) cruce.aprob++; else cruce.sinAprob++;
     if (aparece.indexOf('Control') !== -1) cruce.cg++; else cruce.sinCg++;
     if (aparece.indexOf('Base de OC') === -1) cruce.sinBase++;
+    if (aparece.indexOf('Base de nacionales') !== -1) cruce.enNacionales++;
+    if (/no está en la base de datos nacionales/.test(revisar)) cruce.faltanEnNacionales++;
     if (/otro centro de costo/.test(revisar)) cruce.otroCeco++;
     if (/carpetas distintas/.test(revisar)) cruce.variasCarpetas++;
     var unidad = String(f[I_UNIDAD] || '(sin unidad)');
@@ -1502,6 +1566,9 @@ function actualizarResumen_(libro, resultado) {
   fila('OC en la tabla', cruce.total);
   if (modo === MODO_APROBACIONES) {
     Object.keys(porUnidad).sort().forEach(function (u) { fila('   ' + u, porUnidad[u]); });
+    fila('Están en la base de datos nacionales (Compras)', cruce.enNacionales);
+    fila('NO están en el cuadro de aprobaciones (solo en la base de nacionales)', cruce.sinAprob);
+    fila('Nacionales de Inroprin que NO están en la base de nacionales', cruce.faltanEnNacionales);
   } else {
     fila('Están en el plan de compras', cruce.plan);
     fila('NO están en el plan (solo en otra fuente)', cruce.soloFuera);
@@ -1513,7 +1580,7 @@ function actualizarResumen_(libro, resultado) {
   fila('Con carpetas distintas entre fuentes', cruce.variasCarpetas);
   fila('Sin enlace de carpeta', cruce.sinCarpeta);
   filas.push(['', '', '', '']);
-  titulo('Situación del pago (del cuadro de aprobaciones)');
+  titulo('Situación del pago (del cuadro de aprobaciones; las que no están ahí, aparte)');
   Object.keys(porSituacion).sort(function (a, b) { return porSituacion[b] - porSituacion[a]; })
     .forEach(function (k) { fila('   ' + k, porSituacion[k]); });
   filas.push(['', '', '', '']);
@@ -1533,7 +1600,7 @@ function actualizarResumen_(libro, resultado) {
   });
   var props = PropertiesService.getDocumentProperties();
   filas.push(['', '', '', ''],
-    ['Última actualización desde el cuadro', props.getProperty('LEGAJO_ULTIMA_ACTUALIZACION') || '(todavía ninguna)', '', ''],
+    ['Última actualización desde las fuentes', props.getProperty('LEGAJO_ULTIMA_ACTUALIZACION') || '(todavía ninguna)', '', ''],
     ['Actualización cada noche', hayActualizacionNocturna_() ? 'SÍ, a las ' + HORA_NOCTURNA + ':00' : 'NO (menú: «Programar actualización cada noche»)', '', ''],
     ['Última subida a la base (hojas de SUNAT)', props.getProperty('LEGAJO_ULTIMA_SUBIDA') || '(todavía ninguna)', '', ''],
     ['Última tanda', new Date(), '', ''], ['Resultado de la última tanda', resultado, '', '']);
@@ -1827,7 +1894,8 @@ function serieEnNombre_(nombre) {
  *   («OC 115-2026», nacional) → «0115-2026» · («172-2026», importación) → «172-2026»
  */
 function ocNormalizada_(texto, proc) {
-  var s = String(texto == null ? '' : texto);
+  // «1296.1-2025», «1296.2-2025»: partes de la misma OC 1296 (no la OC 1).
+  var s = String(texto == null ? '' : texto).replace(/(\d)\.\d{1,2}(?=\s*-\s*20\d\d)/g, '$1');
   var num, anio, m = /(\d{1,6})\s*-\s*(202\d)(?!\d)/.exec(s);
   if (m) { num = m[1]; anio = m[2]; }
   else if ((m = /(?:^|\D)(202\d)\s*-\s*(\d{1,6})(?!\d)/.exec(s))) { num = m[2]; anio = m[1]; }

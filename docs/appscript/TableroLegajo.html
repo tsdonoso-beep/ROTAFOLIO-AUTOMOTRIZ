@@ -415,6 +415,8 @@
     var m = /(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(o.fe);
     o.mes = m ? m[3] + '-' + ('0' + m[2]).slice(-2) : '';
     o.pagada = /^PAGADA/.test(o.si);
+    // Viene solo de la base de nacionales: el pago no se sabe (no es «sin pagar»).
+    o.sinCuadro = /NO EST. EN EL CUADRO/.test(o.si);
     o.texto = plano([o.oc, o.un, o.py, o.pv, o.ru, o.cp, o.rq, o.fs, o.cc, o.si].join(' '));
   }
 
@@ -540,7 +542,7 @@
     var montoIncompleto = revisadas.filter(function (o) { return o.incompleta; }).reduce(function (s, o) { return s + o.ms; }, 0);
     var montoTotal = vivas.reduce(function (s, o) { return s + o.ms; }, 0);
     var porRevisar = ocs.filter(function (o) { return o.pendiente || o.sinAcceso || o.sinCarpeta; }).length;
-    var sinPagar = vivas.filter(function (o) { return !o.pagada && o.si; });
+    var sinPagar = vivas.filter(function (o) { return !o.pagada && o.si && !o.sinCuadro; });
     var sinAprobar = sinPagar.filter(function (o) { return /FALTA APROBACION/.test(plano(o.si)); }).length;
     var montoSinPagar = sinPagar.reduce(function (s, o) { return s + o.ms; }, 0);
     var sinRevisar = vivas.length - revisadas.length;
@@ -702,7 +704,7 @@
       if (B.comprador && (o.cp || '(sin comprador)') !== B.comprador) return false;
       if (B.accion === 'pagadasSinFactura' && !(o.pagada && o.d[0] === 'n' && !o.anulada)) return false;
       if (B.accion === 'porRevisar' && !(o.pendiente || o.sinAcceso || o.sinCarpeta)) return false;
-      if (B.accion === 'sinPagar' && (o.pagada || o.anulada || !o.si)) return false;
+      if (B.accion === 'sinPagar' && (o.pagada || o.anulada || o.sinCuadro || !o.si)) return false;
       for (var i = 0; i < palabras.length; i++) if (o.texto.indexOf(palabras[i]) === -1) return false;
       return true;
     }).sort(function (a, b) { return b.faltan.length - a.faltan.length || b.ms - a.ms; });
@@ -710,7 +712,7 @@
 
   function claseSituacion(s) {
     if (/^PAGADA/.test(s)) return 'sit-pagada';
-    if (/ANULADA/.test(s)) return 'sit-anulada';
+    if (/ANULADA|NO EST. EN EL CUADRO/.test(s)) return 'sit-anulada';
     if (/FALTA|INCOMPLETO/.test(s)) return 'sit-falta';
     return 'sit-pendiente';
   }
