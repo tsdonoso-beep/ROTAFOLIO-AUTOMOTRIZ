@@ -43,3 +43,9 @@ next-env.d.ts
 # Artefactos del scraper de SUNAT (capturas de depuración y descargas)
 /capturas/
 /descargas/
+
+# Corridas locales del pool de CPE (bitácoras, XML/PDF de respaldo) y secretos
+/logs/
+/salida/
+/secretos/
+/secrets/

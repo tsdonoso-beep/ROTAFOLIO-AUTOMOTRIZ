@@ -284,6 +284,49 @@ async function crearHojaVacia(
  * colgando debajo de las nuevas, que es peor que una hoja vacía porque
  * parece correcta.
  */
+/**
+ * Desde qué período va la hoja principal. Lo anterior se publica aparte, un
+ * archivo por año («COMPROBANTES SUNAT 2025»), en la misma carpeta.
+ *
+ * Pedido de Contabilidad (30/09/2026): el SIRE ya trae septiembre–diciembre
+ * de 2025 y no querían mezclarlo con 2026 en la hoja de todos los días.
+ */
+export const HOJA_PRINCIPAL_DESDE = process.env.HOJA_PRINCIPAL_DESDE?.trim() || "202601";
+
+/**
+ * Parte las filas de una hoja (con cabecera) por la columna «Período»: las de
+ * `desde` en adelante —o sin período— a la principal; las anteriores, por año.
+ * Sin columna «Período», todo va a la principal.
+ */
+export function partirPorAnio(filas: string[][], desde = HOJA_PRINCIPAL_DESDE): { principal: string[][]; anteriores: Map<string, string[][]> } {
+  const [cabecera, ...resto] = filas;
+  const anteriores = new Map<string, string[][]>();
+  if (!cabecera) return { principal: filas, anteriores };
+  const col = cabecera.findIndex(h => /^per[ií]odo$/i.test(String(h).trim()));
+  if (col < 0) return { principal: filas, anteriores };
+  const principal = [cabecera];
+  for (const fila of resto) {
+    const p = String(fila[col] ?? "").replace(/D/g, "").slice(0, 6);
+    if (p.length < 6 || p >= desde) { principal.push(fila); continue; }
+    const anio = p.slice(0, 4);
+    if (!anteriores.has(anio)) anteriores.set(anio, [cabecera]);
+    anteriores.get(anio)!.push(fila);
+  }
+  return { principal, anteriores };
+}
+
+/** Como publicarHoja, pero con los años anteriores a HOJA_PRINCIPAL_DESDE en su propio archivo («<nombre> <año>»). */
+export async function publicarHojaPorAnio(p: Parameters<typeof publicarHoja>[0]): Promise<Awaited<ReturnType<typeof publicarHoja>> & { anteriores: Array<{ anio: string; url: string; filas: number }> }> {
+  const { principal, anteriores } = partirPorAnio(p.filas);
+  const r = await publicarHoja({ ...p, filas: principal });
+  const extra: Array<{ anio: string; url: string; filas: number }> = [];
+  for (const [anio, filas] of [...anteriores.entries()].sort()) {
+    const ra = await publicarHoja({ ...p, filas, nombre: `${p.nombre} ${anio}` });
+    extra.push({ anio, url: ra.url, filas: filas.length - 1 });
+  }
+  return { ...r, anteriores: extra };
+}
+
 export async function escribirPestana(
   hojas: Hojas, hojaId: string, nombre: string, filas: string[][], tipos: TipoColumna[]
 ): Promise<void> {

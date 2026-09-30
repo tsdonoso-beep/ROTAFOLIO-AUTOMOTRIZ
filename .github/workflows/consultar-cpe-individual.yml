@@ -1,4 +1,8 @@
-# Confirmar comprobantes serie no-E001, uno por uno, contra SUNAT
+# Confirmar comprobantes serie no-E001, uno por uno, contra SUNAT — POR PANTALLAS
+#
+# RESPALDO desde el 30/09/2026: el cron diario pasó a sunat-cpe-api.yml (la
+# misma consulta por la API de SUNAT, ~100 veces más rápida). Este queda solo
+# para correrlo a mano, por si la API deja de servir.
 #
 # `descargar-cpe.yml` trae por rango de fechas, pero esa pantalla solo ve
 # serie E001 (confirmado el 28/09/2026 contra el SIRE: agosto trajo 559
@@ -16,6 +20,30 @@
 # `guardar_cpe`. Con debug=true (por omisión) no baja ni guarda nada: solo
 # entra, llena el formulario y sube capturas + HTML, para fijar selectores
 # sin arriesgar una corrida larga.
+#
+# CRON (agregado el 30/09/2026, con septiembre todavía a medias): corre solo
+# de día —13:30 UTC, 8:30am en Lima, media hora después de `descargar-cpe.yml`
+# y `sunat-diario.yml` (ambos a las 8am)— porque quien mantiene esto sigue
+# corriéndolo a mano por las noches para adelantar el resto del backlog, y
+# las dos cosas juntas chocarían: es la MISMA cuenta secundaria de SOL
+# (`SUNAT_SOL_USUARIO`) que ya usa `descargar-cpe.mts`, y dos sesiones de
+# Playwright con el mismo usuario al mismo tiempo son pedir que SUNAT cierre
+# una de las dos. `concurrency` de abajo es el cinturón de seguridad aparte:
+# si una corrida (cron o manual) sigue viva cuando debería arrancar otra, la
+# nueva espera en cola en vez de pisar a la que está corriendo.
+#
+# Qué toma cada uno, para no pisarse el trabajo:
+#   • el cron: el mes anterior y el actual (calculados en hora de Lima, igual
+#     que `sunat-diario.yml`), LO MÁS RECIENTE PRIMERO. Atiende lo que va
+#     entrando cada día y, si le sobra lote, avanza hacia atrás. No hay que
+#     tocar este archivo al cambiar de mes.
+#   • la corrida manual: el período que se le escriba (202609 por omisión),
+#     LO MÁS VIEJO PRIMERO, que es como se viene limpiando el backlog de noche.
+# Nunca se procesa dos veces lo mismo: cada corrida excluye lo que ya está en
+# `cpe_comprobante`, y `concurrency` impide que corran a la vez.
+#
+# Ojo con dejar `periodo` vacío a mano: son TODOS los períodos, y de enero a
+# agosto de 2026 las series no-E001 siguen al 0% (miles de pendientes).
 
 name: SUNAT consultar CPE individual
 
@@ -28,16 +56,32 @@ on:
         required: false
         default: true
       periodo:
-        description: "Período a revisar, yyyymm."
+        description: "Período(s) a revisar, yyyymm, separados por coma. Vacío = TODOS (incluye el backlog desde enero)."
         required: false
         default: "202609"
+      orden:
+        description: "Qué procesar primero."
+        type: choice
+        options: [antiguo, reciente]
+        required: false
+        default: antiguo
       limite:
         description: "Cuántos pendientes procesar en esta corrida. 0 = todos los que falten."
         required: false
         default: "3"
+  # SIN cron desde el 30/09/2026: el horario de las 8:30 lo tomó «SUNAT CPE
+  # por API» (sunat-cpe-api.yml), que baja lo mismo por la API de SUNAT, sin
+  # pantallas. Este queda para correrlo a mano, como respaldo.
 
 permissions:
   contents: read
+
+# Nunca dos corridas de este workflow a la vez —cron o manual—: comparten la
+# misma cuenta de SOL, y una segunda sesión simultánea puede hacer que SUNAT
+# cierre la primera a la mitad. La que llega después espera en cola.
+concurrency:
+  group: consultar-cpe-individual
+  cancel-in-progress: false
 
 jobs:
   consultar:
@@ -57,6 +101,17 @@ jobs:
       - run: npm ci
 
       - run: npx playwright install --with-deps chromium
+
+      # Solo el cron: mes anterior y actual en hora de Lima. El runner está en
+      # UTC, y a las 8:30am de Lima ya es el mismo día en UTC, pero se calcula
+      # con la zona igual para no depender de esa coincidencia.
+      - name: Calcular los períodos de la corrida programada
+        id: periodos
+        if: github.event_name == 'schedule'
+        run: |
+          actual=$(TZ=America/Lima date +%Y%m)
+          anterior=$(TZ=America/Lima date -d "$(TZ=America/Lima date +%Y-%m-01) -1 day" +%Y%m)
+          echo "valor=${anterior},${actual}" >> "$GITHUB_OUTPUT"
 
       - name: Entrar a SOL y confirmar los pendientes, uno por uno
         env:
@@ -81,10 +136,16 @@ jobs:
           ANON_KEY: ${{ secrets.ANON_KEY }}
           ROBOT_CORREO: ${{ secrets.ROBOT_CORREO }}
           ROBOT_CLAVE: ${{ secrets.ROBOT_CLAVE }}
+          # inputs.* viene vacío en una corrida por cron (no hay formulario
+          # que los llene): debug queda en falso solo (nunca hay que abrir un
+          # dropdown de "Sin definir"), y el límite cae al de un cron, no al
+          # "3" de depuración manual.
           DEBUG: ${{ inputs.debug && '1' || '0' }}
-          PERIODO: ${{ inputs.periodo || '202609' }}
-          LIMITE: ${{ inputs.limite || '3' }}
-        run: node --experimental-strip-types scripts/consultar-cpe-individual.mts
+          PERIODO: ${{ github.event_name == 'schedule' && steps.periodos.outputs.valor || inputs.periodo }}
+          ORDEN: ${{ github.event_name == 'schedule' && 'reciente' || inputs.orden }}
+          LIMITE: ${{ inputs.limite || (github.event_name == 'schedule' && '100' || '3') }}
+        # con-bitacora: hora y nivel en cada línea y logs/<script>-<fecha>/ (eventos, HTTP con error, resumen).
+        run: node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/local/comun/con-bitacora.mts scripts/consultar-cpe-individual.mts
 
       - name: Subir capturas
         if: always()
@@ -94,3 +155,12 @@ jobs:
           path: capturas/
           if-no-files-found: warn
           retention-days: 7
+
+      - name: Subir bitácoras
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bitacoras-consultar-cpe-individual
+          path: logs/
+          if-no-files-found: ignore
+          retention-days: 14

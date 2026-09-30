@@ -412,3 +412,20 @@ export function leerComprobanteXml(xml: string): ComprobanteCpe {
     items,
   };
 }
+
+/**
+ * De los XML que trae una descarga, el del comprobante: no la constancia de
+ * recepción (CDR).
+ *
+ * Algunos emisores —los que envían por un OSE, p. ej. COESTI vía Carvajal— entregan
+ * un zip con DOS XML: «R-…xml» (un ApplicationResponse, la constancia) y la
+ * factura. Tomar «el primero» leía la constancia: sin RUC del emisor, sin
+ * tipo, sin total y sin ítems (109 comprobantes guardados así hasta el
+ * 30/09/2026). Se prefiere el que tenga raíz Invoice / CreditNote /
+ * DebitNote; si ninguno la tiene, el primero que no sea una constancia.
+ */
+export function documentoPrincipal(xmls: string[]): string | null {
+  const raiz = (x: string) => /<\s*(?:[\w-]+:)?(Invoice|CreditNote|DebitNote)[\s>]/.exec(x.slice(0, 4000))?.[1] ?? null;
+  const esConstancia = (x: string) => /<\s*(?:[\w-]+:)?ApplicationResponse[\s>]/.test(x.slice(0, 4000));
+  return xmls.find(x => raiz(x)) ?? xmls.find(x => !esConstancia(x)) ?? null;
+}

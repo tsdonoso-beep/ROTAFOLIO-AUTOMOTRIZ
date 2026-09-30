@@ -31,9 +31,9 @@ import { join } from "node:path";
 import { Readable } from "node:stream";
 import { google } from "googleapis";
 import { createClient } from "@supabase/supabase-js";
-import { normalizarClavePrivada, correoDeServicio, carpeta, publicarHoja } from "../lib/drive/servidor.ts";
+import { normalizarClavePrivada, correoDeServicio, carpeta, publicarHoja, publicarHojaPorAnio } from "../lib/drive/servidor.ts";
 import { leerZip } from "../lib/sunat/zip.ts";
-import { leerComprobanteXml, type ComprobanteCpe } from "../lib/sunat/cpe-xml.ts";
+import { documentoPrincipal, leerComprobanteXml, type ComprobanteCpe } from "../lib/sunat/cpe-xml.ts";
 import { prepararLote, origenDe, periodoDe, identidad, type DocLote } from "../lib/sunat/cpe-importacion.ts";
 import {
   conMenuDeBoletas, consultaDe, normalizar, tandasPorMes, periodosDelRango, nombreDeHojaDelRango,
@@ -1045,13 +1045,14 @@ async function publicarLaHojaDetalle(sb: SupabaseClient): Promise<void> {
   }
 
   const filas = datos.map(filaDetalleDesdeRpc);
-  const r = await publicarHoja({
+  const r = await publicarHojaPorAnio({
     filas: filasItemsSunat(filas),
     nombre: "COMPROBANTES SUNAT - DETALLE",
     carpetas: ["SUNAT"],
     tipos: TIPOS_ITEMS,
   });
   console.log(`Hoja de detalle al día: ${filas.length} ítems · ${r.url}`);
+  for (const a of r.anteriores) console.log(`Hoja aparte ${a.anio}: ${a.filas} filas · ${a.url}`);
 }
 
 /**
@@ -1209,7 +1210,8 @@ try {
       // después—.
       for (const fila of filas) {
         const xmls = fila.xml ? xmlsDe(fila.xml) : [];
-        const c = xmls[0] ? leerComprobanteXml(xmls[0]) : null;
+        const doc = documentoPrincipal(xmls); // no la constancia (CDR) que algunos zips traen primero
+        const c = doc ? leerComprobanteXml(doc) : null;
         const origen = c ? origenDe(c, RUC) : "OTRO";
         const periodo = c ? periodoDe(c.fechaEmision) : null;
         const carpetaId = await carpetaDelLote(drive!, origen, periodo);

@@ -1,0 +1,9 @@
+# Por ahora prettier solo formatea scripts/local (pnpm format). El resto del
+# repo se incorporará de a poco, para no mezclar cambios de formato con cambios
+# de lógica en un mismo commit.
+node_modules
+.next
+logs
+salida
+secrets
+db/database.full.sql

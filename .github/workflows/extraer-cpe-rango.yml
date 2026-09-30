@@ -146,7 +146,8 @@ jobs:
           # Las dos cosas que distinguen a este workflow del diario.
           PARTIR_POR_MES: "1"
           HOJA_DEL_RANGO: "1"
-        run: node --experimental-strip-types scripts/descargar-cpe.mts
+        # con-bitacora: hora y nivel en cada línea y logs/<script>-<fecha>/ (eventos, HTTP con error, resumen).
+        run: node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/local/comun/con-bitacora.mts scripts/descargar-cpe.mts
 
       # Las capturas y el HTML de cada paso: es la evidencia con la que se
       # fijan el menú y la etiqueta de las boletas. Se suben aunque el paso
@@ -159,3 +160,12 @@ jobs:
           path: capturas/
           if-no-files-found: warn
           retention-days: 7
+
+      - name: Subir bitácoras
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bitacoras-extraer-cpe-rango
+          path: logs/
+          if-no-files-found: ignore
+          retention-days: 14

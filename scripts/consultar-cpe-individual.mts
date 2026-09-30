@@ -39,9 +39,9 @@ import { join } from "node:path";
 import { Readable } from "node:stream";
 import { google } from "googleapis";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { normalizarClavePrivada, correoDeServicio, carpeta, publicarHoja } from "../lib/drive/servidor.ts";
+import { normalizarClavePrivada, correoDeServicio, carpeta, publicarHoja, publicarHojaPorAnio } from "../lib/drive/servidor.ts";
 import { leerZip } from "../lib/sunat/zip.ts";
-import { leerComprobanteXml, type ComprobanteCpe } from "../lib/sunat/cpe-xml.ts";
+import { documentoPrincipal, leerComprobanteXml, type ComprobanteCpe } from "../lib/sunat/cpe-xml.ts";
 import { prepararLote, origenDe, periodoDe, identidad } from "../lib/sunat/cpe-importacion.ts";
 import { filasItemsSunat, filaDetalleDesdeRpc, detalleCpeCompleto, TIPOS_ITEMS } from "../lib/export/items-sunat.ts";
 
@@ -59,7 +59,14 @@ const CLAVE = pedir("SUNAT_SOL_CLAVE", "SUNAT_INROPRIN_CLAVE");
 const USUARIO_SOL = USUARIO.startsWith(RUC) ? USUARIO.slice(RUC.length) : USUARIO;
 
 const DEBUG = process.env.DEBUG !== "0";
-const PERIODO = process.env.PERIODO?.trim() || "202609";
+// Uno o varios períodos separados por coma («202609» o «202609,202610»).
+// Vacío = todos, lo que incluye el backlog desde enero: el cron nunca lo deja
+// vacío, le pasa el mes anterior y el actual.
+const PERIODOS = (process.env.PERIODO ?? "").split(",").map(p => p.trim()).filter(Boolean);
+// «reciente» = lo más nuevo primero, que es lo que usa el cron: atiende lo que
+// va entrando cada día y, si le sobra lote, avanza hacia atrás. Por omisión,
+// lo más viejo primero, que es como se viene limpiando el backlog a mano.
+const MAS_RECIENTE_PRIMERO = process.env.ORDEN?.trim() === "reciente";
 // 0 = sin tope. En depuración, unos pocos alcanzan para ver la pantalla de
 // resultado; en descarga real, se deja crecer una vez que la fase 2 exista.
 const LIMITE = Number(process.env.LIMITE?.trim() || (DEBUG ? "3" : "0"));
@@ -458,8 +465,17 @@ function calificadorTipoComprobante(serie: string): string {
  * de verdad. Sin este filtro, esas filas se cuelan primero (van ordenadas
  * por fecha) y la consulta las manda con un RUC que nunca va a encontrar
  * nada.
+ *
+ * «Ya está en cpe_comprobante» se busca SIN filtrar por período: el del SIRE
+ * es el del registro de compras y el de `cpe_comprobante` sale de la fecha de
+ * emisión, y nada garantiza que coincidan (al 30/09/2026 coinciden en todos
+ * los casos, pero si alguna vez no, filtrando por período ese comprobante se
+ * vería pendiente para siempre). Se acota por serie no-E, lo único que se compara.
+ *
+ * Las dos lecturas van paginadas: PostgREST corta cualquier respuesta en
+ * 1000 filas sin avisar, y agosto solo ya tiene 2106 pendientes no-E.
  */
-async function pendientes(periodo: string): Promise<Pendiente[]> {
+async function pendientes(periodos: string[]): Promise<Pendiente[]> {
   const url = process.env.SUPABASE_URL || process.env.PROJECT_URL;
   if (!url) { console.error("✗ Falta SUPABASE_URL o PROJECT_URL."); process.exit(1); }
   const key = pedir("SUPABASE_ANON_KEY", "ANON_KEY");
@@ -470,29 +486,47 @@ async function pendientes(periodo: string): Promise<Pendiente[]> {
   });
   if (eLogin) { console.error("✗ No se pudo entrar a la base:", eLogin.message); process.exit(1); }
 
-  const { data: sire, error: e1 } = await sb
-    .from("comprobantes_sunat")
-    .select("proveedor_ruc, proveedor_nombre, tipo_comprobante, serie, numero, fecha_emision, total, moneda")
-    .eq("empresa_ruc", RUC)
-    .eq("periodo", periodo)
-    .not("serie", "ilike", "E%")
-    .in("tipo_comprobante", ["01", "07", "08"])
-    .neq("proveedor_ruc", "0")
-    .order("fecha_emision");
-  if (e1) { console.error("✗ No se pudo leer comprobantes_sunat:", e1.message); process.exit(1); }
+  const PAGINA = 1000;
+  async function todas<T>(
+    etiqueta: string,
+    pagina: (desde: number, hasta: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+  ): Promise<T[]> {
+    const filas: T[] = [];
+    for (let desde = 0; ; desde += PAGINA) {
+      const { data, error } = await pagina(desde, desde + PAGINA - 1);
+      if (error) { console.error(`✗ No se pudo leer ${etiqueta}:`, error.message); process.exit(1); }
+      filas.push(...(data ?? []));
+      if ((data ?? []).length < PAGINA) return filas;
+    }
+  }
 
-  const { data: yaEstan, error: e2 } = await sb
+  const asc = !MAS_RECIENTE_PRIMERO;
+  const sire = await todas("comprobantes_sunat", (desde, hasta) => {
+    let q = sb
+      .from("comprobantes_sunat")
+      .select("proveedor_ruc, proveedor_nombre, tipo_comprobante, serie, numero, fecha_emision, total, moneda")
+      .eq("empresa_ruc", RUC)
+      .not("serie", "ilike", "E%")
+      .in("tipo_comprobante", ["01", "07", "08"])
+      .neq("proveedor_ruc", "0");
+    if (periodos.length) q = q.in("periodo", periodos);
+    // Desempate por id: sin un orden total, dos páginas pueden repetir o saltarse filas.
+    return q.order("fecha_emision", { ascending: asc }).order("id", { ascending: asc }).range(desde, hasta);
+  });
+
+  const yaEstan = await todas("cpe_comprobante", (desde, hasta) => sb
     .from("cpe_comprobante")
     .select("proveedor_ruc, tipo_comprobante, serie, numero")
     .eq("empresa_ruc", RUC)
-    .eq("periodo", periodo);
-  if (e2) { console.error("✗ No se pudo leer cpe_comprobante:", e2.message); process.exit(1); }
+    .not("serie", "ilike", "E%")
+    .order("id")
+    .range(desde, hasta));
 
   const identidad = (c: { proveedor_ruc: string | null; tipo_comprobante: string | null; serie: string | null; numero: string | null }) =>
     `${c.proveedor_ruc}|${c.tipo_comprobante}|${c.serie}|${c.numero}`;
-  const vistos = new Set((yaEstan ?? []).map(identidad));
+  const vistos = new Set(yaEstan.map(identidad));
 
-  return (sire ?? [])
+  return sire
     .filter(c => c.proveedor_ruc && c.tipo_comprobante && c.serie && c.numero)
     .filter(c => !vistos.has(identidad(c)))
     .map(c => ({
@@ -830,13 +864,14 @@ async function publicarLaHojaDetalle(sb: SupabaseClient): Promise<void> {
   }
 
   const filas = datos.map(filaDetalleDesdeRpc);
-  const r = await publicarHoja({
+  const r = await publicarHojaPorAnio({
     filas: filasItemsSunat(filas),
     nombre: "COMPROBANTES SUNAT - DETALLE",
     carpetas: ["SUNAT"],
     tipos: TIPOS_ITEMS,
   });
   console.log(`Hoja de detalle al día: ${filas.length} ítems · ${r.url}`);
+  for (const a of r.anteriores) console.log(`Hoja aparte ${a.anio}: ${a.filas} filas · ${a.url}`);
 }
 
 // ── Principal ─────────────────────────────────────────────────────
@@ -853,9 +888,11 @@ const contexto = await navegador.newContext({
 const page = await contexto.newPage();
 
 try {
-  const lista = await pendientes(PERIODO);
+  const etiquetaPeriodo = (PERIODOS.length ? PERIODOS.join(", ") : "todos los períodos")
+    + (MAS_RECIENTE_PRIMERO ? ", lo más reciente primero" : "");
+  const lista = await pendientes(PERIODOS);
   const aProcesar = LIMITE > 0 ? lista.slice(0, LIMITE) : lista;
-  console.log(`Pendientes de serie no-E001 en ${PERIODO}: ${lista.length}. Se procesan: ${aProcesar.length}${DEBUG ? " (depuración)" : ""}.`);
+  console.log(`Pendientes de serie no-E001 en ${etiquetaPeriodo}: ${lista.length}. Se procesan: ${aProcesar.length}${DEBUG ? " (depuración)" : ""}.`);
   if (aProcesar.length === 0) { console.log("Nada que hacer."); process.exit(0); }
 
   await entrar(page);
@@ -900,7 +937,8 @@ try {
           // botones de descarga.
           const { xml: xmlArchivo, pdf: pdfArchivo } = await descargarXmlYPdf(page, marco);
           const xmls = xmlArchivo ? xmlsDe(xmlArchivo) : [];
-          const c = xmls[0] ? leerComprobanteXml(xmls[0]) : null;
+          const doc = documentoPrincipal(xmls); // no la constancia (CDR) que algunos zips traen primero
+          const c = doc ? leerComprobanteXml(doc) : null;
 
           if (!c) {
             console.log("  ⚠ no se pudo leer el XML de este comprobante; no se guarda nada de este.");
@@ -945,12 +983,12 @@ try {
   }
 
   if (DEBUG) {
-    console.log(`\nListo: se revisaron ${aProcesar.length} de ${lista.length} pendientes de ${PERIODO}.`);
+    console.log(`\nListo: se revisaron ${aProcesar.length} de ${lista.length} pendientes de ${etiquetaPeriodo}.`);
     console.log("Modo depuración: revisa el artefacto 'capturas/' antes de correr con DEBUG=0.");
   } else {
     await volcar();
     console.log(`\nArchivados en Drive: ${nuevos} nuevos, ${existentes} ya estaban.`);
-    console.log(`Listo: se confirmaron ${confirmados} de ${aProcesar.length} pendientes procesados (de ${lista.length} en ${PERIODO}).`);
+    console.log(`Listo: se confirmaron ${confirmados} de ${aProcesar.length} pendientes procesados (de ${lista.length} en ${etiquetaPeriodo}).`);
   }
 } catch (e) {
   await evidencia(page, "error");
