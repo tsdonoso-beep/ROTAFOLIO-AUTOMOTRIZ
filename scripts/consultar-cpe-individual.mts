@@ -59,12 +59,14 @@ const CLAVE = pedir("SUNAT_SOL_CLAVE", "SUNAT_INROPRIN_CLAVE");
 const USUARIO_SOL = USUARIO.startsWith(RUC) ? USUARIO.slice(RUC.length) : USUARIO;
 
 const DEBUG = process.env.DEBUG !== "0";
-// Vacío = todos los períodos con pendientes, del más antiguo al más nuevo
-// (`pendientes()` ordena por fecha de emisión sin filtrar por período cuando
-// no se pide uno). Así el cron diario no necesita que nadie le actualice el
-// período a mano cada mes: mientras haya algo viejo sin confirmar, sigue por
-// ahí; cuando se pone al día, sigue solo con lo que vaya entrando.
-const PERIODO = process.env.PERIODO?.trim() || "";
+// Uno o varios períodos separados por coma («202609» o «202609,202610»).
+// Vacío = todos, lo que incluye el backlog desde enero: el cron nunca lo deja
+// vacío, le pasa el mes anterior y el actual.
+const PERIODOS = (process.env.PERIODO ?? "").split(",").map(p => p.trim()).filter(Boolean);
+// «reciente» = lo más nuevo primero, que es lo que usa el cron: atiende lo que
+// va entrando cada día y, si le sobra lote, avanza hacia atrás. Por omisión,
+// lo más viejo primero, que es como se viene limpiando el backlog a mano.
+const MAS_RECIENTE_PRIMERO = process.env.ORDEN?.trim() === "reciente";
 // 0 = sin tope. En depuración, unos pocos alcanzan para ver la pantalla de
 // resultado; en descarga real, se deja crecer una vez que la fase 2 exista.
 const LIMITE = Number(process.env.LIMITE?.trim() || (DEBUG ? "3" : "0"));
@@ -464,12 +466,16 @@ function calificadorTipoComprobante(serie: string): string {
  * por fecha) y la consulta las manda con un RUC que nunca va a encontrar
  * nada.
  *
- * `periodo` vacío = todos: sin el `.eq("periodo", …)` en ninguna de las dos
- * consultas, para que «ya está en cpe_comprobante» se calcule contra TODOS
- * los períodos y no solo contra uno —si no, un comprobante de agosto ya
- * confirmado se vería como pendiente de nuevo en una corrida sin período—.
+ * «Ya está en cpe_comprobante» se busca SIN filtrar por período: el del SIRE
+ * es el del registro de compras y el de `cpe_comprobante` sale de la fecha de
+ * emisión, y nada garantiza que coincidan (al 30/09/2026 coinciden en todos
+ * los casos, pero si alguna vez no, filtrando por período ese comprobante se
+ * vería pendiente para siempre). Se acota por serie no-E, lo único que se compara.
+ *
+ * Las dos lecturas van paginadas: PostgREST corta cualquier respuesta en
+ * 1000 filas sin avisar, y agosto solo ya tiene 2106 pendientes no-E.
  */
-async function pendientes(periodo: string): Promise<Pendiente[]> {
+async function pendientes(periodos: string[]): Promise<Pendiente[]> {
   const url = process.env.SUPABASE_URL || process.env.PROJECT_URL;
   if (!url) { console.error("✗ Falta SUPABASE_URL o PROJECT_URL."); process.exit(1); }
   const key = pedir("SUPABASE_ANON_KEY", "ANON_KEY");
@@ -480,31 +486,47 @@ async function pendientes(periodo: string): Promise<Pendiente[]> {
   });
   if (eLogin) { console.error("✗ No se pudo entrar a la base:", eLogin.message); process.exit(1); }
 
-  let consultaSire = sb
-    .from("comprobantes_sunat")
-    .select("proveedor_ruc, proveedor_nombre, tipo_comprobante, serie, numero, fecha_emision, total, moneda")
-    .eq("empresa_ruc", RUC)
-    .not("serie", "ilike", "E%")
-    .in("tipo_comprobante", ["01", "07", "08"])
-    .neq("proveedor_ruc", "0")
-    .order("fecha_emision");
-  if (periodo) consultaSire = consultaSire.eq("periodo", periodo);
-  const { data: sire, error: e1 } = await consultaSire;
-  if (e1) { console.error("✗ No se pudo leer comprobantes_sunat:", e1.message); process.exit(1); }
+  const PAGINA = 1000;
+  async function todas<T>(
+    etiqueta: string,
+    pagina: (desde: number, hasta: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+  ): Promise<T[]> {
+    const filas: T[] = [];
+    for (let desde = 0; ; desde += PAGINA) {
+      const { data, error } = await pagina(desde, desde + PAGINA - 1);
+      if (error) { console.error(`✗ No se pudo leer ${etiqueta}:`, error.message); process.exit(1); }
+      filas.push(...(data ?? []));
+      if ((data ?? []).length < PAGINA) return filas;
+    }
+  }
 
-  let consultaYaEstan = sb
+  const asc = !MAS_RECIENTE_PRIMERO;
+  const sire = await todas("comprobantes_sunat", (desde, hasta) => {
+    let q = sb
+      .from("comprobantes_sunat")
+      .select("proveedor_ruc, proveedor_nombre, tipo_comprobante, serie, numero, fecha_emision, total, moneda")
+      .eq("empresa_ruc", RUC)
+      .not("serie", "ilike", "E%")
+      .in("tipo_comprobante", ["01", "07", "08"])
+      .neq("proveedor_ruc", "0");
+    if (periodos.length) q = q.in("periodo", periodos);
+    // Desempate por id: sin un orden total, dos páginas pueden repetir o saltarse filas.
+    return q.order("fecha_emision", { ascending: asc }).order("id", { ascending: asc }).range(desde, hasta);
+  });
+
+  const yaEstan = await todas("cpe_comprobante", (desde, hasta) => sb
     .from("cpe_comprobante")
     .select("proveedor_ruc, tipo_comprobante, serie, numero")
-    .eq("empresa_ruc", RUC);
-  if (periodo) consultaYaEstan = consultaYaEstan.eq("periodo", periodo);
-  const { data: yaEstan, error: e2 } = await consultaYaEstan;
-  if (e2) { console.error("✗ No se pudo leer cpe_comprobante:", e2.message); process.exit(1); }
+    .eq("empresa_ruc", RUC)
+    .not("serie", "ilike", "E%")
+    .order("id")
+    .range(desde, hasta));
 
   const identidad = (c: { proveedor_ruc: string | null; tipo_comprobante: string | null; serie: string | null; numero: string | null }) =>
     `${c.proveedor_ruc}|${c.tipo_comprobante}|${c.serie}|${c.numero}`;
-  const vistos = new Set((yaEstan ?? []).map(identidad));
+  const vistos = new Set(yaEstan.map(identidad));
 
-  return (sire ?? [])
+  return sire
     .filter(c => c.proveedor_ruc && c.tipo_comprobante && c.serie && c.numero)
     .filter(c => !vistos.has(identidad(c)))
     .map(c => ({
@@ -865,8 +887,9 @@ const contexto = await navegador.newContext({
 const page = await contexto.newPage();
 
 try {
-  const etiquetaPeriodo = PERIODO || "todos los períodos";
-  const lista = await pendientes(PERIODO);
+  const etiquetaPeriodo = (PERIODOS.length ? PERIODOS.join(", ") : "todos los períodos")
+    + (MAS_RECIENTE_PRIMERO ? ", lo más reciente primero" : "");
+  const lista = await pendientes(PERIODOS);
   const aProcesar = LIMITE > 0 ? lista.slice(0, LIMITE) : lista;
   console.log(`Pendientes de serie no-E001 en ${etiquetaPeriodo}: ${lista.length}. Se procesan: ${aProcesar.length}${DEBUG ? " (depuración)" : ""}.`);
   if (aProcesar.length === 0) { console.log("Nada que hacer."); process.exit(0); }

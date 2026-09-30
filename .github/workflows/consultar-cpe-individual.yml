@@ -17,7 +17,7 @@
 # entra, llena el formulario y sube capturas + HTML, para fijar selectores
 # sin arriesgar una corrida larga.
 #
-# CRON (agregado el 30/09/2026, tras terminar septiembre a mano): corre solo
+# CRON (agregado el 30/09/2026, con septiembre todavía a medias): corre solo
 # de día —13:30 UTC, 8:30am en Lima, media hora después de `descargar-cpe.yml`
 # y `sunat-diario.yml` (ambos a las 8am)— porque quien mantiene esto sigue
 # corriéndolo a mano por las noches para adelantar el resto del backlog, y
@@ -28,10 +28,18 @@
 # si una corrida (cron o manual) sigue viva cuando debería arrancar otra, la
 # nueva espera en cola en vez de pisar a la que está corriendo.
 #
-# Sin `periodo`, el cron toma TODOS los pendientes ordenados por fecha de
-# emisión —lo más viejo primero—, no un mes fijo: así no hace falta tocar
-# este archivo cada vez que se pasa de mes, y en cuanto el backlog viejo se
-# termine sigue solo con lo que `sunat-diario.yml` vaya trayendo cada día.
+# Qué toma cada uno, para no pisarse el trabajo:
+#   • el cron: el mes anterior y el actual (calculados en hora de Lima, igual
+#     que `sunat-diario.yml`), LO MÁS RECIENTE PRIMERO. Atiende lo que va
+#     entrando cada día y, si le sobra lote, avanza hacia atrás. No hay que
+#     tocar este archivo al cambiar de mes.
+#   • la corrida manual: el período que se le escriba (202609 por omisión),
+#     LO MÁS VIEJO PRIMERO, que es como se viene limpiando el backlog de noche.
+# Nunca se procesa dos veces lo mismo: cada corrida excluye lo que ya está en
+# `cpe_comprobante`, y `concurrency` impide que corran a la vez.
+#
+# Ojo con dejar `periodo` vacío a mano: son TODOS los períodos, y de enero a
+# agosto de 2026 las series no-E001 siguen al 0% (miles de pendientes).
 
 name: SUNAT consultar CPE individual
 
@@ -44,9 +52,15 @@ on:
         required: false
         default: true
       periodo:
-        description: "Período a revisar, yyyymm. Vacío = todos los pendientes, del más antiguo al más nuevo."
+        description: "Período(s) a revisar, yyyymm, separados por coma. Vacío = TODOS (incluye el backlog desde enero)."
         required: false
-        default: ""
+        default: "202609"
+      orden:
+        description: "Qué procesar primero."
+        type: choice
+        options: [antiguo, reciente]
+        required: false
+        default: antiguo
       limite:
         description: "Cuántos pendientes procesar en esta corrida. 0 = todos los que falten."
         required: false
@@ -86,6 +100,17 @@ jobs:
 
       - run: npx playwright install --with-deps chromium
 
+      # Solo el cron: mes anterior y actual en hora de Lima. El runner está en
+      # UTC, y a las 8:30am de Lima ya es el mismo día en UTC, pero se calcula
+      # con la zona igual para no depender de esa coincidencia.
+      - name: Calcular los períodos de la corrida programada
+        id: periodos
+        if: github.event_name == 'schedule'
+        run: |
+          actual=$(TZ=America/Lima date +%Y%m)
+          anterior=$(TZ=America/Lima date -d "$(TZ=America/Lima date +%Y-%m-01) -1 day" +%Y%m)
+          echo "valor=${anterior},${actual}" >> "$GITHUB_OUTPUT"
+
       - name: Entrar a SOL y confirmar los pendientes, uno por uno
         env:
           SUNAT_RUC: ${{ secrets.SUNAT_RUC }}
@@ -114,7 +139,8 @@ jobs:
           # dropdown de "Sin definir"), y el límite cae al de un cron, no al
           # "3" de depuración manual.
           DEBUG: ${{ inputs.debug && '1' || '0' }}
-          PERIODO: ${{ inputs.periodo }}
+          PERIODO: ${{ github.event_name == 'schedule' && steps.periodos.outputs.valor || inputs.periodo }}
+          ORDEN: ${{ github.event_name == 'schedule' && 'reciente' || inputs.orden }}
           LIMITE: ${{ inputs.limite || (github.event_name == 'schedule' && '100' || '3') }}
         run: node --experimental-strip-types scripts/consultar-cpe-individual.mts
 
