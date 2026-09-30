@@ -33,10 +33,17 @@
 // el resultado y guardarlo en `cpe_comprobante`—, igual que se hizo con
 // boletas en `descargar-cpe.mts`.
 
-import { chromium, type Page, type Frame } from "playwright";
+import { chromium, type Page, type Frame, type Download } from "playwright";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { createClient } from "@supabase/supabase-js";
+import { Readable } from "node:stream";
+import { google } from "googleapis";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { normalizarClavePrivada, correoDeServicio, carpeta, publicarHoja } from "../lib/drive/servidor.ts";
+import { leerZip } from "../lib/sunat/zip.ts";
+import { leerComprobanteXml, type ComprobanteCpe } from "../lib/sunat/cpe-xml.ts";
+import { prepararLote, origenDe, periodoDe, identidad } from "../lib/sunat/cpe-importacion.ts";
+import { filasItemsSunat, filaDetalleDesdeRpc, detalleCpeCompleto, TIPOS_ITEMS } from "../lib/export/items-sunat.ts";
 
 function pedir(...nombres: string[]): string {
   for (const n of nombres) { const v = (process.env[n] ?? "").trim(); if (v) return v; }
@@ -58,6 +65,11 @@ const PERIODO = process.env.PERIODO?.trim() || "202609";
 const LIMITE = Number(process.env.LIMITE?.trim() || (DEBUG ? "3" : "0"));
 
 const LOGIN_URL = "https://e-menu.sunat.gob.pe/cl-ti-itmenu/MenuInternet.htm";
+
+// La misma carpeta de Drive donde descargar-cpe.mts archiva los
+// comprobantes: son el mismo tipo de documento (XML+PDF de una factura),
+// solo que llegan por una pantalla distinta.
+const CARPETA_DRIVE = process.env.SUNAT_DRIVE_FOLDER?.trim() || "1RnyGimYdnhbQ3nKxGOoBc_iRz38fxCnX";
 
 /** Un paso del menú: qué texto clicar y, si hace falta, en qué posición. */
 interface PasoMenu { texto: string; posicion?: "primera" | "ultima" }
@@ -409,6 +421,25 @@ function etiquetaTipoComprobante(tipoComprobante: string): string {
 }
 
 /**
+ * Para 07/08 (notas): si la nota modifica una factura o una boleta, según el
+ * prefijo de su propia serie —«FC01» modifica facturas, «BC01» boletas, la
+ * misma convención de SUNAT para la serie de la nota que para la del
+ * comprobante que corrige—.
+ *
+ * Hace falta desde el run #22 (29/09/2026): el desplegable ya no trae «Nota
+ * de Crédito» sola, la junta con el tipo que modifica —«Factura - Nota de
+ * Crédito», «Boleta de Venta - Nota de Crédito»—. Sin esto, buscar solo por
+ * «Nota de Crédito» encuentra las DOS opciones (las dos contienen esas
+ * palabras) y se queda con la primera que aparezca, sin importar si es la
+ * correcta: los runs #22-24 (300 pendientes) perdieron casi todo por esto —
+ * la opción equivocada deja la serie «incorrecta» y SUNAT nunca abre el
+ * modal de resultado.
+ */
+function calificadorTipoComprobante(serie: string): string {
+  return /^B/i.test(serie) ? "Boleta de Venta" : "Factura";
+}
+
+/**
  * Lo que el SIRE ya sabe que existe, para este período, con serie distinta
  * a E001 —la que la consulta por rango sí cubre—, y que todavía no está en
  * `cpe_comprobante`.
@@ -508,8 +539,14 @@ async function elegirFiltroRecibido(marco: Frame): Promise<void> {
  * Se clica el texto visible «Seleccionar» —el placeholder del combobox
  * vacío— y se busca la opción entre los contenedores típicos de un
  * desplegable moderno (`li`, `[role="option"]`, `.p-dropdown-item`).
+ *
+ * `calificador` (solo para 07/08, ver `calificadorTipoComprobante`) desempata
+ * cuando el texto de `etiqueta` calza con MÁS de una opción —confirmado por
+ * el run #26 (29/09/2026, debug): «Nota de Crédito» calzó con «Factura -
+ * Nota de Crédito» Y «Boleta de Venta - Nota de Crédito» a la vez, y sin
+ * desempate se quedaba con la primera sin mirar si era la correcta.
  */
-async function elegirTipoComprobante(marco: Frame, etiqueta: string): Promise<void> {
+async function elegirTipoComprobante(marco: Frame, etiqueta: string, calificador?: string): Promise<void> {
   const campo = marco.getByText("Seleccionar", { exact: true }).first();
   if (!(await campo.count())) {
     console.log("  ⚠ no encontré el combobox de «Tipo de comprobante» (¿ya no dice «Seleccionar»?).");
@@ -518,9 +555,17 @@ async function elegirTipoComprobante(marco: Frame, etiqueta: string): Promise<vo
   await campo.click().catch(() => {});
   await marco.page().waitForTimeout(600);
 
-  const opcion = marco.locator(
+  const candidatos = marco.locator(
     `li:has-text("${etiqueta}"), [role="option"]:has-text("${etiqueta}"), .p-dropdown-item:has-text("${etiqueta}"), .ui-menu-item:has-text("${etiqueta}"), option:has-text("${etiqueta}")`
-  ).first();
+  );
+  const n = await candidatos.count();
+  let opcion = candidatos.first();
+  if (calificador && n > 1) {
+    for (let i = 0; i < n; i++) {
+      const texto = (await candidatos.nth(i).textContent().catch(() => "")) ?? "";
+      if (texto.includes(calificador)) { opcion = candidatos.nth(i); break; }
+    }
+  }
   if (await opcion.count()) {
     await opcion.click().catch(() => {});
   } else {
@@ -544,7 +589,9 @@ async function llenarFormulario(page: Page, p: Pendiente): Promise<Frame | null>
 
     try {
       await elegirFiltroRecibido(f);
-      await elegirTipoComprobante(f, etiquetaTipoComprobante(p.tipoComprobante));
+      const calificador = (p.tipoComprobante === "07" || p.tipoComprobante === "08")
+        ? calificadorTipoComprobante(p.serie) : undefined;
+      await elegirTipoComprobante(f, etiquetaTipoComprobante(p.tipoComprobante), calificador);
       await rucInput.fill(p.proveedorRuc);
       await f.locator('input[name="serieComprobante"]').first().fill(p.serie);
       await f.locator('input[name="numeroComprobante"]').first().fill(p.numero);
@@ -572,6 +619,226 @@ async function clicConsultar(marco: Frame) {
   console.log("  ⚠ no encontré el botón Consultar/Buscar.");
 }
 
+// ── FASE 2: bajar de verdad, archivar y guardar ─────────────────────
+
+interface ArchivoBajado { nombre: string; datos: Buffer; tipo: string }
+
+/** Dispara una descarga y la devuelve como buffer con su nombre. Igual que en descargar-cpe.mts. */
+async function bajar(page: Page, accion: () => Promise<void>): Promise<ArchivoBajado> {
+  const [descarga] = await Promise.all([
+    page.waitForEvent("download", { timeout: 60000 }) as Promise<Download>,
+    accion(),
+  ]);
+  const stream = await descarga.createReadStream();
+  const trozos: Buffer[] = [];
+  for await (const t of stream) trozos.push(t as Buffer);
+  const nombre = descarga.suggestedFilename();
+  const tipo = /\.pdf$/i.test(nombre) ? "application/pdf"
+    : /\.(xml|zip)$/i.test(nombre) ? (/\.zip$/i.test(nombre) ? "application/zip" : "application/xml")
+    : "application/octet-stream";
+  return { nombre, datos: Buffer.concat(trozos), tipo };
+}
+
+/**
+ * Descarga el XML y el PDF del modal «Resultado».
+ *
+ * Los botones no tienen texto ni `onclick` —son íconos de Angular—, pero sí
+ * un `ngbtooltip` con el nombre de la acción, confirmado por el HTML real
+ * del run #13 (29/09/2026): «Descargar PDF», «Descargar XML», «Descargar
+ * CDR» (el acuse de SUNAT, que no hace falta acá), «Imprimir», «Enviar
+ * Correo». Ese atributo es un selector mucho más firme que cualquier clase
+ * de Angular, que cambia de una versión a otra del build.
+ */
+async function descargarXmlYPdf(page: Page, marco: Frame): Promise<{ xml: ArchivoBajado | null; pdf: ArchivoBajado | null }> {
+  let xml: ArchivoBajado | null = null;
+  let pdf: ArchivoBajado | null = null;
+
+  const botonXml = marco.locator('button[ngbtooltip="Descargar XML"]').first();
+  if (await botonXml.count()) {
+    try { xml = await bajar(page, () => botonXml.click()); }
+    catch (e) { console.log(`  · no se pudo bajar el XML: ${e instanceof Error ? e.message : e}`); }
+  } else {
+    console.log("  ⚠ no encontré el botón «Descargar XML» en el modal.");
+  }
+
+  const botonPdf = marco.locator('button[ngbtooltip="Descargar PDF"]').first();
+  if (await botonPdf.count()) {
+    try { pdf = await bajar(page, () => botonPdf.click()); }
+    catch (e) { console.log(`  · no se pudo bajar el PDF: ${e instanceof Error ? e.message : e}`); }
+  } else {
+    console.log("  ⚠ no encontré el botón «Descargar PDF» en el modal.");
+  }
+
+  return { xml, pdf };
+}
+
+/** El o los XML que trae una descarga: sueltos o dentro de un ZIP. Igual que en descargar-cpe.mts. */
+function xmlsDe(f: ArchivoBajado): string[] {
+  if (/\.zip$/i.test(f.nombre)) {
+    return leerZip(f.datos).filter(a => /\.xml$/i.test(a.nombre)).map(a => decodificar(a.contenido));
+  }
+  if (/\.xml$/i.test(f.nombre)) return [decodificar(f.datos)];
+  return [];
+}
+
+/** Decodifica por lo que los bytes SON, no por lo que el XML dice que son. Igual que en descargar-cpe.mts. */
+function decodificar(buf: Buffer): string {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(buf);
+  } catch {
+    return buf.toString("latin1");
+  }
+}
+
+function clienteDrive() {
+  const email = correoDeServicio(process.env.GOOGLE_SA_EMAIL, process.env.GOOGLE_SA_PRIVATE_KEY);
+  const key = normalizarClavePrivada(process.env.GOOGLE_SA_PRIVATE_KEY);
+  if (!email || !key) { console.error("✗ Faltan GOOGLE_SA_EMAIL / GOOGLE_SA_PRIVATE_KEY."); process.exit(1); }
+  const auth = new google.auth.JWT({ email, key, scopes: ["https://www.googleapis.com/auth/drive"] });
+  return google.drive({ version: "v3", auth });
+}
+
+/** Sube un archivo sin repetir el que ya está. Igual que en descargar-cpe.mts. */
+async function subirADrive(
+  drive: ReturnType<typeof clienteDrive>, carpetaId: string, f: ArchivoBajado
+): Promise<{ estado: "nuevo" | "existe"; url: string | null }> {
+  const q = `name = '${f.nombre.replace(/'/g, "\\'")}' and '${carpetaId}' in parents and trashed = false`;
+  const ya = await drive.files.list({
+    q, fields: "files(id,webViewLink)", supportsAllDrives: true, includeItemsFromAllDrives: true,
+  });
+  if (ya.data.files && ya.data.files.length > 0) {
+    return { estado: "existe", url: ya.data.files[0].webViewLink ?? null };
+  }
+  const creado = await drive.files.create({
+    requestBody: { name: f.nombre, parents: [carpetaId] },
+    media: { mimeType: f.tipo, body: Readable.from(f.datos) },
+    fields: "id,webViewLink",
+    supportsAllDrives: true,
+  });
+  return { estado: "nuevo", url: creado.data.webViewLink ?? null };
+}
+
+/**
+ * Reintenta una llamada a Drive si el cupo de la API se llenó («User rate
+ * limit exceeded», 403/429) —confirmado por el run #16 (29/09/2026): tumbó
+ * la corrida entera en el pendiente 47/100 justo ahí—. Ese cupo se despeja
+ * solo en unos segundos; perder el comprobante entero por eso, después de ya
+ * haberlo confirmado y bajado de SUNAT (lo caro), sería tirar todo por el
+ * paso más barato de reintentar.
+ */
+async function conReintentoDeCupo<T>(fn: () => Promise<T>, intentos = 4): Promise<T> {
+  let ultimo: unknown;
+  for (let i = 1; i <= intentos; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!/rate limit|quota|429/i.test(msg) || i === intentos) throw e;
+      ultimo = e;
+      console.log(`  · cupo de Drive lleno, reintento ${i}/${intentos} en ${5 * i}s: ${msg.split("\n")[0]}`);
+      await new Promise(r => setTimeout(r, 5000 * i));
+    }
+  }
+  throw ultimo;
+}
+
+const carpetasPorRuta = new Map<string, Promise<string>>();
+/** La carpeta para un origen y un período, cacheada. Igual que en descargar-cpe.mts. */
+async function carpetaDelLote(
+  drive: ReturnType<typeof clienteDrive>, origen: "RECIBIDO" | "EMITIDO" | "OTRO", periodo: string | null
+): Promise<string> {
+  const sub = origen === "RECIBIDO" ? "Recibidas" : origen === "EMITIDO" ? "Emitidas" : "Otros";
+  const mes = periodo && /^\d{6}$/.test(periodo) ? `${periodo.slice(0, 4)}-${periodo.slice(4, 6)}` : "Sin fecha";
+  const clave = `${sub}/${mes}`;
+  let promesa = carpetasPorRuta.get(clave);
+  if (!promesa) {
+    promesa = (async () => {
+      const idSub = await carpeta(drive, sub, CARPETA_DRIVE);
+      return carpeta(drive, mes, idSub);
+    })();
+    carpetasPorRuta.set(clave, promesa);
+  }
+  return promesa;
+}
+
+/** Entra a la base como el robot. `null` si falla, que es un aviso, no un motivo para tumbar la corrida. */
+async function clienteBase(): Promise<SupabaseClient | null> {
+  const url = process.env.SUPABASE_URL || process.env.PROJECT_URL;
+  if (!url) return null;
+  const sb = createClient(url, pedir("SUPABASE_ANON_KEY", "ANON_KEY"),
+    { auth: { autoRefreshToken: false, persistSession: false } });
+  const { error } = await sb.auth.signInWithPassword({
+    email: pedir("ROBOT_CORREO"), password: pedir("ROBOT_CLAVE"),
+  });
+  if (error) { console.error("⚠ No se pudo entrar a la base:", error.message); return null; }
+  return sb;
+}
+
+/**
+ * Guarda el lote de comprobantes confirmados en `cpe_comprobante`, y
+ * devuelve el cliente ya logueado como el robot para que el llamador pueda
+ * reusarlo y publicar la hoja de detalle sin loguearse de nuevo.
+ *
+ * Mismo `guardar_cpe` que usa `descargar-cpe.mts`: un comprobante que ya
+ * estaba se actualiza en vez de duplicarse, así que repetir un rango ya
+ * confirmado no hace daño.
+ */
+async function guardarLote(
+  comprobantes: Array<{ c: ComprobanteCpe; xmlUrl: string | null; pdfUrl: string | null }>
+): Promise<SupabaseClient | null> {
+  if (comprobantes.length === 0) return null;
+  const lote = prepararLote(comprobantes.map(x => x.c), RUC);
+  if (lote.length === 0) return null;
+
+  const urlsPorIdentidad = new Map(comprobantes.map(x => [identidad(x.c), x]));
+  for (const d of lote) {
+    const par = urlsPorIdentidad.get(identidad(d));
+    d.xmlDriveUrl = par?.xmlUrl ?? null;
+    d.pdfDriveUrl = par?.pdfUrl ?? null;
+  }
+
+  const sb = await clienteBase();
+  if (!sb) return null;
+  const { data, error } = await sb.rpc("guardar_cpe", { p_empresa_ruc: RUC, p_docs: lote });
+  if (error) { console.error("⚠ No se guardó el detalle:", error.message); return null; }
+  const r = (Array.isArray(data) ? data[0] : data) as { nuevos: number; actualizados: number; items: number };
+  console.log(`Guardado en cpe_comprobante: ${r?.nuevos} nuevos, ${r?.actualizados} actualizados, ${r?.items} ítems.`);
+  return sb;
+}
+
+/**
+ * Deja la hoja «COMPROBANTES SUNAT - DETALLE» al día, igual que hace
+ * `descargar-cpe.mts` tras guardar.
+ *
+ * Sin esto, la hoja se queda como quedó la última vez que alguien la miró
+ * —justo lo que se quería evitar al automatizar—. Es opcional: si faltan las
+ * credenciales de Drive, el detalle igual quedó guardado en la base y solo
+ * se salta la publicación.
+ */
+async function publicarLaHojaDetalle(sb: SupabaseClient): Promise<void> {
+  if (!process.env.GOOGLE_SA_EMAIL || !process.env.GOOGLE_DRIVE_FOLDER_ID) {
+    console.log("Sin credenciales de Drive: no se actualiza la hoja de detalle.");
+    return;
+  }
+
+  let datos: Record<string, unknown>[];
+  try {
+    datos = await detalleCpeCompleto(sb, null);
+  } catch (e) {
+    console.error("⚠ No se pudo leer el detalle para la hoja:", e instanceof Error ? e.message : e);
+    return;
+  }
+
+  const filas = datos.map(filaDetalleDesdeRpc);
+  const r = await publicarHoja({
+    filas: filasItemsSunat(filas),
+    nombre: "COMPROBANTES SUNAT - DETALLE",
+    carpetas: ["SUNAT"],
+    tipos: TIPOS_ITEMS,
+  });
+  console.log(`Hoja de detalle al día: ${filas.length} ítems · ${r.url}`);
+}
+
 // ── Principal ─────────────────────────────────────────────────────
 
 const navegador = await chromium.launch({
@@ -593,27 +860,83 @@ try {
 
   await entrar(page);
 
+  const drive = DEBUG ? null : clienteDrive();
+  let nuevos = 0, existentes = 0, confirmados = 0;
+  let comprobantes: Array<{ c: ComprobanteCpe; xmlUrl: string | null; pdfUrl: string | null }> = [];
+
+  // El run #16 (29/09/2026) mostró por qué guardar todo junto al final es
+  // frágil: un cupo de API lleno en el pendiente 47/100 tumbó la corrida
+  // entera, y como `guardarLote` recién se llamaba DESPUÉS del for, los 46
+  // confirmados y ya archivados en Drive antes de ese punto no llegaron a
+  // `cpe_comprobante` —trabajo hecho pero no guardado—. Ahora se vuelca a la
+  // base cada tantos confirmados, así una corrida grande solo arriesga el
+  // último lote parcial, no todo lo caminado.
+  const LOTE_GUARDADO = 20;
+  async function volcar(): Promise<void> {
+    if (comprobantes.length === 0) return;
+    const sb = await guardarLote(comprobantes);
+    if (sb) await publicarLaHojaDetalle(sb);
+    comprobantes = [];
+  }
+
   for (const [i, p] of aProcesar.entries()) {
     console.log(`\n── ${i + 1}/${aProcesar.length}: ${p.proveedorNombre ?? p.proveedorRuc} · ${p.tipoComprobante} ${p.serie}-${p.numero} ──`);
-    await abrirFormularioIndividual(page);
-    if (DEBUG) await radiografiaFormulario(page);
+    try {
+      await abrirFormularioIndividual(page);
+      if (DEBUG) await radiografiaFormulario(page);
 
-    const marco = await llenarFormulario(page, p);
-    await evidencia(page, `form-lleno-${p.serie}-${p.numero}`);
-    if (marco) {
-      await clicConsultar(marco);
-      await page.waitForTimeout(2000);
-      await evidencia(page, `resultado-${p.serie}-${p.numero}`);
-      if (DEBUG) await radiografiaResultado(page, `resultado-html-${p.serie}-${p.numero}`);
+      const marco = await llenarFormulario(page, p);
+      await evidencia(page, `form-lleno-${p.serie}-${p.numero}`);
+      if (marco) {
+        await clicConsultar(marco);
+        await page.waitForTimeout(2000);
+        await evidencia(page, `resultado-${p.serie}-${p.numero}`);
+        if (DEBUG) {
+          await radiografiaResultado(page, `resultado-html-${p.serie}-${p.numero}`);
+        } else {
+          // El modal «Resultado» se abre DENTRO del mismo frame que ya
+          // teníamos (es una app de una sola página, sin navegar a otro
+          // lado), así que el `marco` de siempre sirve para buscar los
+          // botones de descarga.
+          const { xml: xmlArchivo, pdf: pdfArchivo } = await descargarXmlYPdf(page, marco);
+          const xmls = xmlArchivo ? xmlsDe(xmlArchivo) : [];
+          const c = xmls[0] ? leerComprobanteXml(xmls[0]) : null;
+
+          if (!c) {
+            console.log("  ⚠ no se pudo leer el XML de este comprobante; no se guarda nada de este.");
+          } else {
+            const origen = origenDe(c, RUC);
+            const periodo = periodoDe(c.fechaEmision);
+            const carpetaId = await carpetaDelLote(drive!, origen, periodo);
+
+            let xmlUrl: string | null = null;
+            let pdfUrl: string | null = null;
+            if (xmlArchivo) {
+              const r = await conReintentoDeCupo(() => subirADrive(drive!, carpetaId, xmlArchivo));
+              if (r.estado === "nuevo") nuevos++; else existentes++;
+              xmlUrl = r.url;
+            }
+            if (pdfArchivo) {
+              const r = await conReintentoDeCupo(() => subirADrive(drive!, carpetaId, pdfArchivo));
+              if (r.estado === "nuevo") nuevos++; else existentes++;
+              pdfUrl = r.url;
+            }
+            comprobantes.push({ c, xmlUrl, pdfUrl });
+            confirmados++;
+            console.log(`  · confirmado y archivado: ${c.serie}-${c.numero}, ${c.moneda} ${c.total}.`);
+          }
+        }
+      }
+    } catch (e) {
+      // Un pendiente puntual (SUNAT lento, un selector que no aparece esta
+      // vez) no debe tirar los 99 restantes: se anota, se sigue con el
+      // siguiente, y lo ya confirmado hasta acá igual se guarda en el
+      // próximo volcado.
+      console.log(`  ✗ este pendiente falló, se sigue con el resto: ${e instanceof Error ? e.message : e}`);
+      await evidencia(page, `error-${p.serie}-${p.numero}`);
     }
 
-    if (!DEBUG) {
-      // FASE 2 (todavía no escrita): leer el resultado de esta pantalla y
-      // guardarlo en cpe_comprobante. Falta ver, con la evidencia de arriba,
-      // qué trae de verdad —de ahí sale si hay XML que bajar o solo datos
-      // en pantalla, y cómo se leen—.
-      console.log("  · fase 2 pendiente: por ahora esto solo confirma, no guarda.");
-    }
+    if (!DEBUG && comprobantes.length >= LOTE_GUARDADO) await volcar();
 
     // Espaciar las solicitudes: el mismo motivo que en descargar-cpe.mts, y
     // acá con más razón —una consulta por CADA comprobante, no una por mes,
@@ -621,8 +944,14 @@ try {
     await page.waitForTimeout(1500);
   }
 
-  console.log(`\nListo: se revisaron ${aProcesar.length} de ${lista.length} pendientes de ${PERIODO}.`);
-  if (DEBUG) console.log("Modo depuración: revisa el artefacto 'capturas/' antes de correr con DEBUG=0.");
+  if (DEBUG) {
+    console.log(`\nListo: se revisaron ${aProcesar.length} de ${lista.length} pendientes de ${PERIODO}.`);
+    console.log("Modo depuración: revisa el artefacto 'capturas/' antes de correr con DEBUG=0.");
+  } else {
+    await volcar();
+    console.log(`\nArchivados en Drive: ${nuevos} nuevos, ${existentes} ya estaban.`);
+    console.log(`Listo: se confirmaron ${confirmados} de ${aProcesar.length} pendientes procesados (de ${lista.length} en ${PERIODO}).`);
+  }
 } catch (e) {
   await evidencia(page, "error");
   console.error("✗", e instanceof Error ? e.message : e);

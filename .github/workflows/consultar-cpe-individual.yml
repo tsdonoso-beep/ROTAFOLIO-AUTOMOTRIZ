@@ -9,11 +9,13 @@
 # SUNAT qué existe: la lista de pendientes sale del SIRE (`comprobantes_sunat`,
 # que ya trae RUC+serie+número de cada compra) y esto solo confirma cada uno.
 #
-# FASE 1 (la de ahora): depuración. Todavía no se sabe qué trae la pantalla
-# de resultado, así que por omisión (debug=true) esto entra, llena el
-# formulario con unos pocos pendientes y sube capturas + HTML, sin guardar
-# nada. Con esa evidencia se escribe la fase 2 (guardar de verdad) y recién
-# ahí tiene sentido correr con debug=false y limite en 0 para terminar un mes.
+# Encuentra el comprobante en «Nueva Consulta de comprobantes de pago», baja
+# el XML y el PDF de verdad (el modal «Resultado» trae botones para eso,
+# identificados por 29/09/2026), los archiva en la misma carpeta de Drive de
+# descargar-cpe.mts y guarda el detalle en `cpe_comprobante` con la misma
+# `guardar_cpe`. Con debug=true (por omisión) no baja ni guarda nada: solo
+# entra, llena el formulario y sube capturas + HTML, para fijar selectores
+# sin arriesgar una corrida larga.
 
 name: SUNAT consultar CPE individual
 
@@ -63,6 +65,16 @@ jobs:
           SUNAT_SOL_CLAVE: ${{ secrets.SUNAT_SOL_CLAVE }}
           SUNAT_INROPRIN_USUARIO: ${{ secrets.SUNAT_INROPRIN_USUARIO }}
           SUNAT_INROPRIN_CLAVE: ${{ secrets.SUNAT_INROPRIN_CLAVE }}
+          # La misma carpeta de Drive donde descargar-cpe.mts archiva los
+          # comprobantes. Solo hacen falta para guardar; en depuración no se
+          # tocan.
+          SUNAT_DRIVE_FOLDER: ${{ secrets.SUNAT_DRIVE_FOLDER }}
+          GOOGLE_SA_EMAIL: ${{ secrets.GOOGLE_SA_EMAIL }}
+          GOOGLE_SA_PRIVATE_KEY: ${{ secrets.GOOGLE_SA_PRIVATE_KEY }}
+          # Para dejar publicada la hoja "COMPROBANTES SUNAT - DETALLE" al
+          # terminar, igual que hace descargar-cpe.mts. Si falta, el detalle
+          # igual se guarda y solo se salta la hoja.
+          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           PROJECT_URL: ${{ secrets.PROJECT_URL }}

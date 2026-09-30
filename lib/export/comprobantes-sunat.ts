@@ -45,6 +45,10 @@ export interface ComprobanteHistorico {
   codigoConcar?: string | null;
   /** Lo que conviene revisar del vínculo con la OC. */
   alertasOc?: string | null;
+  /** El archivo (de la carpeta de OC en Drive) que confirmó este vínculo. */
+  archivoOc?: string | null;
+  /** Su enlace, para verificar el vínculo sin buscarlo a mano. */
+  archivoOcUrl?: string | null;
 }
 
 /**
@@ -94,6 +98,7 @@ export const CABECERAS_SUNAT = [
   "Visto por primera vez", "Visto por última vez", "CAR SUNAT",
   "Condición SUNAT", "Buen Contribuyente", "Agente de Retención", "Agente de Percepción",
   "OC (carpeta)", "Centro de costo (CG)", "Código CONCAR", "Revisar vínculo OC",
+  "Archivo que confirma la OC", "Enlace del archivo (OC)",
 ];
 
 /**
@@ -145,6 +150,8 @@ export const TIPOS_SUNAT: TipoColumna[] = [
   "texto",  // Centro de costo (CG)
   "texto",  // Código CONCAR
   "texto",  // Revisar vínculo OC
+  "texto",  // Archivo que confirma la OC
+  "texto",  // Enlace del archivo (OC)
 ];
 
 const NOMBRE_TIPO: Record<string, string> = {
@@ -223,6 +230,8 @@ export function filasComprobantesSunat(
       // En blanco si la equivalencia no está confirmada: mejor vacío que dudoso.
       c.codigoConcar ?? "",
       c.alertasOc ?? "",
+      c.archivoOc ?? "",
+      c.archivoOcUrl ?? "",
       ];
     }),
   ];

@@ -58,22 +58,32 @@ describe("filasItemsSunat", () => {
     assert.equal(r[27], "https://drive.google.com/file/d/xml/view");
   });
 
-  test("la OC de la carpeta, el centro de costo y el código CONCAR van después del XML", () => {
-    const r = filasItemsSunat([fila({ ocCarpeta: "0115-2026", centroCostoCg: "PROY-2025-079-5", codigoConcar: "30016" })])[1];
-    assert.deepEqual(r.slice(28), ["0115-2026", "PROY-2025-079-5", "30016"]);
+  test("la OC de la carpeta, el centro de costo, el código CONCAR y el archivo que la confirma van después del XML", () => {
+    const r = filasItemsSunat([fila({
+      ocCarpeta: "0115-2026", centroCostoCg: "PROY-2025-079-5", codigoConcar: "30016",
+      archivoOc: "FACTURA F001-18178.pdf", archivoOcUrl: "https://drive.google.com/file/d/xyz/view",
+    })])[1];
+    assert.deepEqual(r.slice(28), [
+      "0115-2026", "PROY-2025-079-5", "30016", "FACTURA F001-18178.pdf", "https://drive.google.com/file/d/xyz/view",
+    ]);
     assert.equal(r.length, CABECERAS_ITEMS.length);
     assert.equal(CABECERAS_ITEMS.length, TIPOS_ITEMS.length);
   });
 
-  test("sin OC vinculada, esas tres columnas quedan vacías", () => {
-    assert.deepEqual(filasItemsSunat([fila()])[1].slice(28), ["", "", ""]);
+  test("sin OC vinculada, esas cinco columnas quedan vacías", () => {
+    assert.deepEqual(filasItemsSunat([fila()])[1].slice(28), ["", "", "", "", ""]);
   });
 
   test("la fila cruda de detalle_cpe trae la OC en snake_case", () => {
-    const f = filaDetalleDesdeRpc({ oc_carpeta: "0115-2026", centro_costo_cg: "PROY-2025-079-5", codigo_concar: null });
+    const f = filaDetalleDesdeRpc({
+      oc_carpeta: "0115-2026", centro_costo_cg: "PROY-2025-079-5", codigo_concar: null,
+      archivo_oc: "FACTURA F001-18178.pdf", archivo_oc_url: "https://drive.google.com/file/d/xyz/view",
+    });
     assert.equal(f.ocCarpeta, "0115-2026");
     assert.equal(f.centroCostoCg, "PROY-2025-079-5");
     assert.equal(f.codigoConcar, null);
+    assert.equal(f.archivoOc, "FACTURA F001-18178.pdf");
+    assert.equal(f.archivoOcUrl, "https://drive.google.com/file/d/xyz/view");
   });
 
   test("sin enlace archivado queda vacío, no como texto 'null'", () => {
