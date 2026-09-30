@@ -65,12 +65,23 @@
   .tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   .tabla th { text-align: left; padding: 0 10px 10px 0; font-size: 11px; font-weight: 600; letter-spacing: .05em;
               text-transform: uppercase; color: var(--text3); border-bottom: 1px solid var(--border2); }
-  .th-num { text-align: right; }
+  .tabla th.th-num { text-align: right; }
   .tabla td { padding: 11px 10px 11px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
   .td-num { text-align: right; font-variant-numeric: tabular-nums; color: var(--text2); }
   .td-monto { color: var(--text); font-weight: 600; }
   .td-sub { font-size: 11.5px; color: var(--text3); margin-top: 2px; }
 
+  /* Indicadores para Contabilidad */
+  .seccion-titulo { font-family: "Sora", sans-serif; font-size: 13px; font-weight: 700; letter-spacing: .08em;
+                    text-transform: uppercase; color: var(--accent-texto); margin: 30px 0 12px; }
+  .nota { font-size: 12.5px; color: var(--text2); margin: -6px 0 14px; line-height: 1.45; }
+  .buscador { width: 100%; max-width: 360px; padding: 9px 12px; border: 1px solid var(--border2); border-radius: 10px;
+              font: inherit; font-size: 13.5px; margin-bottom: 12px; background: var(--surface); color: var(--text); }
+  .desplazable { overflow-x: auto; }
+  .sube { color: var(--danger); font-weight: 600; }
+  .baja { color: #0A6E4E; font-weight: 600; }
+  .igual { color: var(--text3); }
+  .pildora { display: inline-block; font-size: 11.5px; padding: 2px 8px; border-radius: 20px; background: var(--surface3); color: var(--text2); }
   .pie { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;
          margin-top: 24px; font-size: 12px; color: var(--text3); }
 </style>
@@ -136,6 +147,37 @@
     <div id="tablaProveedores"></div>
   </section>
 
+  <p class="seccion-titulo">Indicadores para Contabilidad</p>
+
+  <section class="tarjeta tarjeta-ancha">
+    <h2>Por mes: total, detracción y gastos de importación (en soles)</h2>
+    <div class="desplazable" id="tablaMes"></div>
+  </section>
+
+  <section class="tarjeta tarjeta-ancha">
+    <h2>Precios en el tiempo</h2>
+    <p class="nota">Lo que se pagó por cada producto la primera y la última vez que se compró (precio unitario sin IGV, en su moneda). Sirve para revalorizar el Kardex. Solo productos comprados en dos meses o más.</p>
+    <input class="buscador" id="buscarPrecio" type="search" placeholder="Buscar producto o proveedor…">
+    <div class="desplazable" id="tablaPrecios"></div>
+  </section>
+
+  <section class="tarjeta tarjeta-ancha">
+    <h2>Importaciones: gastos con factura en SUNAT</h2>
+    <p class="nota">Flete, aduana, courier y demás gastos en Perú unidos a cada OC de importación. La factura del proveedor extranjero no pasa por SUNAT: está en la carpeta de la OC.</p>
+    <div class="desplazable" id="tablaImpo"></div>
+  </section>
+
+  <section class="tarjeta tarjeta-ancha">
+    <h2>Proveedores mes a mes (últimos 6 meses, en soles)</h2>
+    <div class="desplazable" id="tablaProvMes"></div>
+  </section>
+
+  <section class="tarjeta tarjeta-ancha">
+    <h2>A dónde va el gasto: centros de costo</h2>
+    <p class="nota" id="notaCentros"></p>
+    <div id="barrasCentros"></div>
+  </section>
+
   <footer class="pie">
     <span id="pie"></span>
     <a class="boton boton-accent" id="enlaceHoja2" href="#" target="_blank" rel="noopener">Ver el detalle completo ↗</a>
@@ -193,7 +235,9 @@
       tarjetaKpi('Monto total (' + esc(d.monedaPrincipal) + ')', esc(d.montoPrincipalTexto), otrasMonedasHtml) +
       tarjetaKpi('Proveedores distintos', d.proveedoresDistintosTexto) +
       tarjetaKpi('Con detracción', esc(d.montoDetraccionTexto), '<div class="kpi-extra">' + d.documentosConDetraccion + ' comprobantes</div>') +
-      tarjetaKpi('Período cubierto', esc(d.rangoPeriodo), null, true);
+      tarjetaKpi('Período cubierto', esc(d.rangoPeriodo), null, true) +
+      (d.cobertura ? tarjetaKpi('Unidos a su OC', d.cobertura.conOcPct + '%', '<div class="kpi-extra">' + d.cobertura.conOcTexto + ' de los recibidos</div>') +
+        tarjetaKpi('Con centro de costo', d.cobertura.conCcPct + '%', '<div class="kpi-extra">' + d.cobertura.conCcTexto + ' de los recibidos</div>') : '');
 
     document.getElementById('barrasTipo').innerHTML = d.porTipo.length
       ? d.porTipo.map(filaBarra).join('') : '<p class="vacio">Sin datos.</p>';
@@ -212,8 +256,61 @@
         }).join('') + '</tbody></table>'
       : '<p class="vacio">Sin comprobantes recibidos en el detalle.</p>';
 
+    pintarIndicadores(d);
+
     document.getElementById('pie').textContent =
       'Generado el ' + d.generadoEl + ' · a partir de "COMPROBANTES SUNAT - DETALLE"';
+  }
+
+  function tabla(cabeceras, filas, numericas) {
+    return '<table class="tabla"><thead><tr>' + cabeceras.map(function (c, i) {
+      return '<th' + (numericas && numericas.indexOf(i) !== -1 ? ' class="th-num"' : '') + '>' + esc(c) + '</th>';
+    }).join('') + '</tr></thead><tbody>' + filas.join('') + '</tbody></table>';
+  }
+
+  var PRECIOS = [];
+  function pintarPrecios(filtro) {
+    var f = String(filtro || '').toUpperCase();
+    var lista = PRECIOS.filter(function (p) { return !f || (p.desc + ' ' + p.proveedores).toUpperCase().indexOf(f) !== -1; }).slice(0, 25);
+    document.getElementById('tablaPrecios').innerHTML = lista.length ? tabla(['Producto', 'Primera compra', 'Última compra', 'Variación', 'Meses'],
+      lista.map(function (p) {
+        var clase = p.variacion > 0.5 ? 'sube' : p.variacion < -0.5 ? 'baja' : 'igual';
+        var txt = (p.variacion > 0 ? '+' : '') + p.variacion + '%';
+        return '<tr><td>' + esc(p.desc) + '<div class="td-sub">' + esc(p.unidad) + (p.proveedores ? ' · ' + esc(p.proveedores) : '') + '</div></td>' +
+          '<td class="td-num">' + esc(p.primero) + '</td><td class="td-num td-monto">' + esc(p.ultimo) + '</td>' +
+          '<td class="td-num ' + clase + '">' + txt + '</td><td class="td-num">' + p.meses + '</td></tr>';
+      }), [1, 2, 3, 4]) : '<p class="vacio">Ningún producto coincide.</p>';
+  }
+
+  function pintarIndicadores(d) {
+    if (!d.porMes) return; // un script viejo en el servidor: sin estas secciones
+    document.getElementById('tablaMes').innerHTML = d.porMes.length ? tabla(['Mes', 'Comprobantes', 'Total', 'Detracción', 'Gastos de importación'],
+      d.porMes.map(function (m) {
+        return '<tr><td>' + esc(m.etiqueta) + '</td><td class="td-num">' + m.docs + '</td><td class="td-num td-monto">' + esc(m.total) +
+          '</td><td class="td-num">' + esc(m.detraccion) + '</td><td class="td-num">' + esc(m.impo) + '</td></tr>';
+      }), [1, 2, 3, 4]) : '<p class="vacio">Sin datos.</p>';
+
+    PRECIOS = d.precios || [];
+    pintarPrecios('');
+    document.getElementById('buscarPrecio').oninput = function () { pintarPrecios(this.value); };
+
+    document.getElementById('tablaImpo').innerHTML = d.importaciones.length ? tabla(['OC', 'Proveedores en Perú', 'Comprobantes', 'Gastos en SUNAT', 'Legajo'],
+      d.importaciones.map(function (x) {
+        return '<tr><td><b>' + esc(x.oc) + '</b>' + (x.situacion ? '<div class="td-sub">' + esc(x.situacion) + '</div>' : '') + '</td><td>' + esc(x.proveedores) +
+          '</td><td class="td-num">' + x.docs + '</td><td class="td-num td-monto">' + esc(x.monto) + '</td><td>' +
+          (x.legajo ? '<span class="pildora">' + esc(x.legajo) + '</span>' : '') + '</td></tr>';
+      }), [2, 3]) : '<p class="vacio">Todavía no hay facturas unidas a OC de importación.</p>';
+
+    var pm = d.proveedoresMes;
+    document.getElementById('tablaProvMes').innerHTML = pm.filas.length ? tabla(['Proveedor'].concat(pm.meses).concat(['Total']),
+      pm.filas.map(function (x) {
+        return '<tr><td>' + esc(x.nombre) + '<div class="td-sub">' + esc(x.ruc) + '</div></td>' +
+          x.valores.map(function (v) { return '<td class="td-num">' + esc(v) + '</td>'; }).join('') +
+          '<td class="td-num td-monto">' + esc(x.total) + '</td></tr>';
+      }), pm.meses.map(function (_, i) { return i + 1; }).concat([pm.meses.length + 1])) : '<p class="vacio">Sin datos.</p>';
+
+    document.getElementById('notaCentros').textContent = d.cobertura.conCcPct + '% de los comprobantes recibidos ya tiene centro de costo (sale de su OC). El resto espera que su factura quede unida a una OC.';
+    document.getElementById('barrasCentros').innerHTML = d.centros.length ? d.centros.map(filaBarra).join('') : '<p class="vacio">Todavía sin centros de costo.</p>';
   }
 
   function tarjetaKpi(rotulo, valor, extraHtml, chico) {

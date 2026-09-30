@@ -6,7 +6,10 @@
  * Un enlace propio (no la hoja) para compartir de forma formal: resume el
  * detalle de comprobantes —cuánto, de quién, en qué tipo, cómo se mueve mes
  * a mes— con un botón que abre la hoja real para quien necesite el
- * desglose línea por línea.
+ * desglose línea por línea. Y los indicadores para Contabilidad: precios de
+ * cada producto en el tiempo (para revalorizar el Kardex), cuánto costó cada
+ * importación en gastos con factura de SUNAT, proveedores mes a mes,
+ * detracción por mes y cuánto del gasto ya tiene su OC y su centro de costo.
  *
  * Mismo espíritu que `TableroPadron.gs` + `TableroPadron.html`: este archivo
  * calcula los números UNA vez por visita —no tiene sentido bajar cientos de
@@ -73,18 +76,35 @@ function calcularResumenVista_() {
     iProveedor = col('Proveedor'), iTipo = col('Tipo'), iSerie = col('Serie'),
     iNumero = col('Número'), iMoneda = col('Moneda'), iDetraccion = col('Detracción'),
     iTotal = col('Total del comprobante');
+  // Las columnas que se fueron sumando al final de la hoja: si una versión
+  // vieja no las trae, esas secciones salen vacías en vez de fallar.
+  var opc = function (nombre) { return cab.indexOf(nombre); };
+  var extra = {
+    origen: iOrigen, periodo: iPeriodo, proveedor: iProveedor, moneda: iMoneda,
+    descripcion: opc('Descripción'), unidad: opc('Unidad'), cantidad: opc('Cantidad'),
+    precio: opc('Precio unitario'), importe: opc('Importe'),
+    oc: opc('OC (carpeta)'), cc: opc('Centro de costo (CG)'), area: opc('Área que completa el legajo'),
+    legajo: opc('Legajo de la OC'), situacion: opc('Situación del pago (OC)')
+  };
 
   // El detalle trae una fila por ÍTEM: el mismo comprobante se repite tantas
   // veces como productos tenga. Para no contar ni sumar de más, se agrupa
   // primero por documento (proveedor + tipo + serie + número) y todo lo que
   // sigue se calcula sobre esa lista, no sobre las filas crudas.
   var documentos = {};
+  var precios = {}; // producto → lo que se pagó por él cada mes (para «Precios en el tiempo»)
   for (var f = 1; f < valores.length; f++) {
     var fila = valores[f];
     if (!fila[iRuc] && !fila[iSerie]) continue;
+    anotarPrecio_(precios, fila, extra);
     var clave = [fila[iRuc], fila[iTipo], fila[iSerie], fila[iNumero]].join('|');
     if (documentos[clave]) continue;
     documentos[clave] = {
+      oc: extra.oc >= 0 ? String(fila[extra.oc] || '').trim() : '',
+      cc: extra.cc >= 0 ? String(fila[extra.cc] || '').trim() : '',
+      area: extra.area >= 0 ? String(fila[extra.area] || '') : '',
+      legajo: extra.legajo >= 0 ? String(fila[extra.legajo] || '') : '',
+      situacion: extra.situacion >= 0 ? String(fila[extra.situacion] || '') : '',
       periodo: String(fila[iPeriodo] || ''),
       origen: String(fila[iOrigen] || 'Otro'),
       proveedorRuc: String(fila[iRuc] || ''),
@@ -172,8 +192,16 @@ function calcularResumenVista_() {
     rangoPeriodo = etiquetaPeriodo_(claves[0]) + (claves[0] === claves[claves.length - 1] ? '' : ' – ' + etiquetaPeriodo_(claves[claves.length - 1]));
   }
 
+  var nuevos = indicadoresNuevos_(docs, precios, periodos.length ? aLista(porPeriodo).map(function (p) { return p.clave; }).sort() : []);
+
   return {
     error: null,
+    cobertura: nuevos.cobertura,
+    porMes: nuevos.porMes,
+    precios: nuevos.precios,
+    importaciones: nuevos.importaciones,
+    proveedoresMes: nuevos.proveedoresMes,
+    centros: nuevos.centros,
     urlHoja: URL_HOJA_VISTA,
     generadoEl: Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'America/Lima', "d 'de' MMMM 'de' yyyy, HH:mm"),
     totalDocumentosTexto: miles_(docs.length),
@@ -189,6 +217,131 @@ function calcularResumenVista_() {
     periodos: periodos,
     proveedoresTop: proveedoresTop
   };
+}
+
+// ── Los indicadores para Contabilidad ──
+// Todo sale de columnas que la hoja ya trae. Los montos se suman por
+// moneda y no se convierten: la hoja no trae el tipo de cambio de cada ítem.
+
+/** Una fila de ítem recibido suma a su producto, en su mes. */
+function anotarPrecio_(precios, fila, c) {
+  if (c.descripcion < 0 || c.precio < 0) return;
+  if (String(fila[c.origen]) !== 'Recibido') return;
+  var desc = String(fila[c.descripcion] || '').replace(/\s+/g, ' ').trim();
+  var precio = Number(fila[c.precio]) || 0;
+  if (desc.length < 4 || precio <= 0) return;
+  var unidad = c.unidad >= 0 ? String(fila[c.unidad] || '').trim() : '';
+  var moneda = String(fila[c.moneda] || 'PEN');
+  var k = desc.toUpperCase() + '|' + unidad.toUpperCase() + '|' + moneda;
+  var p = precios[k] || (precios[k] = { desc: desc, unidad: unidad, moneda: moneda, total: 0, meses: {}, proveedores: {} });
+  var cant = c.cantidad >= 0 ? Number(fila[c.cantidad]) || 0 : 0;
+  var imp = c.importe >= 0 ? Number(fila[c.importe]) || 0 : 0;
+  var periodo = String(fila[c.periodo] || '');
+  var m = p.meses[periodo] || (p.meses[periodo] = { cant: 0, imp: 0, suma: 0, n: 0 });
+  if (cant > 0 && imp > 0) { m.cant += cant; m.imp += imp; }
+  m.suma += precio; m.n++;
+  p.total += imp || precio * (cant || 1);
+  p.proveedores[String(fila[c.proveedor] || '')] = true;
+}
+
+function indicadoresNuevos_(docs, precios, clavesPeriodo) {
+  var recibidos = docs.filter(function (d) { return d.origen === 'Recibido'; });
+  var esImpo = function (d) {
+    return /COMEX|IMPORTA/i.test(d.area) || d.oc.split(' / ').some(function (o) { return /^\d{3}-\d{4}$/.test(o.trim()); });
+  };
+  var enSoles = function (d) { return d.moneda === 'PEN' ? d.total : 0; };
+
+  // Cobertura: cuántos recibidos ya están unidos a su OC y a un centro de costo.
+  var conOc = recibidos.filter(function (d) { return d.oc; }).length;
+  var conCc = recibidos.filter(function (d) { return d.cc && d.cc !== '-'; }).length;
+  var cobertura = {
+    recibidos: recibidos.length,
+    conOcTexto: miles_(conOc), conOcPct: recibidos.length ? Math.round(100 * conOc / recibidos.length) : 0,
+    conCcTexto: miles_(conCc), conCcPct: recibidos.length ? Math.round(100 * conCc / recibidos.length) : 0
+  };
+
+  // Por mes: total, detracción y gastos de importación (en soles).
+  var mes = {};
+  docs.forEach(function (d) {
+    var m = mes[d.periodo] || (mes[d.periodo] = { docs: 0, total: 0, detraccion: 0, impo: 0 });
+    m.docs++; m.total += enSoles(d); m.detraccion += d.detraccion;
+    if (d.origen === 'Recibido' && esImpo(d)) m.impo += enSoles(d);
+  });
+  var porMes = clavesPeriodo.map(function (k) {
+    var m = mes[k] || { docs: 0, total: 0, detraccion: 0, impo: 0 };
+    return { etiqueta: etiquetaPeriodo_(k), docs: miles_(m.docs), total: moneda_(m.total), detraccion: moneda_(m.detraccion), impo: moneda_(m.impo) };
+  });
+
+  // Precios en el tiempo: productos comprados en dos meses o más.
+  var lista = [];
+  for (var k in precios) {
+    var p = precios[k];
+    var meses = Object.keys(p.meses).filter(function (x) { return /^\d{6}$/.test(x); }).sort();
+    if (meses.length < 2) continue;
+    var precioDe = function (x) { var m = p.meses[x]; return m.cant > 0 ? m.imp / m.cant : m.suma / m.n; };
+    var ini = precioDe(meses[0]), fin = precioDe(meses[meses.length - 1]);
+    lista.push({
+      desc: p.desc, unidad: p.unidad, moneda: p.moneda, total: p.total,
+      proveedores: Object.keys(p.proveedores).filter(String).slice(0, 2).join(' / '),
+      meses: meses.length,
+      primero: etiquetaPeriodo_(meses[0]) + ' · ' + moneda_(ini, p.moneda),
+      ultimo: etiquetaPeriodo_(meses[meses.length - 1]) + ' · ' + moneda_(fin, p.moneda),
+      variacion: ini > 0 ? Math.round(1000 * (fin - ini) / ini) / 10 : 0
+    });
+  }
+  lista.sort(function (a, b) { return b.total - a.total; });
+  var preciosTop = lista.slice(0, 150);
+
+  // Importaciones: los comprobantes de SUNAT unidos a una OC de importación.
+  var impo = {};
+  recibidos.filter(esImpo).forEach(function (d) {
+    d.oc.split(' / ').forEach(function (o) {
+      o = o.trim(); if (!o) return;
+      var x = impo[o] || (impo[o] = { oc: o, docs: 0, montos: {}, proveedores: {}, legajo: d.legajo, situacion: d.situacion, soles: 0 });
+      x.docs++; x.montos[d.moneda] = (x.montos[d.moneda] || 0) + d.total; x.proveedores[d.proveedor] = true;
+      if (d.moneda === 'PEN') x.soles += d.total;
+    });
+  });
+  var importaciones = Object.keys(impo).map(function (o) {
+    var x = impo[o];
+    return { oc: o, docs: x.docs, soles: x.soles,
+      monto: Object.keys(x.montos).map(function (m) { return moneda_(x.montos[m], m); }).join(' + '),
+      proveedores: Object.keys(x.proveedores).slice(0, 3).join(' / '), legajo: x.legajo, situacion: x.situacion };
+  }).sort(function (a, b) { return b.soles - a.soles; });
+
+  // Proveedores mes a mes: los 10 que más facturaron en los últimos 6 meses (en soles).
+  var ult = clavesPeriodo.filter(function (x) { return /^\d{6}$/.test(x); }).slice(-6);
+  var prov = {};
+  recibidos.forEach(function (d) {
+    if (ult.indexOf(d.periodo) === -1 || d.moneda !== 'PEN') return;
+    var x = prov[d.proveedorRuc] || (prov[d.proveedorRuc] = { nombre: d.proveedor, ruc: d.proveedorRuc, total: 0, meses: {} });
+    x.total += d.total; x.meses[d.periodo] = (x.meses[d.periodo] || 0) + d.total;
+  });
+  var provLista = Object.keys(prov).map(function (r) { return prov[r]; }).sort(function (a, b) { return b.total - a.total; }).slice(0, 10);
+  var proveedoresMes = {
+    meses: ult.map(etiquetaPeriodo_),
+    filas: provLista.map(function (x) {
+      return { nombre: x.nombre, ruc: x.ruc, total: moneda_(x.total),
+        valores: ult.map(function (m) { return x.meses[m] ? moneda_(x.meses[m]) : '—'; }) };
+    })
+  };
+
+  // Centros de costo: a dónde va el gasto recibido ya unido a su OC (en soles).
+  var cc = {};
+  recibidos.forEach(function (d) {
+    if (!d.cc || d.cc === '-') return;
+    var x = cc[d.cc] || (cc[d.cc] = { cantidad: 0, monto: 0 });
+    x.cantidad++; x.monto += enSoles(d);
+  });
+  var centrosLista = Object.keys(cc).map(function (k) { return { clave: k, cantidad: cc[k].cantidad, monto: cc[k].monto }; })
+    .sort(function (a, b) { return b.monto - a.monto; }).slice(0, 10);
+  var maxCc = Math.max.apply(null, [1].concat(centrosLista.map(function (x) { return x.monto; })));
+  var centros = centrosLista.map(function (x) {
+    return { etiqueta: x.clave, cantidad: x.cantidad, montoTexto: moneda_(x.monto), pct: pct_(x.monto, maxCc), color: 'var(--accent)' };
+  });
+
+  return { cobertura: cobertura, porMes: porMes, precios: preciosTop, importaciones: importaciones.slice(0, 40),
+    importacionesTotal: importaciones.length, proveedoresMes: proveedoresMes, centros: centros };
 }
 
 /** "mar 2026" a partir de un período "AAAAMM"; lo que no calce se muestra tal cual. */

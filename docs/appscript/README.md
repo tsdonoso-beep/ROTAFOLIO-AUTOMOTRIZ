@@ -259,6 +259,18 @@ Son dos archivos, mismo patrón que `TableroPadron.gs` + `TableroPadron.html`:
 el script calcula los números una vez por visita y el HTML solo los pinta
 (se los pide con `google.script.run`, no hay que tocar nada de eso).
 
+Además, **indicadores para Contabilidad**, todos con columnas que la hoja ya
+trae (los montos se suman por moneda, sin convertir):
+
+- **Por mes:** total, detracción y gastos de importación.
+- **Precios en el tiempo:** primera y última compra de cada producto, con su
+  variación (sirve para revalorizar el Kardex), con buscador.
+- **Importaciones:** los gastos en Perú con factura de SUNAT (flete, aduana,
+  courier) unidos a cada OC de importación. La factura del proveedor
+  extranjero no pasa por SUNAT: está en la carpeta de la OC.
+- **Proveedores mes a mes** (últimos 6 meses) y **centros de costo**, con el
+  % de lo recibido que ya está unido a su OC y a un centro de costo.
+
 ### Instalación
 
 1. Abre **COMPROBANTES SUNAT - DETALLE** → **Extensiones · Apps Script**.
