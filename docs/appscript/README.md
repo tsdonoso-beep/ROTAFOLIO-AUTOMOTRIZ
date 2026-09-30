@@ -475,6 +475,32 @@ un tope diario de tiempo de ejecución (unas 6 horas en cuentas de empresa, 90
 minutos en Gmail). Si aparece «Service using too much computer time», se
 sigue solo al día siguiente.
 
+## Tablero del legajo (vista para Contabilidad)
+
+`VistaLegajo.gs` + `VistaLegajo.html` van en el **mismo proyecto** que
+`LegajoPorOC.gs` (usan sus constantes) y solo leen TABLA y RESUMEN. Muestran:
+
+- **La lectura**: si la actualización de las 8 PM está programada, cuánto
+  falta para la próxima, la última actualización y si los revisores están
+  trabajando ahora (se refresca sola cada 2 minutos mientras trabajan).
+- **La analítica**, con filtros por unidad, área, mes y situación del pago:
+  legajo completo, factura, guía, pagadas sin factura, monto con legajo
+  incompleto, aún sin pagar; un mapa de calor documento × área (clic → las
+  OC a las que les falta), situación del pago, completitud por unidad,
+  evolución mensual y «quién debe completar» por comprador.
+- **El buscador**: qué le falta a cada OC y a quién le toca (la guía a
+  Almacén; lo demás al área que compró), con el enlace a cada archivo y a
+  la carpeta.
+
+### Cómo se usa
+
+1. En el proyecto de Apps Script de la hoja: **+ → Script** «VistaLegajo»
+   (pega el `.gs`) y **+ → HTML** «VistaLegajo» (pega el `.html`).
+2. Dentro de la hoja: menú **Legajo por OC → 📊 Abrir el tablero**.
+3. Enlace propio para compartir: **Implementar → Nueva implementación →
+   Aplicación web**, «Ejecutar como: Yo» y acceso para tu organización. El
+   estado de los relojes que muestra es el de quien lo implementó.
+
 ## Si algo falla
 
 **«La hoja no trae estas columnas…»** — cambiaron los títulos en la fuente. El

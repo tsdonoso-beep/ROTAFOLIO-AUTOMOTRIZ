@@ -183,7 +183,10 @@ var CAB_ARCHIVOS = ['OC', 'Área', 'Enlace carpeta OC', 'Ubicación', 'Nombre de
 var NACIONAL = 'Compras nacionales', COMEX = 'COMEX (importaciones)';
 
 function onOpen() {
-  SpreadsheetApp.getUi().createMenu('Legajo por OC')
+  var menu = SpreadsheetApp.getUi().createMenu('Legajo por OC');
+  // El tablero (VistaLegajo.gs + VistaLegajo.html), si está en el proyecto.
+  if (typeof abrirTableroLegajo === 'function') menu.addItem('📊 Abrir el tablero', 'abrirTableroLegajo').addSeparator();
+  menu
     .addItem('1. Armar tabla del proyecto ' + PROYECTO.nombre, 'armarTablaLegajo')
     .addItem('1. Armar tabla de TODO el cuadro de aprobaciones 2026', 'armarTablaAprobaciones')
     .addItem('2. Revisar siguiente tanda', 'revisarTandaLegajo')
@@ -321,22 +324,46 @@ function armarTabla_(libro, modo, conservar) {
   // En el modo proyecto todas son de EMPRESA; en el de todo 2026 la misma OC
   // puede existir en Inroprin y en Inroplas, así que la unidad va en la clave.
   var claveDe = function (unidad, oc) { return todo2026 ? normalizar_(unidad) + '|' + oc : oc; };
-  var registro = function (unidad, oc) {
-    var k = claveDe(unidad, oc);
+  // En todo 2026, además: Inroplas repite el mismo número para compras
+  // distintas (la 2601-0007 es una compra nacional, un servicio y una
+  // importación, cada una con su proveedor). `distinguir` (procedencia +
+  // proveedor) las separa; las partes (I), (II) de una misma OC, que tienen
+  // el mismo proveedor, siguen juntas.
+  var porBase = {};
+  var registro = function (unidad, oc, distinguir) {
+    var base = claveDe(unidad, oc);
+    var k = todo2026 && distinguir ? base + '|' + distinguir : base;
     if (!ocs[k]) {
-      ocs[k] = { oc: oc, unidad: [], proyecto: [], fuentes: {}, proc: [], prov: [], ruc: [], req: [], ceco: [], cecoNombre: [],
+      ocs[k] = { oc: oc, base: base, unidad: [], proyecto: [], fuentes: {}, proc: [], prov: [], ruc: [], req: [], ceco: [], cecoNombre: [],
         sidige: [], items: 0, estado: [], cuadro: {}, tipo: [], otroCeco: [], otroProyBase: [],
         links: { aprob: [], planCA: [], plan: [], cg: [] } };
       agregar_(ocs[k].unidad, unidad);
       orden.push(k);
+      (porBase[base] = porBase[base] || []).push(k);
     }
     return ocs[k];
   };
-  var existe = function (unidad, oc) { return !!ocs[claveDe(unidad, oc)]; };
+  var existe = function (unidad, oc) { return !!porBase[claveDe(unidad, oc)]; };
+  /**
+   * La OC ya registrada que corresponde a una fila de otra fuente (CG): si
+   * el número es de una sola, esa; si se repite, la del proveedor parecido.
+   * null si no se puede saber cuál.
+   */
+  var elegir = function (unidad, oc, proveedor) {
+    var cands = porBase[claveDe(unidad, oc)] || [];
+    if (cands.length <= 1) return cands.length ? ocs[cands[0]] : null;
+    var buscado = palabrasDeTitulo_(proveedor), mejor = null, max = 0;
+    cands.forEach(function (k) {
+      var suyas = palabrasDeTitulo_(ocs[k].prov.join(' '));
+      var comunes = buscado.filter(function (w) { return w.length > 2 && suyas.indexOf(w) !== -1; }).length;
+      if (comunes > max) { max = comunes; mejor = ocs[k]; }
+    });
+    return mejor;
+  };
 
   if (!todo2026) armarDesdeElPlan_(registro, existe);
   var mapeo = armarDesdeAprobaciones_(registro, existe, todo2026);
-  armarDesdeControlDeGestion_(registro, existe, todo2026);
+  armarDesdeControlDeGestion_(registro, existe, todo2026, elegir);
 
   // Las filas, como {columna: valor}. Un enlace por OC: primero el del cuadro
   // de aprobaciones (lo pone Compras al pedir la aprobación), después el del
@@ -368,6 +395,7 @@ function armarTabla_(libro, modo, conservar) {
     if (!r.fuentes.cg) revisar.push('no está en Control de Gestión');
     else if (!todo2026 && !r.fuentes.cgProyecto) revisar.push('en Control de Gestión está con otro centro de costo: ' + r.otroCeco.join(' / '));
     else if (!todo2026 && r.otroCeco.length) revisar.push('en Control de Gestión también está en: ' + r.otroCeco.join(' / '));
+    if ((porBase[r.base] || []).length > 1) revisar.push('el número ' + r.oc + ' se repite en el cuadro en ' + porBase[r.base].length + ' OC distintas');
     if (!enlace) revisar.push('sin enlace de carpeta');
     if (ids.length > 1) revisar.push(ids.length + ' carpetas distintas entre las fuentes');
     if (!proc) revisar.push('sin procedencia');
@@ -409,7 +437,7 @@ function armarTabla_(libro, modo, conservar) {
   var cuenta = { filas: filas.length, conCarpeta: conCarpeta, nuevas: 0, aRevisar: 0, conservadas: 0, quitadas: 0, pendientes: 0 };
   var guardadas = {}; // «OC|id de carpeta» cuyas filas de ARCHIVOS se quedan
   var ricos = filas.map(function (o) {
-    var viejo = previo ? previo.buscar(o['Unidad de negocio'], o.OC) : null;
+    var viejo = previo ? previo.buscar(o['Unidad de negocio'], o.OC, idDeDrive_(o['Enlace de la carpeta'])) : null;
     if (previo && !viejo) cuenta.nuevas++;
     if (viejo) viejo.usado = true;
     if (viejo && seConserva_(viejo.valores, o)) {
@@ -496,19 +524,23 @@ function tablaPrevia_(libro) {
   var valores = hoja.getRange(2, 1, n, ancho).getValues();
   var iDocs = DOCS.map(function (d) { return cab.indexOf(d.col); });
   var ricosPorDoc = iDocs.map(function (c) { return c >= 0 ? hoja.getRange(2, c + 1, n, 1).getRichTextValues() : null; });
-  var iOc = cab.indexOf('OC'), iUnidad = cab.indexOf('Unidad de negocio');
+  var iOc = cab.indexOf('OC'), iUnidad = cab.indexOf('Unidad de negocio'), iLink = cab.indexOf('Enlace de la carpeta');
   var porClave = {}, todas = [];
   valores.forEach(function (f, k) {
     var v = {};
     cab.forEach(function (h, j) { if (h) v[h] = f[j]; });
     var x = { valores: v, ricos: ricosPorDoc.map(function (rs) { return rs ? rs[k][0] : rico_(''); }), usado: false };
     todas.push(x);
-    porClave[normalizar_(iUnidad >= 0 ? f[iUnidad] : '') + '|' + f[iOc]] = x;
+    var base = normalizar_(iUnidad >= 0 ? f[iUnidad] : '') + '|' + f[iOc];
+    if (iLink >= 0 && idDeDrive_(f[iLink])) porClave[base + '|' + idDeDrive_(f[iLink])] = x;
+    if (!porClave[base]) porClave[base] = x;
     if (!porClave['|' + f[iOc]]) porClave['|' + f[iOc]] = x;
   });
   return {
-    buscar: function (unidad, oc) {
-      return porClave[normalizar_(unidad) + '|' + oc] || (iUnidad < 0 ? porClave['|' + oc] : null);
+    /** Por unidad + OC + carpeta (la OC repetida con otra carpeta es otra); si no, por unidad + OC. */
+    buscar: function (unidad, oc, idCarpeta) {
+      var base = normalizar_(unidad) + '|' + oc;
+      return (idCarpeta && porClave[base + '|' + idCarpeta]) || porClave[base] || (iUnidad < 0 ? porClave['|' + oc] : null);
     },
     sinUsar: function () { return todas.filter(function (x) { return !x.usado; }).length; }
   };
@@ -657,7 +689,10 @@ function armarDesdeAprobaciones_(registro, existe, todo2026) {
     if (!oc) return;
     var proyecto = String(valor_(f, ap.col(['Proyecto'])) || '');
     if (!todo2026 && !PROYECTO.patron.test(proyecto) && !existe(EMPRESA, oc)) return;
-    var r = registro(todo2026 ? unidad : EMPRESA, oc);
+    var prov = String(valor_(f, ap.col(['PROVEEDOR'])) || '');
+    var distinguir = (procedencia_([String(proc || '')]) === 'Importación' ? 'I' : 'N') + '|' +
+      palabrasDeTitulo_(prov).slice(0, 2).join(' ');
+    var r = registro(todo2026 ? unidad : EMPRESA, oc, distinguir);
     r.fuentes.aprob = true;
     agregar_(r.proyecto, proyecto);
     agregar_(r.req, valor_(f, ap.col(['N° Requerimiento'])));
@@ -678,7 +713,7 @@ function armarDesdeAprobaciones_(registro, existe, todo2026) {
  * Modo proyecto: suma las OC del proyecto que solo están aquí. Todo 2026:
  * solo completa las que ya vienen del cuadro de aprobaciones.
  */
-function armarDesdeControlDeGestion_(registro, existe, todo2026) {
+function armarDesdeControlDeGestion_(registro, existe, todo2026, elegir) {
   var cg = leerTabla_(SpreadsheetApp.openById(CG_ID), CG_PESTANA, ['N° OC/OS', 'LINK DE CARPETA'], true);
   if (!cg) return;
   cg.filas.forEach(function (f, k) {
@@ -692,7 +727,8 @@ function armarDesdeControlDeGestion_(registro, existe, todo2026) {
     var nombre = String(valor_(f, cg.col(['CENTRO DE COSTO'])) || '').trim();
     var delProyecto = !todo2026 && PROYECTO.patron.test(codigo + ' ' + nombre);
     if (!delProyecto && !existe(unidad, oc)) return;
-    var r = registro(unidad, oc);
+    var r = todo2026 ? elegir(unidad, oc, String(valor_(f, cg.col(['PROVEEDOR'])) || '')) : registro(unidad, oc);
+    if (!r) return; // el número se repite y no se sabe de cuál es
     r.fuentes.cg = true;
     if (delProyecto || todo2026) {
       r.fuentes.cgProyecto = true;

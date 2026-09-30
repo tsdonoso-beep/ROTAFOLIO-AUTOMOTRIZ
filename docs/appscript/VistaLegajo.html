@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<base target="_top">
+<title>Legajo por OC · Control documentario</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* Paleta e identidad de INRO (app/globals.css), la misma familia visual
+     que la aplicación y la vista ejecutiva de SUNAT. */
+  :root {
+    --bg:#EDF1F4; --surface:#FFFFFF; --surface2:#F6F8FA; --surface3:#EEF2F6;
+    --border:#E4E9EE; --border2:#D2DAE2;
+    --accent:#00A298; --accent-texto:#007A72; --accent-suave:#E1F4F2;
+    --azul:#006DB1; --azul-suave:#E3EEF7; --amarillo:#FFDD00;
+    --tinta:#1D1D1B; --text:#101A24; --text2:#52627A; --text3:#8494A8;
+    --danger:#C62828; --danger-suave:#FBE9E9; --warn:#A15C07; --warn-suave:#FCF1E0;
+    --ok:#1E7F4F; --ok-suave:#E4F4EB;
+    --sombra: 0 2px 4px rgba(16,26,38,.05), 0 6px 16px rgba(16,26,38,.06);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font-family: "DM Sans", system-ui, sans-serif; -webkit-font-smoothing: antialiased; font-size: 14px; }
+  h2 { font-family: "Sora", sans-serif; font-size: 15px; font-weight: 700; margin: 0; }
+  button, select, input { font-family: inherit; font-size: 13.5px; }
+  .pagina { max-width: 1240px; margin: 0 auto; padding: 28px 24px 56px; }
+  a { color: var(--azul); }
+
+  #cargando, #error { max-width: 1240px; margin: 60px auto; padding: 0 24px; color: var(--text2); font-size: 14px; }
+  #error .sub { color: var(--text2); font-size: 13.5px; }
+
+  /* ── Cabecera ── */
+  .cabecera { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+              margin-bottom: 22px; padding-bottom: 20px; border-bottom: 1px solid var(--border2); }
+  .marca { display: flex; align-items: center; gap: 16px; }
+  .marca-titulo { font-family: "Sora", sans-serif; font-weight: 700; font-size: 17px; }
+  .marca-sub { font-size: 12.5px; color: var(--text2); margin-top: 2px; }
+  .acciones { display: flex; gap: 10px; flex-wrap: wrap; }
+  .boton { display: inline-flex; align-items: center; gap: 6px; background: var(--tinta); color: #fff; border: 0; cursor: pointer;
+           text-decoration: none; font-weight: 600; font-size: 13.5px; padding: 11px 18px; border-radius: 10px;
+           box-shadow: var(--sombra); white-space: nowrap; }
+  .boton:hover { background: #000; }
+  .boton-claro { background: var(--surface); color: var(--text); border: 1px solid var(--border2); box-shadow: none; }
+  .boton-claro:hover { background: var(--surface3); }
+  .boton-accent { background: var(--accent); }
+  .boton-accent:hover { background: var(--accent-texto); }
+
+  /* ── Estado de la lectura ── */
+  .lectura { display: grid; grid-template-columns: 1.1fr 1fr; gap: 0; background: var(--surface); border: 1px solid var(--border);
+             border-radius: 14px; box-shadow: var(--sombra); margin-bottom: 18px; overflow: hidden; }
+  .lectura > div { padding: 18px 22px; min-width: 0; }
+  .lectura > div + div { border-left: 1px solid var(--border); }
+  .lec-rotulo { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text3); margin-bottom: 10px; }
+  .chip { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; font-size: 12.5px; padding: 5px 11px;
+          border-radius: 999px; white-space: nowrap; }
+  .chip-ok { background: var(--ok-suave); color: var(--ok); }
+  .chip-warn { background: var(--warn-suave); color: var(--warn); }
+  .chip-azul { background: var(--azul-suave); color: var(--azul); }
+  .chip-gris { background: var(--surface3); color: var(--text2); }
+  .punto { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
+  .punto-vivo { animation: latido 1.6s ease-in-out infinite; }
+  @keyframes latido { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.75); } }
+  .lec-grande { font-family: "Sora", sans-serif; font-size: 20px; font-weight: 700; margin: 12px 0 4px; letter-spacing: -.01em; }
+  .lec-linea { font-size: 13px; color: var(--text2); margin-top: 6px; line-height: 1.45; }
+  .lec-linea b { color: var(--text); font-weight: 600; }
+  .pasos { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 14px; font-size: 12px; color: var(--text2); }
+  .paso { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 5px 9px; }
+  .flecha { color: var(--text3); }
+  .progreso { height: 10px; background: var(--surface3); border-radius: 6px; overflow: hidden; margin: 12px 0 6px; display: flex; }
+  .progreso > span { height: 100%; }
+  .leyenda { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text2); }
+  .leyenda i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  .resultado { font-size: 12px; color: var(--text3); margin-top: 10px; line-height: 1.45; }
+
+  /* ── Filtros ── */
+  .filtros { position: sticky; top: 0; z-index: 5; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+             background: rgba(237,241,244,.94); backdrop-filter: blur(6px); padding: 10px 24px 12px; margin: 0 -24px 8px; }
+  .filtros label { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--text3); margin-right: -4px; }
+  .filtros select { background: var(--surface); border: 1px solid var(--border2); border-radius: 9px; padding: 8px 10px; color: var(--text); max-width: 190px; }
+  .segmento { display: inline-flex; background: var(--surface); border: 1px solid var(--border2); border-radius: 9px; padding: 3px; }
+  .segmento button { background: none; border: 0; padding: 6px 11px; border-radius: 7px; cursor: pointer; color: var(--text2); font-weight: 600; font-size: 12.5px; }
+  .segmento button.activo { background: var(--tinta); color: #fff; }
+  .limpiar { background: none; border: 0; color: var(--azul); cursor: pointer; font-weight: 600; font-size: 12.5px; padding: 6px 4px; }
+  .filtro-activo { font-size: 12px; color: var(--text2); margin-left: auto; }
+
+  /* ── KPIs ── */
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 18px; }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px 14px; box-shadow: var(--sombra);
+         position: relative; }
+  .kpi-click { cursor: pointer; transition: transform .12s, box-shadow .12s; }
+  .kpi-click:hover { transform: translateY(-1px); box-shadow: 0 4px 10px rgba(16,26,38,.08), 0 10px 24px rgba(16,26,38,.08); }
+  .kpi-rotulo { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text3); margin-bottom: 8px; }
+  .kpi-valor { font-family: "Sora", sans-serif; font-size: 26px; font-weight: 800; letter-spacing: -.01em; line-height: 1.1; }
+  .kpi-valor small { font-size: 14px; font-weight: 700; color: var(--text2); }
+  .kpi-extra { font-size: 12px; color: var(--text2); margin-top: 6px; }
+  .kpi-riesgo { border-color: #F2C9C9; background: linear-gradient(180deg, #FFF 0%, #FFF7F7 100%); }
+  .kpi-riesgo .kpi-valor { color: var(--danger); }
+  .kpi-anillo { display: flex; align-items: center; gap: 14px; }
+  .mini-barra { height: 6px; background: var(--surface3); border-radius: 4px; overflow: hidden; margin-top: 9px; }
+  .mini-barra > span { display: block; height: 100%; border-radius: 4px; }
+
+  /* ── Tarjetas ── */
+  .grilla { display: grid; grid-template-columns: 1.35fr 1fr; gap: 14px; margin-bottom: 14px; }
+  .dos-columnas { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+  .tarjeta { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px; box-shadow: var(--sombra); min-width: 0; }
+  .tarjeta-ancha { margin-bottom: 14px; }
+  .tarjeta-cab { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+  .tarjeta-nota { font-size: 12px; color: var(--text3); }
+  .vacio { color: var(--text3); font-size: 13px; margin: 0; }
+
+  /* Mapa de calor: documento × área */
+  .calor { width: 100%; border-collapse: separate; border-spacing: 0 4px; font-size: 13px; }
+  .calor th { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--text3); text-align: center; padding: 0 4px 4px; }
+  .calor th:first-child { text-align: left; }
+  .calor td { padding: 0 3px; }
+  .calor td.doc { font-weight: 600; white-space: nowrap; padding-right: 10px; }
+  .calor td.doc span { color: var(--text3); font-weight: 500; font-size: 11.5px; margin-left: 4px; }
+  .celda { display: block; width: 100%; border: 0; border-radius: 8px; padding: 8px 6px; text-align: center; cursor: pointer;
+           font-variant-numeric: tabular-nums; transition: outline-color .1s; outline: 2px solid transparent; }
+  .celda:hover { outline-color: var(--tinta); }
+  .celda b { display: block; font-size: 14px; }
+  .celda small { font-size: 11px; opacity: .8; }
+  .celda-na { background: var(--surface2) !important; color: var(--text3) !important; cursor: default; }
+  .celda-na:hover { outline-color: transparent; }
+
+  /* Barras */
+  .fila-barra { margin-bottom: 12px; cursor: pointer; border-radius: 8px; padding: 4px 6px; margin-left: -6px; margin-right: -6px; }
+  .fila-barra:hover { background: var(--surface2); }
+  .fila-barra.activa { background: var(--accent-suave); }
+  .fila-barra:last-child { margin-bottom: 0; }
+  .fb-cab { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; gap: 10px; }
+  .fb-etq { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fb-cifras { font-size: 12.5px; color: var(--text2); white-space: nowrap; }
+  .fb-pista { height: 8px; background: var(--surface3); border-radius: 6px; overflow: hidden; display: flex; }
+  .fb-pista > span { height: 100%; }
+
+  /* Evolución mensual */
+  .meses { display: flex; align-items: flex-end; gap: 10px; height: 190px; padding-top: 10px; overflow-x: auto; }
+  .mes { flex: 1 0 44px; display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; height: 100%; justify-content: flex-end; }
+  .mes-columna { width: 100%; max-width: 46px; display: flex; flex-direction: column-reverse; border-radius: 6px 6px 2px 2px; overflow: hidden;
+                 background: var(--surface3); }
+  .mes-columna > span { display: block; width: 100%; }
+  .mes-etq { font-size: 11.5px; color: var(--text2); font-weight: 600; white-space: nowrap; }
+  .mes-num { font-size: 11px; color: var(--text3); }
+  .mes.activo .mes-etq { color: var(--accent-texto); }
+  .mes.activo .mes-columna { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Tablas */
+  .tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .tabla th { text-align: left; padding: 0 10px 10px 0; font-size: 11px; font-weight: 600; letter-spacing: .05em;
+              text-transform: uppercase; color: var(--text3); border-bottom: 1px solid var(--border2); white-space: nowrap; }
+  .th-num, .td-num { text-align: right; }
+  .tabla td { padding: 10px 10px 10px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .td-num { font-variant-numeric: tabular-nums; color: var(--text2); }
+  .td-sub { font-size: 11.5px; color: var(--text3); margin-top: 2px; }
+  .fila-click { cursor: pointer; }
+  .fila-click:hover td { background: var(--surface2); }
+  .rojo { color: var(--danger); font-weight: 700; }
+
+  /* ── Buscador ── */
+  .buscador { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+  .caja { flex: 1 1 320px; position: relative; }
+  .caja input { width: 100%; border: 1px solid var(--border2); border-radius: 10px; padding: 11px 14px 11px 38px; background: var(--surface2); color: var(--text); }
+  .caja input:focus { outline: 2px solid var(--accent); background: #fff; }
+  .caja svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); }
+  .buscador select { background: var(--surface); border: 1px solid var(--border2); border-radius: 9px; padding: 9px 10px; }
+  .interruptor { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; color: var(--text2); cursor: pointer; user-select: none; }
+  .interruptor input { accent-color: var(--accent); width: 16px; height: 16px; }
+  .etiquetas { display: flex; gap: 8px; flex-wrap: wrap; margin: -4px 0 12px; }
+  .etiqueta { background: var(--tinta); color: #fff; border-radius: 999px; padding: 4px 6px 4px 11px; font-size: 12px; font-weight: 600; display: inline-flex; gap: 6px; align-items: center; }
+  .etiqueta button { background: rgba(255,255,255,.18); border: 0; color: #fff; border-radius: 50%; width: 18px; height: 18px; cursor: pointer; line-height: 1; }
+
+  .resultados th:nth-child(5) { text-align: center; }
+  .puntos { display: inline-flex; gap: 3px; }
+  .p { width: 13px; height: 13px; border-radius: 4px; display: inline-block; }
+  .p-s { background: var(--accent); }
+  .p-n { background: var(--danger); }
+  .p-x { background: var(--surface3); }
+  .p-o { background: #fff; border: 1.5px dashed var(--border2); }
+  .p-q { background: var(--warn); }
+  .p- { background: #fff; border: 1.5px solid var(--border2); }
+  .sit { display: inline-block; font-size: 11.5px; font-weight: 700; padding: 3px 8px; border-radius: 6px; white-space: nowrap; }
+  .sit-pagada { background: var(--ok-suave); color: var(--ok); }
+  .sit-pendiente { background: var(--azul-suave); color: var(--azul); }
+  .sit-falta { background: var(--warn-suave); color: var(--warn); }
+  .sit-anulada { background: var(--surface3); color: var(--text3); text-decoration: line-through; }
+  .area { font-size: 11.5px; font-weight: 700; color: var(--text2); }
+  .falta { font-size: 12.5px; color: var(--danger); font-weight: 600; }
+  .falta-a { font-size: 11.5px; color: var(--text3); margin-top: 2px; }
+  .completo { font-size: 12.5px; color: var(--ok); font-weight: 600; }
+  .detalle td { background: var(--surface2); padding: 16px 18px; }
+  .det-docs { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; margin-bottom: 14px; }
+  .det-doc { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px; font-size: 13px; }
+  .det-doc a { margin-left: auto; font-size: 12px; font-weight: 600; text-decoration: none; }
+  .det-info { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px 18px; font-size: 13px; }
+  .det-info div span { display: block; font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--text3); }
+  .mas { display: flex; justify-content: center; margin-top: 14px; }
+  .contador { font-size: 12.5px; color: var(--text2); }
+
+  .pie { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;
+         margin-top: 24px; font-size: 12px; color: var(--text3); }
+
+  @media (max-width: 1080px) { .kpis { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 900px) {
+    .lectura, .grilla, .dos-columnas { grid-template-columns: 1fr; }
+    .lectura > div + div { border-left: 0; border-top: 1px solid var(--border); }
+    .cabecera { flex-direction: column; align-items: flex-start; }
+    .resultados .ocultable { display: none; }
+  }
+  @media (max-width: 560px) {
+    .pagina { padding: 20px 16px 48px; }
+    .filtros { margin: 0 -16px 8px; padding: 10px 16px 12px; }
+    .kpis { grid-template-columns: 1fr; }
+    .chip { white-space: normal; }
+    .lec-grande { font-size: 17px; }
+    .marca { flex-wrap: wrap; }
+    .segmento button { padding: 6px 8px; }
+    .resultados th:nth-child(5), .resultados td:nth-child(5) { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div id="cargando">Cargando el legajo…</div>
+
+<div id="error" class="tarjeta" style="display:none; max-width:560px; margin:60px auto;">
+  <h2>No se pudo armar el tablero</h2>
+  <p class="sub" id="errorTexto"></p>
+</div>
+
+<div id="pagina" class="pagina" style="display:none">
+
+  <header class="cabecera">
+    <div class="marca">
+      <svg width="130" height="29" viewBox="0 0 183 41" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Roland Print">
+        <path opacity="0.15" d="M15.3066 35.9092L26.7855 35.8535L31.4094 40.5052H19.9305L15.3066 35.9092Z" fill="#1D1D1B"/>
+        <path d="M11.9185 20.6918L5.95923 26.6176L0 20.6918L5.95923 14.7715L11.9185 20.6918Z" fill="#006DB1"/>
+        <path d="M18.8459 13.8087L12.8867 19.7345L6.92188 13.8087L12.8867 7.88281L18.8459 13.8087Z" fill="#E30613"/>
+        <path d="M25.7681 6.92584L19.8088 12.8517L13.8496 6.92584L19.8088 1L25.7681 6.92584Z" fill="#006DB1"/>
+        <path d="M18.9683 27.7032L13.009 33.629L7.0498 27.7032L13.009 21.7773L18.9683 27.7032Z" fill="#00A298"/>
+        <path d="M25.8957 20.8148L19.9365 26.7406L13.9717 20.8148L19.9365 14.8945L25.8957 20.8148Z" fill="#FFDD00"/>
+        <path d="M32.8179 13.9317L26.8586 19.8575L20.8994 13.9317L26.8586 8.00586L32.8179 13.9317Z" fill="#00A298"/>
+        <path d="M25.8843 34.5801L19.925 40.506L13.9658 34.5801L19.9306 28.6543L25.8843 34.5801Z" fill="#E30613"/>
+        <path d="M32.812 27.6918L26.8528 33.6176L20.8936 27.6918L26.8528 21.7715L32.812 27.6918Z" fill="#006DB1"/>
+        <path d="M38.5097 24.7486L30.2246 23.2018L31.777 14.9668L40.0621 16.5136L38.5097 24.7486Z" fill="#E30613"/>
+        <path d="M50.4785 16.111H59.0918C61.0171 16.111 62.447 16.5228 63.3763 17.3407C64.3389 18.1976 64.8229 19.444 64.8229 21.0854C64.8229 22.1815 64.5837 23.0829 64.0996 23.8007C63.6879 24.4851 63.0313 24.9803 62.141 25.2864C62.9311 25.559 63.482 25.9707 63.7936 26.516C64.1052 27.0279 64.2943 27.9015 64.3611 29.1312L64.4668 31.2344V31.9021C64.4668 32.1414 64.4835 32.364 64.5169 32.5699C64.6226 33.1875 64.8285 33.577 65.1345 33.7495H61.1116C60.9392 33.41 60.8334 33.0484 60.8 32.67C60.7333 32.1247 60.6943 31.7464 60.6943 31.5405L60.6443 29.6431C60.5775 28.6193 60.3716 27.8793 60.0266 27.4397C59.6483 27.0613 58.975 26.8777 58.0124 26.8777H54.1453V33.7495H50.4841V16.1055L50.4785 16.111ZM54.1397 23.8007H58.4242C59.3534 23.8007 60.0433 23.6115 60.4885 23.2387C60.9336 22.8604 61.1617 22.2817 61.1617 21.4972C61.1617 20.7126 60.9392 20.1284 60.4885 19.7556C60.0767 19.3438 59.4591 19.1379 58.63 19.1379H54.1397V23.8063V23.8007Z" fill="#1D1D1B"/>
+        <path d="M83.786 16.1113V33.7553H80.1748V16.1113H83.786Z" fill="#1D1D1B"/>
+        <path d="M90.3954 33.8169C89.1602 33.8169 88.0751 33.4831 87.1459 32.8154C86.2167 32.1477 85.7549 31.2352 85.7549 29.6994C85.7549 28.2639 86.1778 27.2345 87.018 26.6225C87.4686 26.2942 87.9861 26.0215 88.5704 25.8101C89.0767 25.6265 91.3803 25.2203 91.6919 25.1869C93.2053 24.981 93.962 24.5359 93.962 23.8515C93.962 23.3396 93.695 23.0057 93.1608 22.8499C92.6266 22.6941 92.137 22.6218 91.6919 22.6218C91.2078 22.6218 90.7793 22.6886 90.401 22.8277C90.0226 22.9668 89.75 23.2227 89.5775 23.5955H86.1221C86.2612 22.5384 86.7397 21.6648 87.5688 20.9804C88.498 20.1958 89.8223 19.8008 91.5416 19.8008C93.4668 19.8008 94.9135 20.1235 95.8761 20.7745C96.8721 21.4589 97.3729 22.4159 97.3729 23.6456V33.8169M94.0121 31.046V26.884C93.528 27.1232 92.8603 27.3458 91.9979 27.5517L90.8127 27.8076C90.1951 27.9801 89.7166 28.1749 89.4718 28.4753C89.1935 28.8203 89.1101 29.2265 89.1101 29.6048C89.1101 30.1168 89.2659 30.3338 89.5775 30.6398C89.8835 30.9124 90.3342 31.0515 90.9184 31.0515H94.0121V31.046Z" fill="#1D1D1B"/>
+        <path d="M108.001 33.756V25.037C108.001 24.219 107.751 23.6181 107.256 23.2397C106.755 22.8614 106.198 22.6778 105.581 22.6778C104.963 22.6778 104.412 22.8669 103.928 23.2397C103.45 23.6181 103.205 24.2135 103.205 25.037V33.756H99.5938V25.7547C99.5938 23.4289 100.206 21.8765 101.424 21.0864C102.643 20.3019 103.995 19.8734 105.475 19.8066C106.989 19.8066 108.38 20.2017 109.654 20.9862C110.928 21.7708 111.562 23.3621 111.562 25.7547V33.756H108.001Z" fill="#1D1D1B"/>
+        <path d="M119.864 33.8172C119.096 33.8394 117.889 33.7838 117.232 33.5724C116.575 33.3609 115.685 32.8101 115.168 32.1591C114.172 30.896 113.671 29.1655 113.671 26.9788C113.671 24.7921 114.166 23.1006 115.168 21.7986C116.197 20.4632 117.521 19.7955 119.14 19.7955C120.003 19.7955 120.76 19.968 121.411 20.3074C122.101 20.7191 122.651 21.2477 123.063 21.8987V16.0508H126.569V33.8116H119.858L119.864 33.8172ZM122.941 23.9074C122.39 23.223 120.999 22.8836 120.07 22.8836C119.14 22.8836 118.473 23.2397 117.955 23.9575C117.438 24.6419 117.182 25.5989 117.182 26.8286C117.182 28.1974 117.438 29.2379 117.955 29.9556C118.473 30.6734 119.207 31.0351 120.175 31.0351C121.144 31.0351 121.383 31.0407 122.941 31.0295V23.9074Z" fill="#1D1D1B"/>
+        <path d="M133.758 16.1113H141.653C143.545 16.1113 144.953 16.5898 145.882 17.5469C146.845 18.5039 147.323 19.9228 147.323 21.8035C147.323 23.584 146.861 24.9862 145.932 26.01C145.003 26.967 143.662 27.4455 141.909 27.4455H137.419V33.7553H133.758V16.1113ZM137.425 24.2628H140.986C141.948 24.2628 142.638 24.057 143.05 23.6452C143.495 23.2669 143.723 22.6214 143.723 21.6978C143.723 20.9132 143.517 20.2789 143.106 19.8004C142.627 19.3886 141.987 19.1828 141.197 19.1828H137.43V24.2628H137.425Z" fill="#1D1D1B"/>
+        <path d="M147.612 33.7566V27.1408C147.612 25.8054 147.807 24.687 148.202 23.7801C148.597 22.8731 149.137 22.1498 149.827 21.5989C150.483 21.087 151.246 20.7086 152.125 20.4694C153.004 20.2301 153.905 20.1133 154.835 20.1133H155.352V23.7522H154.167C153.171 23.7522 152.431 23.9915 151.947 24.47C151.468 24.9485 151.223 25.6997 151.223 26.7291V33.7566H147.612Z" fill="#1D1D1B"/>
+        <path d="M161.095 16.1113V18.9324H157.483V16.1113H161.095ZM161.095 20.112V33.7553H157.483V20.112H161.095Z" fill="#1D1D1B"/>
+        <path d="M171.705 33.756V25.037C171.705 24.219 171.455 23.6181 170.96 23.2397C170.459 22.8614 169.903 22.6778 169.285 22.6778C168.667 22.6778 168.116 22.8669 167.632 23.2397C167.148 23.6181 166.909 24.2135 166.909 25.037V33.756H163.298V25.7547C163.298 23.4289 163.91 21.8765 165.128 21.0864C166.347 20.3019 167.699 19.8734 169.179 19.8066C170.693 19.8066 172.089 20.2017 173.358 20.9862C174.632 21.7708 175.266 23.3621 175.266 25.7547V33.756H171.705Z" fill="#1D1D1B"/>
+        <path d="M183.001 22.6211H180.886V33.7495H177.325V16.1055H180.886V20.1562H183.001V22.6155" fill="#1D1D1B"/>
+        <path d="M77.3037 22.8049C76.686 21.553 75.7234 20.6738 74.4159 20.1619C73.2808 19.7558 72.0066 19.6445 70.5988 19.8337C69.1855 20.0228 68.0393 20.6182 67.1435 21.6364C66.5926 22.2429 66.1865 23.0052 65.9305 23.9178C65.6746 24.8303 65.541 25.7484 65.541 26.6609C65.541 27.7793 65.6968 28.8532 66.0084 29.8825C66.3144 30.9175 66.8319 31.7354 67.5552 32.3475C68.2396 32.954 69.1633 33.388 70.3151 33.6439C71.4669 33.8999 72.6131 33.8721 73.7482 33.566C75.0224 33.2989 76.0684 32.6034 76.8975 31.485C77.2758 30.9453 77.5819 30.2832 77.8267 29.5042C78.066 28.7252 78.1884 27.796 78.1884 26.711C78.1884 25.2253 77.8935 23.9178 77.3092 22.7994L77.3037 22.8049ZM71.8619 30.9954C69.9144 30.9954 68.9741 29.1091 68.9741 26.7833C68.9741 24.4575 69.9089 22.5712 71.8619 22.5712C73.8149 22.5712 74.7497 24.4575 74.7497 26.7833C74.7497 29.1091 73.8038 30.9954 71.8619 30.9954Z" fill="#1D1D1B"/>
+      </svg>
+      <div>
+        <div class="marca-titulo">Legajo por OC · Control documentario</div>
+        <div class="marca-sub" id="subtitulo">Contabilidad · INROPRIN S.A.C.</div>
+      </div>
+    </div>
+    <div class="acciones">
+      <button class="boton boton-claro" id="btnRecargar" type="button">↻ Actualizar vista</button>
+      <a class="boton" id="enlaceHoja" href="#" target="_blank" rel="noopener">Abrir la hoja ↗</a>
+    </div>
+  </header>
+
+  <!-- Estado de la lectura: la de cada noche y los revisores -->
+  <section class="lectura" id="lectura"></section>
+
+  <!-- Filtros globales: mueven toda la analítica y el buscador -->
+  <nav class="filtros" id="filtros">
+    <label for="fUnidad">Unidad</label>
+    <select id="fUnidad"></select>
+    <div class="segmento" id="fArea">
+      <button type="button" data-v="" class="activo">Todas las áreas</button>
+      <button type="button" data-v="N">Compras nacionales</button>
+      <button type="button" data-v="I">COMEX</button>
+    </div>
+    <label for="fMes">Mes</label>
+    <select id="fMes"></select>
+    <label for="fSituacion">Pago</label>
+    <select id="fSituacion"></select>
+    <button class="limpiar" id="limpiar" type="button">Limpiar filtros</button>
+    <span class="filtro-activo" id="filtroActivo"></span>
+  </nav>
+
+  <section class="kpis" id="kpis"></section>
+
+  <section class="grilla">
+    <div class="tarjeta">
+      <div class="tarjeta-cab">
+        <h2>Qué falta, por área</h2>
+        <span class="tarjeta-nota">% de las OC a las que les corresponde · clic para ver cuáles faltan</span>
+      </div>
+      <div id="calor"></div>
+    </div>
+    <div>
+      <div class="tarjeta" style="margin-bottom:14px">
+        <div class="tarjeta-cab"><h2>Situación del pago</h2><span class="tarjeta-nota">clic para filtrar</span></div>
+        <div id="barrasSituacion"></div>
+      </div>
+      <div class="tarjeta">
+        <div class="tarjeta-cab"><h2>Legajo completo por unidad</h2></div>
+        <div id="barrasUnidad"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="tarjeta tarjeta-ancha">
+    <div class="tarjeta-cab">
+      <h2>Evolución mensual de las OC</h2>
+      <div class="leyenda">
+        <span><i style="background:var(--accent)"></i>Legajo completo</span>
+        <span><i style="background:var(--danger)"></i>Le falta algo</span>
+        <span><i style="background:var(--border2)"></i>Por revisar / sin acceso</span>
+        <span><i style="background:#C9D3DD"></i>Anuladas</span>
+      </div>
+    </div>
+    <div class="meses" id="meses"></div>
+  </section>
+
+  <section class="tarjeta tarjeta-ancha">
+    <div class="tarjeta-cab">
+      <h2>Quién debe completar</h2>
+      <span class="tarjeta-nota">compradores con más OC incompletas · clic para ver sus OC</span>
+    </div>
+    <div id="compradores"></div>
+  </section>
+
+  <!-- Buscador -->
+  <section class="tarjeta tarjeta-ancha" id="zonaBuscador">
+    <div class="tarjeta-cab">
+      <h2>Buscador de OC</h2>
+      <span class="contador" id="contador"></span>
+    </div>
+    <div class="buscador">
+      <div class="caja">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8494A8" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input id="q" type="search" placeholder="OC, proveedor, RUC, comprador, proyecto, serie de factura…" autocomplete="off">
+      </div>
+      <select id="fFalta"></select>
+      <label class="interruptor"><input type="checkbox" id="soloIncompletas" checked> Solo las que les falta algo</label>
+    </div>
+    <div class="etiquetas" id="etiquetas"></div>
+    <div id="resultados"></div>
+    <div class="mas"><button class="boton boton-claro" id="verMas" type="button" style="display:none">Mostrar más</button></div>
+  </section>
+
+  <footer class="pie">
+    <span id="pie"></span>
+    <span>✓ lo tiene · ✗ falta · — no le corresponde · ○ opcional · ? sin acceso a la carpeta</span>
+  </footer>
+</div>
+
+<script>
+  // ── Estado ──
+  var D = null;                         // lo que manda el servidor
+  var F = { unidad: '', area: '', mes: '', situacion: '' };      // filtros globales
+  var B = { q: '', falta: '', soloIncompletas: true, comprador: '' }; // buscador
+  var mostrar = 40, abierta = null, relojRecarga = null, relojCuenta = null;
+
+  var esc = function (s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  };
+  var sol = function (n) { return 'S/ ' + Number(n || 0).toLocaleString('es-PE', { minimumFractionDigits: 0, maximumFractionDigits: 0 }); };
+  var pct = function (a, b) { return b ? Math.round(100 * a / b) : 0; };
+  var plano = function (s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase(); };
+  var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'set', 'oct', 'nov', 'dic'];
+
+  // ── Pedir los datos ──
+  function pedirDatos() {
+    if (window.google && google.script && google.script.run) {
+      google.script.run.withSuccessHandler(recibir).withFailureHandler(fallo).datosDelTableroLegajo();
+    } else if (window.DATOS_DE_PRUEBA) {
+      recibir(window.DATOS_DE_PRUEBA); // para probar la página fuera de Apps Script
+    }
+  }
+  function fallo(e) {
+    document.getElementById('cargando').style.display = 'none';
+    document.getElementById('error').style.display = '';
+    document.getElementById('errorTexto').textContent = e && e.message ? e.message : String(e);
+  }
+
+  function recibir(d) {
+    document.getElementById('cargando').style.display = 'none';
+    if (d.error) return fallo({ message: d.error });
+    D = d;
+    D.ocs.forEach(prepararOc);
+    document.getElementById('pagina').style.display = '';
+    document.getElementById('enlaceHoja').href = d.urlHoja;
+    if (d.titulo) document.getElementById('subtitulo').textContent = 'Contabilidad · ' + d.titulo;
+    llenarSelectores();
+    pintarTodo();
+    // Mientras los revisores trabajan, la vista se refresca sola cada 2 minutos.
+    clearTimeout(relojRecarga);
+    relojRecarga = setTimeout(pedirDatos, d.lectura.revisoresActivos ? 120000 : 600000);
+  }
+
+  /** Lo que se calcula una vez por OC. */
+  function prepararOc(o) {
+    o.anulada = o.si === 'ANULADA';
+    o.sinAcceso = /^SIN ACCESO/.test(o.es);
+    o.sinCarpeta = o.es === 'SIN CARPETA';
+    o.pendiente = o.es === 'PENDIENTE' || o.es === '';
+    o.revisada = !o.pendiente && !o.sinCarpeta && !o.sinAcceso;
+    o.faltan = [];
+    o.d.forEach(function (m, j) { if (m === 'n') o.faltan.push(j); });
+    o.completa = o.revisada && !o.anulada && !o.faltan.length;
+    o.incompleta = o.revisada && !o.anulada && o.faltan.length > 0;
+    var m = /(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(o.fe);
+    o.mes = m ? m[3] + '-' + ('0' + m[2]).slice(-2) : '';
+    o.pagada = /^PAGADA/.test(o.si);
+    o.texto = plano([o.oc, o.un, o.py, o.pv, o.ru, o.cp, o.rq, o.fs, o.cc, o.si].join(' '));
+  }
+
+  function nombreMes(k) { if (!k) return '(sin fecha)'; var p = k.split('-'); return MESES[Number(p[1]) - 1] + ' ' + p[0].slice(2); }
+
+  function llenarSelectores() {
+    var opciones = function (el, valores, todas, rotulo) {
+      var actual = el.value;
+      el.innerHTML = '<option value="">' + todas + '</option>' + valores.map(function (v) {
+        return '<option value="' + esc(v) + '">' + esc(rotulo ? rotulo(v) : v) + '</option>';
+      }).join('');
+      el.value = valores.indexOf(actual) !== -1 ? actual : '';
+    };
+    var unicos = function (campo) {
+      var s = {}; D.ocs.forEach(function (o) { if (o[campo]) s[o[campo]] = 1; }); return Object.keys(s).sort();
+    };
+    opciones(document.getElementById('fUnidad'), unicos('un'), 'Todas');
+    opciones(document.getElementById('fMes'), unicos('mes').reverse(), 'Todo 2026', nombreMes);
+    opciones(document.getElementById('fSituacion'), unicos('si'), 'Todas');
+    var fFalta = document.getElementById('fFalta');
+    fFalta.innerHTML = '<option value="">Le falta: cualquier documento</option>' + D.docs.map(function (d, j) {
+      return d.opcional ? '' : '<option value="' + j + '">Le falta: ' + esc(d.nombre) + '</option>';
+    }).join('');
+    fFalta.value = B.falta;
+  }
+
+  /** Las OC que pasan los filtros globales (sin el buscador). */
+  function base(sin) {
+    return D.ocs.filter(function (o) {
+      if (F.unidad && sin !== 'unidad' && o.un !== F.unidad) return false;
+      if (F.area && o.ar !== F.area) return false;
+      if (F.mes && sin !== 'mes' && o.mes !== F.mes) return false;
+      if (F.situacion && sin !== 'situacion' && o.si !== F.situacion) return false;
+      return true;
+    });
+  }
+
+  function pintarTodo() {
+    pintarLectura();
+    var ocs = base();
+    pintarKpis(ocs);
+    pintarCalor(ocs);
+    pintarSituacion(base('situacion'));
+    pintarUnidades(base('unidad'));
+    pintarMeses(base('mes'));
+    pintarCompradores(ocs);
+    pintarResultados(ocs);
+    var partes = [];
+    if (F.unidad) partes.push(F.unidad);
+    if (F.area) partes.push(D.areas[F.area]);
+    if (F.mes) partes.push(nombreMes(F.mes));
+    if (F.situacion) partes.push(F.situacion);
+    document.getElementById('filtroActivo').textContent = partes.length ? 'Viendo: ' + partes.join(' · ') + ' (' + ocs.length + ' OC)' : '';
+    document.getElementById('pie').textContent = 'Datos de la hoja al ' + D.generadoEl + ' · pestañas TABLA y RESUMEN';
+  }
+
+  // ── Estado de la lectura ──
+  function pintarLectura() {
+    var L = D.lectura;
+    var hora = (L.hora > 12 ? L.hora - 12 : L.hora) + ':00 ' + (L.hora >= 12 ? 'p. m.' : 'a. m.');
+    var programada = L.nocturna
+      ? '<span class="chip chip-ok"><span class="punto"></span>Programada · todos los días a las ' + hora + '</span>'
+      : '<span class="chip chip-warn"><span class="punto"></span>No programada</span>';
+    var revisadas = D.ocs.filter(function (o) { return o.revisada || o.sinAcceso; }).length;
+    var conCarpeta = D.ocs.filter(function (o) { return !o.sinCarpeta; }).length;
+    var sinAcceso = D.ocs.filter(function (o) { return o.sinAcceso; }).length;
+    var estadoRev = L.revisoresActivos
+      ? '<span class="chip chip-azul"><span class="punto punto-vivo"></span>Revisando ahora · ' + L.revisores + ' revisores en paralelo</span>'
+      : L.pendientes
+        ? '<span class="chip chip-warn"><span class="punto"></span>En pausa · ' + L.pendientes + ' por revisar</span>'
+        : '<span class="chip chip-ok"><span class="punto"></span>Al día</span>';
+    var ok = revisadas - sinAcceso;
+    document.getElementById('lectura').innerHTML =
+      '<div>' +
+        '<div class="lec-rotulo">Lectura del cuadro de aprobaciones</div>' + programada +
+        '<div class="lec-grande" id="cuenta">' + (L.nocturna ? '…' : 'Sin lectura automática') + '</div>' +
+        (L.nocturna ? '' : '<div class="lec-linea">Para activarla: en la hoja, menú <b>Legajo por OC → Programar actualización cada noche</b>.</div>') +
+        '<div class="lec-linea">Última actualización: <b>' + esc(L.ultimaActualizacion || 'todavía ninguna') + '</b></div>' +
+        '<div class="pasos"><span class="paso">' + hora + ' lee el cuadro en vivo</span><span class="flecha">→</span>' +
+        '<span class="paso">suma OC nuevas y actualiza estatus</span><span class="flecha">→</span>' +
+        '<span class="paso">revisa carpetas nuevas o con faltantes</span><span class="flecha">→</span>' +
+        '<span class="paso">este tablero</span></div>' +
+      '</div>' +
+      '<div>' +
+        '<div class="lec-rotulo">Revisión de carpetas</div>' + estadoRev +
+        '<div class="lec-grande">' + pct(revisadas, conCarpeta) + '% <small style="font-size:13px;color:var(--text2);font-weight:600">revisado · ' +
+          revisadas + ' de ' + conCarpeta + ' carpetas</small></div>' +
+        '<div class="progreso">' +
+          '<span style="width:' + (100 * ok / Math.max(conCarpeta, 1)) + '%;background:var(--accent)"></span>' +
+          '<span style="width:' + (100 * sinAcceso / Math.max(conCarpeta, 1)) + '%;background:var(--warn)"></span>' +
+        '</div>' +
+        '<div class="leyenda"><span><i style="background:var(--accent)"></i>Revisadas ' + ok + '</span>' +
+          '<span><i style="background:var(--warn)"></i>Sin acceso ' + sinAcceso + '</span>' +
+          '<span><i style="background:var(--surface3)"></i>Por revisar ' + L.pendientes + '</span>' +
+          '<span>Revisan cada ' + L.cadaMinutos + ' min</span></div>' +
+        (L.ultimaTanda ? '<div class="resultado">Última tanda: ' + esc(L.ultimaTanda) + ' — ' + esc(L.resultadoTanda) + '</div>' : '') +
+      '</div>';
+    if (L.nocturna) { contarRegresivo(); clearInterval(relojCuenta); relojCuenta = setInterval(contarRegresivo, 30000); }
+  }
+
+  function contarRegresivo() {
+    var L = D.lectura, el = document.getElementById('cuenta');
+    if (!el) return;
+    var falta = L.proximaMs - Date.now();
+    if (falta < 0) { el.textContent = 'Leyendo el cuadro ahora…'; return; }
+    var h = Math.floor(falta / 3600000), m = Math.floor((falta % 3600000) / 60000);
+    var cuando = (new Date(L.proximaMs).getDate() === new Date().getDate()) ? 'hoy' : 'mañana';
+    el.innerHTML = 'Próxima lectura ' + cuando + ' · <span style="color:var(--accent-texto)">en ' + (h ? h + ' h ' : '') + m + ' min</span>';
+  }
+
+  // ── KPIs ──
+  function pintarKpis(ocs) {
+    var vivas = ocs.filter(function (o) { return !o.anulada; });
+    var revisadas = vivas.filter(function (o) { return o.revisada; });
+    var completas = revisadas.filter(function (o) { return o.completa; });
+    var docPct = function (j) {
+      var si = 0, ap = 0;
+      vivas.forEach(function (o) { var m = o.d[j]; if (m === 's') { si++; ap++; } else if (m === 'n' || m === 'o') ap++; });
+      return { si: si, ap: ap, p: pct(si, ap) };
+    };
+    var fac = docPct(0), gui = docPct(3);
+    var pagadasSinFactura = vivas.filter(function (o) { return o.pagada && o.d[0] === 'n'; });
+    var montoIncompleto = revisadas.filter(function (o) { return o.incompleta; }).reduce(function (s, o) { return s + o.ms; }, 0);
+    var montoTotal = vivas.reduce(function (s, o) { return s + o.ms; }, 0);
+    var porRevisar = ocs.filter(function (o) { return o.pendiente || o.sinAcceso || o.sinCarpeta; }).length;
+    var sinPagar = vivas.filter(function (o) { return !o.pagada && o.si; });
+    var sinAprobar = sinPagar.filter(function (o) { return /FALTA APROBACION/.test(plano(o.si)); }).length;
+    var montoSinPagar = sinPagar.reduce(function (s, o) { return s + o.ms; }, 0);
+    var sinRevisar = vivas.length - revisadas.length;
+    var nac = ocs.filter(function (o) { return o.ar === 'N'; }).length, imp = ocs.filter(function (o) { return o.ar === 'I'; }).length;
+    var pc = pct(completas.length, revisadas.length);
+
+    document.getElementById('kpis').innerHTML =
+      kpi('OC en el cuadro', ocs.length, nac + ' nacionales · ' + imp + ' importaciones' +
+        (ocs.length - vivas.length ? ' · ' + (ocs.length - vivas.length) + ' anuladas' : '')) +
+      '<div class="kpi"><div class="kpi-rotulo">Legajo completo</div><div class="kpi-anillo">' + anillo(pc) +
+        '<div><div class="kpi-valor">' + completas.length + '</div><div class="kpi-extra">de ' + revisadas.length + ' revisadas</div></div></div></div>' +
+      kpiBarra('Con factura', fac, 'var(--accent)', 'falta-0', sinRevisar) +
+      kpiBarra('Con guía de remisión', gui, 'var(--azul)', 'falta-3', sinRevisar) +
+      '<div class="kpi kpi-riesgo kpi-click" data-accion="pagadasSinFactura"><div class="kpi-rotulo">Pagadas sin factura</div>' +
+        '<div class="kpi-valor">' + pagadasSinFactura.length + '</div><div class="kpi-extra">el pago salió y el comprobante no está en la carpeta · ver ↓</div></div>' +
+      kpi('Monto con legajo incompleto', sol(montoIncompleto), 'de ' + sol(montoTotal) + ' en soles (' + pct(montoIncompleto, montoTotal) + '%)') +
+      '<div class="kpi kpi-click" data-accion="sinPagar"><div class="kpi-rotulo">Aún sin pagar</div><div class="kpi-valor">' + sinPagar.length + '</div>' +
+        '<div class="kpi-extra">' + sol(montoSinPagar) + ' · ' + sinAprobar + ' todavía sin aprobar</div></div>' +
+      '<div class="kpi kpi-click" data-accion="porRevisar"><div class="kpi-rotulo">Por revisar</div><div class="kpi-valor">' + porRevisar + '</div>' +
+        '<div class="kpi-extra">pendientes, sin acceso o sin carpeta</div></div>';
+  }
+  function kpi(rotulo, valor, extra) {
+    return '<div class="kpi"><div class="kpi-rotulo">' + esc(rotulo) + '</div><div class="kpi-valor">' + esc(valor) + '</div>' +
+      (extra ? '<div class="kpi-extra">' + esc(extra) + '</div>' : '') + '</div>';
+  }
+  function kpiBarra(rotulo, x, color, accion, sinRevisar) {
+    return '<div class="kpi kpi-click" data-accion="' + accion + '"><div class="kpi-rotulo">' + esc(rotulo) + '</div>' +
+      '<div class="kpi-valor">' + x.p + '<small>%</small></div><div class="kpi-extra">' + x.si + ' de ' + x.ap + ' · faltan ' + (x.ap - x.si) +
+      (sinRevisar ? ' · ' + sinRevisar + ' aún sin revisar' : '') + '</div>' +
+      '<div class="mini-barra"><span style="width:' + x.p + '%;background:' + color + '"></span></div></div>';
+  }
+  function anillo(p) {
+    var r = 22, c = 2 * Math.PI * r, color = p >= 80 ? 'var(--accent)' : p >= 50 ? 'var(--warn)' : 'var(--danger)';
+    return '<svg width="58" height="58" viewBox="0 0 58 58"><circle cx="29" cy="29" r="' + r + '" fill="none" stroke="var(--surface3)" stroke-width="7"/>' +
+      '<circle cx="29" cy="29" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="7" stroke-linecap="round" ' +
+      'stroke-dasharray="' + (c * p / 100) + ' ' + c + '" transform="rotate(-90 29 29)"/>' +
+      '<text x="29" y="33" text-anchor="middle" font-family="Sora" font-weight="800" font-size="12" fill="var(--text)">' + p + '%</text></svg>';
+  }
+
+  // ── Mapa de calor ──
+  function colorCalor(p) {
+    if (p >= 90) return ['#CDEEEA', '#00625B'];
+    if (p >= 75) return ['#E1F4F2', '#007A72'];
+    if (p >= 50) return ['#FCF1E0', '#8A4F06'];
+    if (p >= 25) return ['#FBE3D6', '#9A3B12'];
+    return ['#F9D9D9', '#A51F1F'];
+  }
+  function pintarCalor(ocs) {
+    var vivas = ocs.filter(function (o) { return !o.anulada && o.revisada; });
+    var cols = [['N', 'Compras nacionales'], ['I', 'COMEX'], ['', 'Total']];
+    var html = '<table class="calor"><thead><tr><th>Documento</th>' + cols.map(function (c) { return '<th>' + c[1] + '</th>'; }).join('') + '</tr></thead><tbody>';
+    D.docs.forEach(function (d, j) {
+      html += '<tr><td class="doc">' + esc(d.num + '. ' + d.nombre) + (d.opcional ? '<span>opcional</span>' : '') + '</td>';
+      cols.forEach(function (c) {
+        var si = 0, ap = 0;
+        vivas.forEach(function (o) {
+          if (c[0] && o.ar !== c[0]) return;
+          var m = o.d[j]; if (m === 's') { si++; ap++; } else if (m === 'n' || m === 'o') ap++;
+        });
+        if (!ap) { html += '<td><span class="celda celda-na">—</span></td>'; return; }
+        var p = pct(si, ap), k = colorCalor(p);
+        html += '<td><button type="button" class="celda" data-doc="' + j + '" data-area="' + c[0] + '" style="background:' + k[0] + ';color:' + k[1] + '" ' +
+          'title="' + esc(d.nombre) + ': faltan ' + (ap - si) + '"><b>' + p + '%</b><small>' + si + ' de ' + ap + '</small></button></td>';
+      });
+      html += '</tr>';
+    });
+    document.getElementById('calor').innerHTML = vivas.length ? html + '</tbody></table>' : '<p class="vacio">Todavía no hay OC revisadas con estos filtros.</p>';
+  }
+
+  // ── Barras ──
+  function colorSituacion(s) {
+    if (/^PAGADA/.test(s)) return 'var(--accent)';
+    if (/PENDIENTE|APROBADA/.test(s)) return 'var(--azul)';
+    if (/FALTA|INCOMPLETO/.test(s)) return 'var(--warn)';
+    if (/ANULADA/.test(s)) return '#C9D3DD';
+    return 'var(--text3)';
+  }
+  function pintarSituacion(ocs) {
+    var c = {}; ocs.forEach(function (o) { var k = o.si || '(sin dato)'; c[k] = (c[k] || 0) + 1; });
+    var claves = Object.keys(c).sort(function (a, b) { return c[b] - c[a]; }), max = Math.max.apply(null, claves.map(function (k) { return c[k]; }).concat([1]));
+    document.getElementById('barrasSituacion').innerHTML = claves.length ? claves.map(function (k) {
+      return '<div class="fila-barra' + (F.situacion === k ? ' activa' : '') + '" data-situacion="' + esc(k) + '">' +
+        '<div class="fb-cab"><span class="fb-etq">' + esc(k.charAt(0) + k.slice(1).toLowerCase()) + '</span><span class="fb-cifras"><b>' + c[k] + '</b> OC</span></div>' +
+        '<div class="fb-pista"><span style="width:' + (100 * c[k] / max) + '%;background:' + colorSituacion(k) + '"></span></div></div>';
+    }).join('') : '<p class="vacio">Sin datos.</p>';
+  }
+  function pintarUnidades(ocs) {
+    var g = {};
+    ocs.forEach(function (o) {
+      if (o.anulada) return;
+      var x = g[o.un || '(sin unidad)'] || (g[o.un || '(sin unidad)'] = { c: 0, i: 0, r: 0, t: 0 });
+      x.t++; if (o.completa) x.c++; if (o.incompleta) x.i++; if (!o.revisada) x.r++;
+    });
+    var claves = Object.keys(g).sort(function (a, b) { return g[b].t - g[a].t; });
+    document.getElementById('barrasUnidad').innerHTML = claves.map(function (k) {
+      var x = g[k];
+      return '<div class="fila-barra' + (F.unidad === k ? ' activa' : '') + '" data-unidad="' + esc(k) + '">' +
+        '<div class="fb-cab"><span class="fb-etq" title="' + esc(k) + '">' + esc(k) + '</span><span class="fb-cifras"><b>' + pct(x.c, x.c + x.i) + '%</b> completo · ' + x.t + ' OC</span></div>' +
+        '<div class="fb-pista"><span style="width:' + (100 * x.c / x.t) + '%;background:var(--accent)"></span>' +
+        '<span style="width:' + (100 * x.i / x.t) + '%;background:var(--danger)"></span>' +
+        '<span style="width:' + (100 * x.r / x.t) + '%;background:var(--border2)"></span></div></div>';
+    }).join('') || '<p class="vacio">Sin datos.</p>';
+  }
+
+  function pintarMeses(ocs) {
+    var g = {};
+    ocs.forEach(function (o) {
+      var x = g[o.mes] || (g[o.mes] = { c: 0, i: 0, r: 0, a: 0, t: 0 });
+      x.t++;
+      if (o.anulada) x.a++; else if (o.completa) x.c++; else if (o.incompleta) x.i++; else x.r++;
+    });
+    var claves = Object.keys(g).filter(Boolean).sort(), max = Math.max.apply(null, claves.map(function (k) { return g[k].t; }).concat([1]));
+    document.getElementById('meses').innerHTML = claves.map(function (k) {
+      var x = g[k], h = function (n) { return (100 * n / max) + '%'; };
+      return '<div class="mes' + (F.mes === k ? ' activo' : '') + '" data-mes="' + k + '" title="' + nombreMes(k) + ': ' + x.c + ' completas, ' + x.i + ' incompletas, ' + x.r + ' por revisar, ' + x.a + ' anuladas">' +
+        '<span class="mes-num">' + pct(x.c, x.c + x.i) + '%</span>' +
+        '<div class="mes-columna" style="height:' + h(x.t) + '">' +
+          '<span style="height:' + (100 * x.c / x.t) + '%;background:var(--accent)"></span>' +
+          '<span style="height:' + (100 * x.i / x.t) + '%;background:var(--danger)"></span>' +
+          '<span style="height:' + (100 * x.r / x.t) + '%;background:var(--border2)"></span>' +
+          '<span style="height:' + (100 * x.a / x.t) + '%;background:#C9D3DD"></span>' +
+        '</div><span class="mes-etq">' + nombreMes(k) + '</span><span class="mes-num">' + x.t + ' OC</span></div>';
+    }).join('') || '<p class="vacio">Sin fechas.</p>';
+  }
+
+  function pintarCompradores(ocs) {
+    var g = {};
+    ocs.forEach(function (o) {
+      if (o.anulada || !o.revisada) return;
+      var k = o.cp || '(sin comprador)';
+      var x = g[k] || (g[k] = { t: 0, i: 0, fac: 0, gui: 0, dam: 0, acta: 0, area: {} });
+      x.t++; x.area[o.ar] = 1;
+      if (o.incompleta) x.i++;
+      if (o.d[0] === 'n') x.fac++;
+      if (o.d[3] === 'n') x.gui++;
+      if (o.d[4] === 'n') x.dam++;
+      if (o.d[10] === 'n') x.acta++;
+    });
+    var claves = Object.keys(g).filter(function (k) { return g[k].i; }).sort(function (a, b) { return g[b].i - g[a].i; }).slice(0, 12);
+    var n = function (v) { return v ? '<span class="rojo">' + v + '</span>' : '<span style="color:var(--text3)">0</span>'; };
+    document.getElementById('compradores').innerHTML = claves.length
+      ? '<table class="tabla"><thead><tr><th>Comprador</th><th class="th-num">OC revisadas</th><th class="th-num">Incompletas</th>' +
+        '<th class="th-num">Sin factura</th><th class="th-num">Sin guía</th><th class="th-num">Sin DAM</th><th class="th-num">Sin acta</th><th class="th-num">Completo</th></tr></thead><tbody>' +
+        claves.map(function (k) {
+          var x = g[k], areas = Object.keys(x.area).map(function (a) { return a === 'I' ? 'COMEX' : a === 'N' ? 'Compras nacionales' : ''; }).filter(Boolean).join(' · ');
+          return '<tr class="fila-click" data-comprador="' + esc(k) + '"><td><b>' + esc(k) + '</b><div class="td-sub">' + esc(areas) + '</div></td>' +
+            '<td class="td-num">' + x.t + '</td><td class="td-num">' + n(x.i) + '</td><td class="td-num">' + n(x.fac) + '</td><td class="td-num">' + n(x.gui) +
+            '</td><td class="td-num">' + n(x.dam) + '</td><td class="td-num">' + n(x.acta) + '</td><td class="td-num"><b>' + pct(x.t - x.i, x.t) + '%</b></td></tr>';
+        }).join('') + '</tbody></table>'
+      : '<p class="vacio">Nadie debe documentos con estos filtros. 🎉</p>';
+  }
+
+  // ── Buscador ──
+  function filtradasPorBuscador(ocs) {
+    var q = plano(B.q).trim(), palabras = q ? q.split(/\s+/) : [];
+    return ocs.filter(function (o) {
+      if (B.soloIncompletas && !o.incompleta && !B.accion) return false;
+      if (B.falta !== '' && o.d[Number(B.falta)] !== 'n') return false;
+      if (B.comprador && (o.cp || '(sin comprador)') !== B.comprador) return false;
+      if (B.accion === 'pagadasSinFactura' && !(o.pagada && o.d[0] === 'n' && !o.anulada)) return false;
+      if (B.accion === 'porRevisar' && !(o.pendiente || o.sinAcceso || o.sinCarpeta)) return false;
+      if (B.accion === 'sinPagar' && (o.pagada || o.anulada || !o.si)) return false;
+      for (var i = 0; i < palabras.length; i++) if (o.texto.indexOf(palabras[i]) === -1) return false;
+      return true;
+    }).sort(function (a, b) { return b.faltan.length - a.faltan.length || b.ms - a.ms; });
+  }
+
+  function claseSituacion(s) {
+    if (/^PAGADA/.test(s)) return 'sit-pagada';
+    if (/ANULADA/.test(s)) return 'sit-anulada';
+    if (/FALTA|INCOMPLETO/.test(s)) return 'sit-falta';
+    return 'sit-pendiente';
+  }
+
+  function pintarResultados(ocs) {
+    var lista = filtradasPorBuscador(ocs);
+    document.getElementById('contador').textContent = lista.length + ' de ' + ocs.length + ' OC';
+    var etq = [];
+    if (B.comprador) etq.push(['comprador', 'Comprador: ' + B.comprador]);
+    if (B.accion === 'pagadasSinFactura') etq.push(['accion', 'Pagadas sin factura']);
+    if (B.accion === 'porRevisar') etq.push(['accion', 'Por revisar']);
+    if (B.accion === 'sinPagar') etq.push(['accion', 'Aún sin pagar']);
+    document.getElementById('etiquetas').innerHTML = etq.map(function (e) {
+      return '<span class="etiqueta">' + esc(e[1]) + '<button type="button" data-quitar="' + e[0] + '">×</button></span>';
+    }).join('');
+
+    if (!lista.length) {
+      document.getElementById('resultados').innerHTML = '<p class="vacio">No hay OC que coincidan.</p>';
+      document.getElementById('verMas').style.display = 'none';
+      return;
+    }
+    var html = '<table class="tabla resultados"><thead><tr><th>OC</th><th>Proveedor</th><th class="ocultable">Área</th><th>Pago</th>' +
+      '<th title="Los 11 documentos, en orden">Documentos 1–11</th><th>Le falta</th><th class="th-num ocultable">Monto S/</th></tr></thead><tbody>';
+    lista.slice(0, mostrar).forEach(function (o) {
+      var id = o.un + '|' + o.oc;
+      html += '<tr class="fila-click" data-oc="' + esc(id) + '">' +
+        '<td><b>' + esc(o.oc) + '</b><div class="td-sub">' + esc(o.un) + (o.fe ? ' · ' + esc(o.fe) : '') + '</div></td>' +
+        '<td>' + esc(o.pv) + '<div class="td-sub">' + esc(o.cp || '') + (o.py ? ' · ' + esc(o.py) : '') + '</div></td>' +
+        '<td class="ocultable"><span class="area">' + (o.ar === 'I' ? 'COMEX' : o.ar === 'N' ? 'Nacionales' : '—') + '</span></td>' +
+        '<td><span class="sit ' + claseSituacion(o.si) + '">' + esc(o.si || '—') + '</span></td>' +
+        '<td style="text-align:center"><span class="puntos">' + o.d.map(function (m, j) {
+          return '<i class="p p-' + m + '" title="' + esc(D.docs[j].num + '. ' + D.docs[j].nombre) + ': ' + textoMarca(m) + '"></i>';
+        }).join('') + '</span></td>' +
+        '<td>' + celdaFalta(o) + '</td>' +
+        '<td class="td-num ocultable">' + (o.ms ? Number(o.ms).toLocaleString('es-PE', { maximumFractionDigits: 0 }) : '') + '</td></tr>';
+      if (abierta === id) html += detalle(o);
+    });
+    document.getElementById('resultados').innerHTML = html + '</tbody></table>';
+    var btn = document.getElementById('verMas');
+    btn.style.display = lista.length > mostrar ? '' : 'none';
+    btn.textContent = 'Mostrar más (' + (lista.length - mostrar) + ' restantes)';
+  }
+
+  function textoMarca(m) {
+    return { s: 'lo tiene', n: 'falta', x: 'no le corresponde', o: 'opcional, no está', q: 'sin acceso', '': 'por revisar' }[m] || '';
+  }
+
+  function celdaFalta(o) {
+    if (o.anulada) return '<span class="td-sub">Anulada</span>';
+    if (o.sinAcceso) return '<span class="falta" style="color:var(--warn)">Sin acceso a la carpeta</span>';
+    if (o.sinCarpeta) return '<span class="falta" style="color:var(--warn)">Sin enlace de carpeta</span>';
+    if (!o.revisada) return '<span class="td-sub">Por revisar</span>';
+    if (!o.faltan.length) return '<span class="completo">✓ Legajo completo</span>';
+    var quien = function (j) { return j === 3 ? 'Almacén' : o.ar === 'I' ? 'COMEX' : 'Compras nacionales'; };
+    // A quién le toca: la guía la sube Almacén; lo demás, el área que compró.
+    var grupos = {};
+    o.faltan.forEach(function (j) { (grupos[quien(j)] = grupos[quien(j)] || []).push(D.docs[j].nombre); });
+    return '<span class="falta">' + esc(o.faltan.map(function (j) { return D.docs[j].nombre; }).join(', ')) + '</span>' +
+      '<div class="falta-a">' + Object.keys(grupos).map(function (k) { return '→ ' + esc(k); }).join(' · ') + '</div>';
+  }
+
+  function detalle(o) {
+    var docs = D.docs.map(function (d, j) {
+      var m = o.d[j], icono = { s: '✓', n: '✗', x: '—', o: '○', q: '?', '': '·' }[m];
+      var color = { s: 'var(--accent)', n: 'var(--danger)', q: 'var(--warn)' }[m] || 'var(--text3)';
+      var extra = j === 0 && o.fs ? ' <span class="td-sub" style="display:inline">' + esc(o.fs) + '</span>' : '';
+      return '<div class="det-doc"><b style="color:' + color + '">' + icono + '</b>' + esc(d.num + '. ' + d.nombre) + extra +
+        (m === 's' && o.u[j] ? '<a href="' + esc(o.u[j]) + '" target="_blank" rel="noopener">Abrir ↗</a>' : '') + '</div>';
+    }).join('');
+    var dato = function (r, v) { return v ? '<div><span>' + r + '</span>' + esc(v) + '</div>' : ''; };
+    return '<tr class="detalle"><td colspan="7"><div class="det-docs">' + docs + '</div><div class="det-info">' +
+      dato('Proyecto', o.py) + dato('Centro de costo', o.cc) + dato('Requerimiento', o.rq) + dato('Comprador', o.cp) +
+      dato('RUC', o.ru) + dato('Fecha OC', o.fe) + dato('Monto en soles', o.ms ? sol(o.ms) : '') +
+      dato('Estado de la revisión', o.es) + dato('Revisar el cruce', o.rv) +
+      '</div>' + (o.ca ? '<div style="margin-top:14px"><a class="boton boton-accent" href="' + esc(o.ca) + '" target="_blank" rel="noopener">Abrir la carpeta de la OC ↗</a></div>' : '') +
+      '</td></tr>';
+  }
+
+  function irAlBuscador() { document.getElementById('zonaBuscador').scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+
+  // ── Eventos ──
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-v],[data-doc],[data-situacion],[data-unidad],[data-mes],[data-comprador],[data-oc],[data-quitar],[data-accion]');
+    if (!t) return;
+    if (t.hasAttribute('data-v')) {
+      F.area = t.getAttribute('data-v');
+      document.querySelectorAll('#fArea button').forEach(function (b) { b.classList.toggle('activo', b === t); });
+    } else if (t.hasAttribute('data-doc')) {
+      B.falta = t.getAttribute('data-doc'); B.soloIncompletas = true; B.accion = ''; F.area = t.getAttribute('data-area');
+      document.querySelectorAll('#fArea button').forEach(function (b) { b.classList.toggle('activo', b.getAttribute('data-v') === F.area); });
+      document.getElementById('fFalta').value = B.falta; document.getElementById('soloIncompletas').checked = true;
+      mostrar = 40; pintarTodo(); irAlBuscador(); return;
+    } else if (t.hasAttribute('data-situacion')) {
+      var s = t.getAttribute('data-situacion'); F.situacion = F.situacion === s ? '' : s; document.getElementById('fSituacion').value = F.situacion;
+    } else if (t.hasAttribute('data-unidad')) {
+      var u = t.getAttribute('data-unidad'); F.unidad = F.unidad === u ? '' : u; document.getElementById('fUnidad').value = F.unidad;
+    } else if (t.hasAttribute('data-mes')) {
+      var m = t.getAttribute('data-mes'); F.mes = F.mes === m ? '' : m; document.getElementById('fMes').value = F.mes;
+    } else if (t.hasAttribute('data-comprador')) {
+      B.comprador = t.getAttribute('data-comprador'); B.accion = ''; mostrar = 40; pintarTodo(); irAlBuscador(); return;
+    } else if (t.hasAttribute('data-accion')) {
+      var a = t.getAttribute('data-accion');
+      if (/^falta-/.test(a)) { B.falta = a.split('-')[1]; B.accion = ''; B.soloIncompletas = true; document.getElementById('fFalta').value = B.falta; }
+      else { B.accion = a; B.falta = ''; document.getElementById('fFalta').value = ''; }
+      mostrar = 40; pintarTodo(); irAlBuscador(); return;
+    } else if (t.hasAttribute('data-quitar')) {
+      if (t.getAttribute('data-quitar') === 'comprador') B.comprador = ''; else B.accion = '';
+    } else if (t.hasAttribute('data-oc')) {
+      if (e.target.closest('a')) return;
+      var id = t.getAttribute('data-oc'); abierta = abierta === id ? null : id; pintarResultados(base()); return;
+    }
+    mostrar = 40; pintarTodo();
+  });
+  ['fUnidad', 'fMes', 'fSituacion'].forEach(function (id) {
+    document.getElementById(id).addEventListener('change', function (e) {
+      F[{ fUnidad: 'unidad', fMes: 'mes', fSituacion: 'situacion' }[id]] = e.target.value; mostrar = 40; pintarTodo();
+    });
+  });
+  var espera;
+  document.getElementById('q').addEventListener('input', function (e) {
+    clearTimeout(espera); espera = setTimeout(function () { B.q = e.target.value; mostrar = 40; pintarResultados(base()); }, 150);
+  });
+  document.getElementById('fFalta').addEventListener('change', function (e) { B.falta = e.target.value; B.accion = ''; mostrar = 40; pintarResultados(base()); });
+  document.getElementById('soloIncompletas').addEventListener('change', function (e) { B.soloIncompletas = e.target.checked; mostrar = 40; pintarResultados(base()); });
+  document.getElementById('verMas').addEventListener('click', function () { mostrar += 60; pintarResultados(base()); });
+  document.getElementById('limpiar').addEventListener('click', function () {
+    F = { unidad: '', area: '', mes: '', situacion: '' }; B = { q: '', falta: '', soloIncompletas: true, comprador: '' };
+    ['fUnidad', 'fMes', 'fSituacion', 'fFalta', 'q'].forEach(function (id) { document.getElementById(id).value = ''; });
+    document.getElementById('soloIncompletas').checked = true;
+    document.querySelectorAll('#fArea button').forEach(function (b) { b.classList.toggle('activo', b.getAttribute('data-v') === ''); });
+    mostrar = 40; pintarTodo();
+  });
+  document.getElementById('btnRecargar').addEventListener('click', function () {
+    document.getElementById('btnRecargar').textContent = 'Actualizando…';
+    pedirDatos();
+    setTimeout(function () { document.getElementById('btnRecargar').textContent = '↻ Actualizar vista'; }, 1500);
+  });
+
+  pedirDatos();
+</script>
+
+</body>
+</html>
