@@ -80,13 +80,14 @@ try {
   await nav.close();
   process.exit(1);
 }
-await login.close();
+// La pestaña del login NO se cierra: cerrarla puede terminar la sesión de SOL
+// (así pasó en GitHub Actions). En la vía API es la que pide el token.
 
 const cantidad = Math.min(WORKERS, aProcesar.length);
 let trabajadores: Trabajador[];
 let renovador: Renovador | null = null;
 if (VIA === "api") {
-  renovador = new Renovador(b, principal);
+  renovador = new Renovador(b, principal, login);
   await renovador.listo();
   const conPdf = texto("CON_PDF", "1") !== "0";
   trabajadores = Array.from({ length: cantidad }, (_, i) => new TrabajadorApi(b, renovador!, i + 1, conPdf));

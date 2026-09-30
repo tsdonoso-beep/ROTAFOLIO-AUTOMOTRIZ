@@ -102,7 +102,18 @@ export const primeraLinea = (e: unknown) => crudo(e).mensaje.split("\n")[0].slic
 export const dormir = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
 /** Que nada se muera en silencio: toda promesa o excepción sin manejar queda en la bitácora. */
+/**
+ * Que nada se muera en silencio: toda promesa o excepción sin manejar queda en
+ * la bitácora — y el proceso TERMINA con código 1. Escuchar estos eventos le
+ * quita a Node su salida automática: sin el exit, un error antes de arrancar
+ * (p. ej. «el login mostró un captcha») dejaba el proceso vivo con el
+ * navegador abierto, colgado hasta el tope del workflow (GitHub, 30/09/2026).
+ */
 export function vigilarProceso(b: Bitacora): void {
-  process.on("unhandledRejection", e => b.log("error", "proceso", `promesa sin manejar: ${primeraLinea(e)}`, { error: crudo(e) }));
-  process.on("uncaughtException", e => b.log("error", "proceso", `excepción sin manejar: ${primeraLinea(e)}`, { error: crudo(e) }));
+  const morir = (que: string, e: unknown) => {
+    b.log("error", "proceso", `${que} sin manejar: ${primeraLinea(e)}`, { error: crudo(e) });
+    process.exit(1);
+  };
+  process.on("unhandledRejection", e => morir("promesa", e));
+  process.on("uncaughtException", e => morir("excepción", e));
 }

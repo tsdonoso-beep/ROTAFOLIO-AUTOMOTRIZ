@@ -133,9 +133,43 @@ export async function marcoFormulario(page: Page): Promise<Frame | null> {
 }
 
 /** Menú → «Nueva Consulta de comprobantes de pago». Las esperas fijas son a propósito: con textos repetidos, apurarse clica la categoría otra vez. */
+/** Espera el formulario de consulta (el campo rucEmisor) dentro de algún recuadro. */
+async function esperarFormulario(page: Page, ms: number): Promise<Frame | null> {
+  const fin = Date.now() + ms;
+  while (Date.now() < fin) {
+    const f = await marcoFormulario(page);
+    if (f) return f;
+    await page.waitForTimeout(400);
+  }
+  return null;
+}
+
+/**
+ * Llega a «Nueva Consulta» SIN SALIR DEL MENÚ DE SOL.
+ *
+ * Salir del menú —recargar MenuInternet.htm, navegar a otra página— dispara el
+ * cierre de sesión de SOL (la app pide «…?logout»). A veces el cierre alcanzaba
+ * a correr y a veces no: el formulario abría con la pantalla de ingreso, el
+ * segundo login pedía captcha en GitHub Actions y la corrida moría (30/09/2026).
+ * Por eso:
+ *   • si el formulario ya está abierto (renovar el token, reintentar tras un
+ *     error), se recarga SOLO su recuadro: la app pide token nuevo al cargar;
+ *   • si estamos en el menú recién entrados, se hace clic en él directamente;
+ *   • solo si no estamos en el menú se navega a él.
+ */
 export async function abrirFormulario(b: Bitacora, page: Page, quien: string): Promise<Frame> {
-  await irConReintento(b, page, LOGIN_URL, quien);
-  await page.waitForLoadState("networkidle", { timeout: 30000 }).catch(() => {});
+  const abierto = await marcoFormulario(page);
+  if (abierto) {
+    await abierto.goto(abierto.url(), { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => {});
+    const f = await esperarFormulario(page, 30000);
+    if (f) return f;
+    b.log("aviso", quien, "recargar el formulario no funcionó; se vuelve a recorrer el menú");
+  }
+  const enMenu = /MenuInternet/i.test(page.url()) && !(await page.$("#txtRuc"));
+  if (!enMenu) {
+    await irConReintento(b, page, LOGIN_URL, quien);
+    await page.waitForLoadState("networkidle", { timeout: 30000 }).catch(() => {});
+  }
   if (await sesionCaida(page)) throw new ErrorSesion("el menú devolvió la pantalla de ingreso");
   for (const [i, paso] of MENU.entries()) {
     const posicion = paso.posicion ?? (i > 0 && MENU[i - 1].texto === paso.texto ? "ultima" : "primera");
@@ -143,12 +177,8 @@ export async function abrirFormulario(b: Bitacora, page: Page, quien: string): P
       throw new Error(`no se llegó al formulario: falta «${paso.texto}» (paso ${i + 1})`);
     if (i < MENU.length - 1) await page.waitForTimeout(MENU[i + 1]?.texto === paso.texto ? 2500 : 1200);
   }
-  const fin = Date.now() + 30000;
-  while (Date.now() < fin) {
-    const f = await marcoFormulario(page);
-    if (f) return f;
-    await page.waitForTimeout(400);
-  }
+  const f = await esperarFormulario(page, 30000);
+  if (f) return f;
   throw new Error("el menú terminó pero el formulario (rucEmisor) no apareció en 30 s");
 }
 

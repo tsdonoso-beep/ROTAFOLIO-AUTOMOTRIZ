@@ -37,8 +37,15 @@ export class ClienteApi {
   b: Bitacora;
   quien: string;
   timeoutMs: number;
-  http: APIRequestContext;
-  constructor(b: Bitacora, http: APIRequestContext, token: () => string | null, quien = "api", timeoutMs = 30000) {
+  // Un contexto fijo, o cómo obtener el vigente (el Renovador puede cambiar de sesión a mitad de corrida).
+  http: APIRequestContext | (() => APIRequestContext);
+  constructor(
+    b: Bitacora,
+    http: APIRequestContext | (() => APIRequestContext),
+    token: () => string | null,
+    quien = "api",
+    timeoutMs = 30000,
+  ) {
     this.b = b;
     this.http = http;
     this.token = token;
@@ -53,7 +60,8 @@ export class ClienteApi {
     let status = 0,
       texto = "";
     try {
-      const r = await this.http.fetch(url, {
+      const http = typeof this.http === "function" ? this.http() : this.http;
+      const r = await http.fetch(url, {
         method: metodo,
         headers: {
           authorization: auth,

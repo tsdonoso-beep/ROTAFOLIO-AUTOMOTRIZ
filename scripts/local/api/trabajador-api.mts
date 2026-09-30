@@ -4,7 +4,7 @@ import type { BrowserContext, Page } from "playwright";
 import type { Bitacora } from "../comun/bitacora.mts";
 import { clave, type Pendiente } from "../comun/tipos.mts";
 import type { Tarea, Trabajador, Resultado } from "../comun/tuberia.mts";
-import { abrirFormulario, entrar, Token } from "../sol/sesion.mts";
+import { abrirFormulario, entrar, nuevoContexto, Token } from "../sol/sesion.mts";
 import { ClienteApi } from "./cliente.mts";
 
 /**
@@ -20,9 +20,16 @@ export class Renovador {
   private enCurso: Promise<void> | null = null;
   renovaciones = 0;
 
-  constructor(b: Bitacora, ctx: BrowserContext) {
+  /**
+   * `pagina`: la pestaña donde se inició sesión, para abrir ahí el formulario
+   * que da el token. Cerrarla y abrir otra perdía la sesión en GitHub Actions
+   * (la nueva mostraba el ingreso), el segundo login pedía captcha y la
+   * corrida moría antes de empezar (30/09/2026).
+   */
+  constructor(b: Bitacora, ctx: BrowserContext, pagina?: Page) {
     this.b = b;
     this.ctx = ctx;
+    this.page = pagina ?? null;
     this.token.vigilar(ctx);
   }
 
@@ -37,15 +44,18 @@ export class Renovador {
           d.accept().catch(() => {});
         });
       }
+      let abierto = true;
       try {
         await abrirFormulario(this.b, this.page, "token");
       } catch (e) {
-        this.b.log("aviso", "token", `no se abrió el formulario (${e instanceof Error ? e.message : e}); se reinicia sesión`);
-        await entrar(this.b, this.page, "token");
-        await abrirFormulario(this.b, this.page, "token");
+        abierto = false;
+        this.b.log("aviso", "token", `no se abrió el formulario: ${e instanceof Error ? e.message : e}`);
       }
-      const fin = Date.now() + 30000;
-      while (Date.now() < fin && (!this.token.valor || this.token.valor === anterior)) await new Promise(r => setTimeout(r, 250));
+      if (abierto) await this.esperarToken(anterior, 15000);
+      // La app reusa el token guardado hasta que vence: si recargar devolvió el
+      // mismo y ya está por vencer (o el formulario no abrió), sesión nueva en
+      // un contexto limpio. Sin esto, un 401 volvía a pedir el mismo token en círculo.
+      if (!abierto || !this.token.valor || (this.token.valor === anterior && !this.token.vigente(120))) await this.sesionNueva(anterior);
       if (!this.token.valor) throw new Error("la app no pidió token a api-cpe");
       this.renovaciones++;
       const vence = this.token.expira ? new Date(this.token.expira * 1000).toLocaleTimeString() : "?";
@@ -54,6 +64,31 @@ export class Renovador {
       this.enCurso = null;
     });
     return this.enCurso;
+  }
+
+  private async esperarToken(anterior: string | null, ms: number) {
+    const fin = Date.now() + ms;
+    while (Date.now() < fin && (!this.token.valor || this.token.valor === anterior)) await new Promise(r => setTimeout(r, 250));
+  }
+
+  /** Otra sesión de SOL en un contexto nuevo; si da el token, pasa a ser la vigente y la vieja se cierra. */
+  private async sesionNueva(anterior: string | null) {
+    this.b.log("aviso", "token", "sesión nueva en un contexto limpio");
+    const nav = this.ctx.browser();
+    if (!nav) throw new Error("no hay navegador para abrir otra sesión");
+    const ctx = await nuevoContexto(nav);
+    this.token.vigilar(ctx);
+    const page = await ctx.newPage();
+    page.on("dialog", d => {
+      d.accept().catch(() => {});
+    });
+    await entrar(this.b, page, "token");
+    await abrirFormulario(this.b, page, "token");
+    await this.esperarToken(anterior, 30000);
+    const vieja = this.ctx;
+    this.ctx = ctx;
+    this.page = page;
+    await vieja.close().catch(() => {});
   }
 
   async listo(): Promise<string> {
@@ -76,7 +111,12 @@ export class TrabajadorApi implements Trabajador {
     this.renovador = renovador;
     this.conPdf = conPdf;
     this.id = `api${String(n).padStart(2, "0")}`;
-    this.api = new ClienteApi(b, renovador.ctx.request, () => renovador.token.valor, this.id);
+    this.api = new ClienteApi(
+      b,
+      () => renovador.ctx.request,
+      () => renovador.token.valor,
+      this.id,
+    );
   }
 
   destrabar() {
