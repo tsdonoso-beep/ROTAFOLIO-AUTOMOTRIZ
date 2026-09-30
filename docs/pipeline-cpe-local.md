@@ -257,22 +257,33 @@ En orden de impacto, con lo que se midió el 30/09/2026:
    (clasificación, reintentos, colas con trabajadores falsos) y un lint que
    atrapa la sintaxis que rompía la ejecución en Node.
 
-## 9. Pendientes (al 30/09/2026, 16:30)
+## 9. Estado y pendientes (al 30/09/2026, 19:00)
 
-**Cobertura** (no-E001, 2026): 96.3% al cierre del 30/09 — de 0% en enero–agosto esa misma mañana.
+**Cobertura 2026** (lo recibido que está en el SIRE): **98.7%**. Lo que falta son
+comprobantes que SUNAT no entrega: ~89 del BCP (500 por la API y por pantallas)
+y ~89 que SUNAT responde «no existe». Notas E001 y PDF: completos.
+
+**Validado en GitHub el 30/09:** «SUNAT CPE por API» (login + token + API),
+«SUNAT diario» (hoja 2026 + hoja aparte 2025) y «SUNAT descargar XML» (sin
+facturas E001 recibidas). La descarga real desde GitHub se verá en el primer
+cron con pendientes (el de prueba solo tenía comprobantes del BCP).
 
 | # | Qué | Estado / cómo |
 |---|---|---|
-| 1 | **BCP (RUC 20100047218)**, ~120 | SUNAT da «Error del Servidor» por la API **y** por pantallas, siempre. No depende de nosotros: pedirlos al banco o dejarlos como excepción |
-| 2 | **Migración 044** (borra 109 filas vacías, leídas de la constancia CDR) | Pendiente: alguien con acceso al SQL Editor de Supabase. No es urgente: no salen en las hojas ni traban el pipeline |
-| 3 | **Validar «SUNAT CPE por API» en GitHub** | Actions → Run workflow con `limite` 5, o esperar el cron de las 8:30. Si SUNAT rechaza a GitHub, correrlo desde una laptop |
-| 4 | **Septiembre–diciembre 2025** | El SIRE ya los tiene (3 250). Decisión de Contabilidad. Ojo: `PERIODO=todos` ya los incluye |
-| 5 | **Notas de crédito E001** por la API | 404 siempre: siguen por «descargar XML» |
-| 6 | **Drive es el cuello (~70-100/min)** | Idea: guardar en la base antes de subir a Drive |
-| 7 | **Padrón de RUC** | SUNAT publica el padrón reducido como archivo (393 MB, estado y condición de todos los RUC, sin captcha). Buen contribuyente y agentes no están como archivo |
-| 8 | **Hoja «COBERTURA»** desactualizada y cortada en 1 000 filas | Es de la app web |
+| 1 | **BCP (RUC 20100047218)** | Se comunica a Contabilidad: pedirlos al banco o dejarlos como excepción |
+| 2 | **Padrón de RUC** | 531 proveedores de 2026 sin consultar al 30/09; puesta al día local ese día (`DEBUG=0 MAX_CONSULTAS=600 pnpm padron:local`). El cron consulta 80 por día, con 2026 primero |
+| 3 | **Sep–dic 2025** | No hace falta por ahora. El SIRE ya los trae: van a hojas aparte («… 2025») y el padrón los deja al final |
+| 4 | **Drive es el cuello (~70-100/min)** | Idea: guardar en la base antes de subir a Drive |
+| 5 | **Padrón reducido de SUNAT** (archivo de 393 MB) | Solo estado y condición; buen contribuyente y agentes siguen por consulta |
+| 6 | **Hoja «COBERTURA»** desactualizada | Es de la app web |
 
-**Hecho el 30/09:** migración 043; E001 de enero y facturas E001 recibidas pasadas a la API (el cron de la API las toma y «descargar XML» ya no); lector de XML arreglado para zips con constancia + factura (COESTI); logs al estilo nuevo en todos los workflows; filtros `RUCS`, `SERIES`, `TIPOS`; `pnpm sire:local`.
+**Aprendido el 30/09 sobre el login a SOL** (`sol/sesion.mts`):
+- Recargar o salir del menú cierra la sesión (`…?logout`): el formulario se abre sin salir del menú, y para renovar el token se recarga solo su recuadro.
+- Se espera a VER el menú («Bienvenido,» / «Empresas»), no la URL (esperar la URL tardaba 64 s en GitHub).
+- A veces la autenticación termina en la portada de `api-seguridad` («Bienvenidos a SUNAT»): se pide el menú de nuevo y, si vuelve el formulario, se ingresa otra vez.
+- Un segundo login seguido puede pedir captcha (en GitHub): por eso se evita.
+- Si el login o el menú fallan, captura + HTML en `logs/<corrida>/errores/` (en GitHub, en el artefacto).
+- Los zips de algunos emisores (vía OSE) traen primero la constancia CDR: `documentoPrincipal()` elige la factura.
 
 ### Qué baja cada workflow desde el 30/09/2026
 
