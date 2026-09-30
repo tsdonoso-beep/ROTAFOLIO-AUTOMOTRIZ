@@ -1,9 +1,10 @@
 // Sesión de SOL con Playwright: navegador, login, menú hasta «Nueva Consulta» y el token de api-cpe.
 
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { chromium, type Browser, type BrowserContext, type Page, type Frame } from "playwright";
 import { credencialesSol, HEADLESS, LOGIN_URL, RUC } from "../comun/config.mts";
 import { dormir, primeraLinea, type Bitacora } from "../comun/bitacora.mts";
-import { expiracionJwt } from "../comun/tipos.mts";
 
 const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
 
@@ -61,19 +62,104 @@ export async function entrar(b: Bitacora, page: Page, quien: string): Promise<vo
   await page.fill("#txtUsuario", usuario);
   await page.fill("#txtContrasena", clave);
   await page.click((await page.$("#btnAceptar")) ? "#btnAceptar" : "text=Iniciar sesión");
-  await page.waitForURL(/MenuInternet\.htm/i, { timeout: 60000 }).catch(() => {});
-  await page.waitForLoadState("networkidle", { timeout: 30000 }).catch(() => {});
-  const cuerpo = (await page.content()).toLowerCase();
-  if (/captcha|recaptcha|código de verificación/.test(cuerpo)) throw new ErrorSesion("el login mostró un captcha");
-  if (/usuario o clave|clave incorrecta|no coinciden/.test(cuerpo)) throw new ErrorSesion("SOL rechazó las credenciales");
-  if (await page.$("#txtRuc")) throw new ErrorSesion("después del login sigue el formulario de ingreso");
-  b.log("info", quien, "sesión abierta");
+  // Se espera a VER el menú, no a que la URL cambie: esperar la URL espera
+  // además el «load» completo, que en GitHub Actions tardaba 64 s.
+  const t0 = Date.now();
+  let pidioMenu = false;
+  let reingreso = false;
+  while (Date.now() - t0 < 90000) {
+    // A veces la autenticación de SUNAT termina en su portada
+    // (api-seguridad.sunat.gob.pe/?state=&code=…, «Bienvenidos a SUNAT») en vez
+    // de volver al menú: el login SÍ quedó hecho, falta el regreso. Se pide el
+    // menú una vez; con la sesión ya autenticada, entra (30/09/2026).
+    if (!pidioMenu && Date.now() - t0 > 5000 && ES_PORTADA_SEGURIDAD.test(page.url())) {
+      pidioMenu = true;
+      b.log("aviso", quien, "la autenticación quedó en la portada de SUNAT; se pide el menú de nuevo");
+      await irConReintento(b, page, LOGIN_URL, quien).catch(() => {});
+      continue;
+    }
+    // Si al pedir el menú vuelve el formulario de ingreso, se llena una vez más.
+    if (pidioMenu && !reingreso && (await ingresoVisible(page))) {
+      reingreso = true;
+      b.log("aviso", quien, "volvió el formulario de ingreso; se ingresa otra vez");
+      await page.fill("#txtRuc", RUC);
+      await page.fill("#txtUsuario", usuario);
+      await page.fill("#txtContrasena", clave);
+      await page.click((await page.$("#btnAceptar")) ? "#btnAceptar" : "text=Iniciar sesión");
+      continue;
+    }
+    if (await menuVisible(page)) {
+      b.log("info", quien, `sesión abierta en ${((Date.now() - t0) / 1000).toFixed(0)} s`);
+      return;
+    }
+    const texto = (
+      await page
+        .locator("body")
+        .innerText({ timeout: 2000 })
+        .catch(() => "")
+    ).toLowerCase();
+    if (/captcha|código de verificación/.test(texto)) {
+      await guardarEvidencia(b, page, "login-captcha");
+      throw new ErrorSesion("el login mostró un captcha");
+    }
+    // Solo el mensaje de error real: el formulario trae el enlace «¿Olvidaste tu usuario o clave?».
+    if (/(usuario|clave)[^.\n]{0,40}(incorrect|inv[aá]lid|no coincide)|no coinciden/.test(texto))
+      throw new ErrorSesion("SOL rechazó las credenciales");
+    await page.waitForTimeout(500);
+  }
+  await guardarEvidencia(b, page, "login-sin-menu");
+  throw new ErrorSesion(`después del login no apareció el menú en 90 s (${page.url().slice(0, 120)})`);
+}
+
+/** La portada del servicio de autenticación de SUNAT (a veces el login termina ahí en vez de en el menú). */
+const ES_PORTADA_SEGURIDAD = /^https:\/\/api-seguridad\.sunat\.gob\.pe\/?(\?|$)/i;
+
+/** El formulario de ingreso, VISIBLE. Solo existir no basta: la página del menú puede traerlo escondido. */
+async function ingresoVisible(page: Page): Promise<boolean> {
+  return page
+    .locator("#txtRuc")
+    .first()
+    .isVisible()
+    .catch(() => false);
+}
+
+/** El menú de SOL a la vista: «Bienvenido, …» arriba, o «Empresas» en algún recuadro. */
+export async function menuVisible(page: Page): Promise<boolean> {
+  if (page.isClosed() || (await ingresoVisible(page))) return false;
+  const texto = await page
+    .locator("body")
+    .innerText({ timeout: 2000 })
+    .catch(() => "");
+  if (/Bienvenido,/i.test(texto)) return true;
+  for (const f of page.frames()) {
+    const visible = await f
+      .getByText("Empresas", { exact: true })
+      .first()
+      .isVisible()
+      .catch(() => false);
+    if (visible) return true;
+  }
+  return false;
+}
+
+/** Captura, HTML y URL de la pestaña en logs/<corrida>/errores/: en GitHub quedan en el artefacto de bitácoras. */
+export async function guardarEvidencia(b: Bitacora, page: Page, nombre: string): Promise<void> {
+  if (page.isClosed()) return;
+  const base = join(b.dir, "errores", `${nombre}-${Date.now()}`);
+  await page.screenshot({ path: `${base}.png`, fullPage: true, timeout: 15000 }).catch(() => {});
+  try {
+    writeFileSync(`${base}.html`, await page.content());
+    writeFileSync(`${base}.txt`, [page.url(), ...page.frames().map(fr => `  frame: ${fr.url()}`)].join("\n"));
+  } catch {
+    /* la evidencia nunca tumba la corrida */
+  }
+  b.log("aviso", "evidencia", `captura y HTML en ${base}.png/.html (url: ${page.url().slice(0, 120)})`);
 }
 
 /** ¿La pestaña quedó fuera de SOL? (formulario de ingreso o «Usted esta saliendo del Menú SOL»). */
 export async function sesionCaida(page: Page): Promise<boolean> {
   if (page.isClosed()) return false;
-  if ((await page.$("#txtRuc").catch(() => null)) !== null) return true;
+  if (await ingresoVisible(page)) return true;
   const t = await page
     .locator("body")
     .innerText({ timeout: 2000 })
@@ -165,12 +251,15 @@ export async function abrirFormulario(b: Bitacora, page: Page, quien: string): P
     if (f) return f;
     b.log("aviso", quien, "recargar el formulario no funcionó; se vuelve a recorrer el menú");
   }
-  const enMenu = /MenuInternet/i.test(page.url()) && !(await page.$("#txtRuc"));
+  const enMenu = await menuVisible(page);
   if (!enMenu) {
     await irConReintento(b, page, LOGIN_URL, quien);
     await page.waitForLoadState("networkidle", { timeout: 30000 }).catch(() => {});
   }
-  if (await sesionCaida(page)) throw new ErrorSesion("el menú devolvió la pantalla de ingreso");
+  if (await sesionCaida(page)) {
+    await guardarEvidencia(b, page, "menu-con-ingreso");
+    throw new ErrorSesion("el menú devolvió la pantalla de ingreso");
+  }
   for (const [i, paso] of MENU.entries()) {
     const posicion = paso.posicion ?? (i > 0 && MENU[i - 1].texto === paso.texto ? "ultima" : "primera");
     if (!(await clicVisible(page, paso.texto, posicion)))
@@ -182,32 +271,4 @@ export async function abrirFormulario(b: Bitacora, page: Page, quien: string): P
   throw new Error("el menú terminó pero el formulario (rucEmisor) no apareció en 30 s");
 }
 
-/**
- * El token Bearer con que la app «Nueva Consulta» llama a api-cpe.sunat.gob.pe.
- * Se lee de las cabeceras de sus propias peticiones; vive solo en memoria.
- */
-export class Token {
-  valor: string | null = null;
-  expira: number | null = null; // segundos epoch
-  vigilar(ctx: BrowserContext): void {
-    ctx.on("request", req => {
-      if (!/api-cpe\.sunat\.gob\.pe/i.test(req.url())) return;
-      const a = req.headers()["authorization"];
-      if (a && a !== this.valor) {
-        this.valor = a;
-        this.expira = expiracionJwt(a);
-      }
-    });
-  }
-  vigente(margenS = 60): boolean {
-    return !!this.valor && (this.expira === null || this.expira - margenS > Date.now() / 1000);
-  }
-  async esperar(ms = 30000): Promise<string> {
-    const fin = Date.now() + ms;
-    while (Date.now() < fin) {
-      if (this.valor) return this.valor;
-      await dormir(250);
-    }
-    throw new ErrorSesion("la app no llamó a api-cpe: no hay token");
-  }
-}
+export { Token } from "./token.mts";
