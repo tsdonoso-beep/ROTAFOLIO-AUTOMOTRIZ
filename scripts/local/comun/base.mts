@@ -3,7 +3,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { pedir, RUC, PERIODOS, MAS_RECIENTE_PRIMERO } from "./config.mts";
+import { pedir, RUC, PERIODOS, MAS_RECIENTE_PRIMERO, RUCS, SERIES } from "./config.mts";
 import { dormir, type Bitacora } from "./bitacora.mts";
 import { prepararLote, identidad } from "../../../lib/sunat/cpe-importacion.ts";
 import type { ComprobanteCpe } from "../../../lib/sunat/cpe-xml.ts";
@@ -83,8 +83,11 @@ export async function pendientes(b: Bitacora): Promise<Pendiente[]> {
   const sire = porFecha(await todas<FilaSire>(b, "comprobantes_sunat", (despues, tamano) => {
     let q = c.from("comprobantes_sunat")
       .select("id, proveedor_ruc, proveedor_nombre, tipo_comprobante, serie, numero, fecha_emision, periodo")
-      .eq("empresa_ruc", RUC).not("serie", "ilike", "E%").in("tipo_comprobante", ["01", "07", "08"]).neq("proveedor_ruc", "0");
+      .eq("empresa_ruc", RUC).in("tipo_comprobante", ["01", "07", "08"]).neq("proveedor_ruc", "0");
+    if (SERIES === "noE") q = q.not("serie", "ilike", "E%");
+    if (SERIES === "E") q = q.ilike("serie", "E%");
     if (PERIODOS.length) q = q.in("periodo", PERIODOS);
+    if (RUCS.length) q = q.in("proveedor_ruc", RUCS);
     if (despues) q = q.gt("id", despues);
     return q.order("id").limit(tamano);
   }), asc);

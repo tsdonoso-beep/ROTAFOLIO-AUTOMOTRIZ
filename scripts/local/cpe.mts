@@ -15,7 +15,7 @@
 
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { num, texto, LIMITE, PERIODOS } from "./comun/config.mts";
+import { num, texto, LIMITE, PERIODOS, RUCS, SERIES } from "./comun/config.mts";
 import { crearBitacora, vigilarProceso, primeraLinea, usarSalida } from "./comun/bitacora.mts";
 import { Barra } from "./comun/barra.mts";
 import { pendientes, pendientesSinPdf, publicarDetalle } from "./comun/base.mts";
@@ -34,7 +34,7 @@ const MODO_SESION = texto("MODO_SESION", "compartida");
 
 const b = crearBitacora(`cpe-${VIA}`);
 vigilarProceso(b);
-b.log("info", "inicio", `corrida ${b.corrida} · vía ${VIA} · modo ${MODO} · períodos ${PERIODOS.join(",") || "TODOS"} · ${WORKERS} en paralelo · logs en ${b.dir}`);
+b.log("info", "inicio", `corrida ${b.corrida} · vía ${VIA} · modo ${MODO} · períodos ${PERIODOS.join(",") || "TODOS"} · series ${SERIES}${RUCS.length ? ` · RUCS ${RUCS.join(",")}` : ""} · ${WORKERS} en paralelo · logs en ${b.dir}`);
 
 if (MODO === "pdf" && VIA !== "api") { b.log("error", "inicio", "MODO=pdf solo funciona con VIA=api"); process.exit(1); }
 const lista = MODO === "pdf" ? await pendientesSinPdf(b) : await pendientes(b);
