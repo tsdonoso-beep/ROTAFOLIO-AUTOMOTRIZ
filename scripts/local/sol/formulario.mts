@@ -28,8 +28,24 @@ export async function elegirTipo(marco: Frame, p: Pendiente, actual: string | nu
   const c = marco.locator(`li:has-text("${etiqueta}"), [role="option"]:has-text("${etiqueta}"), .p-dropdown-item:has-text("${etiqueta}")`);
   const n = await c.count();
   for (let i = 0; i < n; i++) {
-    const t = ((await c.nth(i).textContent().catch(() => "")) ?? "").replace(/\s+/g, " ").trim();
-    if (quiere(t) && await c.nth(i).isVisible().catch(() => false)) { await c.nth(i).click({ timeout: 5000 }); return t; }
+    const t = (
+      (await c
+        .nth(i)
+        .textContent()
+        .catch(() => "")) ?? ""
+    )
+      .replace(/\s+/g, " ")
+      .trim();
+    if (
+      quiere(t) &&
+      (await c
+        .nth(i)
+        .isVisible()
+        .catch(() => false))
+    ) {
+      await c.nth(i).click({ timeout: 5000 });
+      return t;
+    }
   }
   throw new Error(`el combobox no ofreció «${calificador ? calificador + " - " : ""}${etiqueta}» (${n} candidatos)`);
 }
@@ -45,26 +61,36 @@ export async function llenar(marco: Frame, p: Pendiente, tipoActual: string | nu
 }
 
 export async function clicConsultar(marco: Frame): Promise<void> {
-  for (const loc of [marco.locator('input[value="Consultar"], input[value="Buscar"]'), marco.getByRole("button", { name: /consultar|buscar/i })]) {
-    if (await loc.first().count()) { await loc.first().click({ timeout: 10000 }); return; }
+  for (const loc of [
+    marco.locator('input[value="Consultar"], input[value="Buscar"]'),
+    marco.getByRole("button", { name: /consultar|buscar/i }),
+  ]) {
+    if (await loc.first().count()) {
+      await loc.first().click({ timeout: 10000 });
+      return;
+    }
   }
   throw new Error("no encontré el botón Consultar/Buscar");
 }
 
 // Donde una app Angular/Bootstrap/PrimeNG pinta un error o un aviso.
-const MENSAJES = "[role=alert], [role=alertdialog], .alert, .toast, .p-toast-message, .invalid-feedback, .text-danger, ngb-alert, .modal-body, .modal-title";
+const MENSAJES =
+  "[role=alert], [role=alertdialog], .alert, .toast, .p-toast-message, .invalid-feedback, .text-danger, ngb-alert, .modal-body, .modal-title";
 
 export async function textosVisibles(marco: Frame): Promise<string[]> {
-  return marco.locator(MENSAJES).evaluateAll(els => {
-    const out: string[] = [];
-    for (const e of els) {
-      const el = e as HTMLElement;
-      const r = el.getBoundingClientRect();
-      const t = (el.innerText || "").replace(/\s+/g, " ").trim();
-      if (r.width && r.height && t && t.length < 600 && !out.includes(t)) out.push(t);
-    }
-    return out.slice(0, 12);
-  }).catch(() => [] as string[]);
+  return marco
+    .locator(MENSAJES)
+    .evaluateAll(els => {
+      const out: string[] = [];
+      for (const e of els) {
+        const el = e as HTMLElement;
+        const r = el.getBoundingClientRect();
+        const t = (el.innerText || "").replace(/\s+/g, " ").trim();
+        if (r.width && r.height && t && t.length < 600 && !out.includes(t)) out.push(t);
+      }
+      return out.slice(0, 12);
+    })
+    .catch(() => [] as string[]);
 }
 
 const BOTON_XML = 'button[ngbtooltip="Descargar XML"]';
@@ -75,13 +101,23 @@ export async function esperarResultado(marco: Frame, topeMs: number, extras: () 
   const fin = Date.now() + topeMs;
   let textos: string[] = [];
   while (Date.now() < fin) {
-    if (await marco.locator(BOTON_XML).first().isVisible().catch(() => false)) return { clase: "OK", textos: [] };
-    textos = [...await textosVisibles(marco), ...extras()];
+    if (
+      await marco
+        .locator(BOTON_XML)
+        .first()
+        .isVisible()
+        .catch(() => false)
+    )
+      return { clase: "OK", textos: [] };
+    textos = [...(await textosVisibles(marco)), ...extras()];
     const c = clasificarTexto(textos);
     if (c) return { clase: c, textos };
     await marco.page().waitForTimeout(300);
   }
-  const cuerpo = await marco.locator("body").innerText().catch(() => "");
+  const cuerpo = await marco
+    .locator("body")
+    .innerText()
+    .catch(() => "");
   return { clase: textos.length ? "DESCONOCIDO" : "TIMEOUT", textos: [...textos, `BODY: ${cuerpo.replace(/\s+/g, " ").slice(0, 1500)}`] };
 }
 
@@ -101,15 +137,35 @@ export const bajarPdf = (marco: Frame) => bajar(marco.page(), () => marco.locato
  * (confirmado el 30/09/2026). false = no se pudo; hay que volver por el menú.
  */
 export async function cerrarModal(marco: Frame): Promise<boolean> {
-  const x = marco.locator('ngb-modal-window .modal-header button.close, ngb-modal-window .modal-header button.btn-close, ngb-modal-window .modal-header [aria-label="Close"], ngb-modal-window .modal-header [aria-label="Cerrar"]');
+  const x = marco.locator(
+    'ngb-modal-window .modal-header button.close, ngb-modal-window .modal-header button.btn-close, ngb-modal-window .modal-header [aria-label="Close"], ngb-modal-window .modal-header [aria-label="Cerrar"]',
+  );
   const n = await x.count().catch(() => 0);
   let clic = false;
   for (let i = 0; i < n && !clic; i++) {
-    if (await x.nth(i).isVisible().catch(() => false)) { await x.nth(i).click({ timeout: 3000 }).catch(() => {}); clic = true; }
+    if (
+      await x
+        .nth(i)
+        .isVisible()
+        .catch(() => false)
+    ) {
+      await x
+        .nth(i)
+        .click({ timeout: 3000 })
+        .catch(() => {});
+      clic = true;
+    }
   }
   if (!clic) return false;
   for (let i = 0; i < 15; i++) {
-    if (!(await marco.locator("ngb-modal-window").first().isVisible().catch(() => false))) return true;
+    if (
+      !(await marco
+        .locator("ngb-modal-window")
+        .first()
+        .isVisible()
+        .catch(() => false))
+    )
+      return true;
     await marco.page().waitForTimeout(200);
   }
   return false;

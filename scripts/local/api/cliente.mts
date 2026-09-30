@@ -17,7 +17,13 @@ export const API = "https://api-cpe.sunat.gob.pe/v1/contribuyente/consultacpe";
 const ORIGEN = "https://e-factura.sunat.gob.pe";
 export const TIPO_ARCHIVO = { PDF: "01", XML: "02", CDR: "03" } as const;
 
-export interface Respuesta<T = unknown> { status: number; clase: Clase; ms: number; json: T | null; texto: string }
+export interface Respuesta<T = unknown> {
+  status: number;
+  clase: Clase;
+  ms: number;
+  json: T | null;
+  texto: string;
+}
 
 /**
  * Se pide con el cliente HTTP de Playwright (`contexto.request`), NO con el
@@ -33,19 +39,27 @@ export class ClienteApi {
   timeoutMs: number;
   http: APIRequestContext;
   constructor(b: Bitacora, http: APIRequestContext, token: () => string | null, quien = "api", timeoutMs = 30000) {
-    this.b = b; this.http = http; this.token = token; this.quien = quien; this.timeoutMs = timeoutMs;
+    this.b = b;
+    this.http = http;
+    this.token = token;
+    this.quien = quien;
+    this.timeoutMs = timeoutMs;
   }
 
   async pedir<T>(metodo: "GET" | "POST", url: string, cuerpo?: unknown): Promise<Respuesta<T>> {
     const t0 = Date.now();
     const auth = this.token();
     if (!auth) return { status: 0, clase: "SESION", ms: 0, json: null, texto: "sin token" };
-    let status = 0, texto = "";
+    let status = 0,
+      texto = "";
     try {
       const r = await this.http.fetch(url, {
         method: metodo,
         headers: {
-          authorization: auth, accept: "application/json, text/plain, */*", origin: ORIGEN, referer: `${ORIGEN}/`,
+          authorization: auth,
+          accept: "application/json, text/plain, */*",
+          origin: ORIGEN,
+          referer: `${ORIGEN}/`,
           ...(cuerpo ? { "content-type": "application/json" } : {}),
         },
         data: cuerpo ? JSON.stringify(cuerpo) : undefined,
@@ -62,7 +76,11 @@ export class ClienteApi {
     const ms = Date.now() - t0;
     this.b.http({ metodo, url, status, cuerpo: texto, quien: this.quien, ms });
     let json: T | null = null;
-    try { json = texto ? JSON.parse(texto) as T : null; } catch { /* no era JSON: queda en texto */ }
+    try {
+      json = texto ? (JSON.parse(texto) as T) : null;
+    } catch {
+      /* no era JSON: queda en texto */
+    }
     return { status, clase: clasificarHttp(status, texto), ms, json, texto };
   }
 
@@ -73,7 +91,10 @@ export class ClienteApi {
 
   /** Un archivo del comprobante. Devuelve el Archivo ya decodificado, o la respuesta cruda si falló. */
   async archivo(p: Pendiente, tipo: "PDF" | "XML" | "CDR"): Promise<{ r: Respuesta; archivo: Archivo | null }> {
-    const r = await this.pedir<{ nomArchivo?: string; valArchivo?: string }>("GET", `${API}/comprobantes/${idApi(p)}/${TIPO_ARCHIVO[tipo]}`);
+    const r = await this.pedir<{ nomArchivo?: string; valArchivo?: string }>(
+      "GET",
+      `${API}/comprobantes/${idApi(p)}/${TIPO_ARCHIVO[tipo]}`,
+    );
     return { r, archivo: r.clase === "OK" ? decodificarArchivo(r.json, tipo, p) : null };
   }
 
@@ -93,9 +114,17 @@ export class ClienteApi {
  * { nomArchivo, valArchivo } → Archivo. La app decodifica valArchivo como
  * base64 «url-safe» y guarda XML/CDR como .zip; se hace igual.
  */
-export function decodificarArchivo(json: { nomArchivo?: string; valArchivo?: string } | null, tipo: "PDF" | "XML" | "CDR", p: Pick<Pendiente, "proveedorRuc" | "tipoComprobante" | "serie" | "numero">): Archivo | null {
+export function decodificarArchivo(
+  json: { nomArchivo?: string; valArchivo?: string } | null,
+  tipo: "PDF" | "XML" | "CDR",
+  p: Pick<Pendiente, "proveedorRuc" | "tipoComprobante" | "serie" | "numero">,
+): Archivo | null {
   if (!json?.valArchivo) return null;
-  const b64 = json.valArchivo.replace(/^data:.*;base64,/, "").replace(/\s/g, "").replace(/-/g, "+").replace(/_/g, "/");
+  const b64 = json.valArchivo
+    .replace(/^data:.*;base64,/, "")
+    .replace(/\s/g, "")
+    .replace(/-/g, "+")
+    .replace(/_/g, "/");
   let datos = Buffer.from(b64, "base64");
   if (!datos.length) return null;
   let base = (json.nomArchivo || `${p.proveedorRuc}-${p.tipoComprobante}-${p.serie}-${p.numero}`).replace(/[\\/:*?"<>|]/g, "_");
@@ -103,7 +132,11 @@ export function decodificarArchivo(json: { nomArchivo?: string; valArchivo?: str
   // El PDF llega DENTRO de un zip («…-PDF.zip» con el .pdf adentro): se sube el PDF, como hasta ahora.
   if (tipo === "PDF" && esZip) {
     const pdf = leerZip(datos).find(a => /\.pdf$/i.test(a.nombre));
-    if (pdf) { datos = Buffer.from(pdf.contenido); base = pdf.nombre; esZip = false; }
+    if (pdf) {
+      datos = Buffer.from(pdf.contenido);
+      base = pdf.nombre;
+      esZip = false;
+    }
   }
   const ext = tipo === "PDF" ? ".pdf" : esZip ? ".zip" : ".xml";
   const nombre = /\.(pdf|zip|xml)$/i.test(base) ? base : base + ext;

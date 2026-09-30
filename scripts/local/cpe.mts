@@ -18,7 +18,8 @@ import { join } from "node:path";
 import { num, texto, LIMITE, PERIODOS, RUCS, SERIES, TIPOS } from "./comun/config.mts";
 import { crearBitacora, vigilarProceso, primeraLinea, usarSalida } from "./comun/bitacora.mts";
 import { Barra } from "./comun/barra.mts";
-import { pendientes, pendientesSinPdf, publicarDetalle } from "./comun/base.mts";
+import { pendientes, pendientesSinPdf } from "./comun/base.mts";
+import { publicarDetalle } from "./comun/guardar.mts";
 import { Tuberia, type Trabajador } from "./comun/tuberia.mts";
 import { abrirNavegador, nuevoContexto, entrar } from "./sol/sesion.mts";
 import { TrabajadorUi } from "./sol/trabajador-ui.mts";
@@ -34,9 +35,16 @@ const MODO_SESION = texto("MODO_SESION", "compartida");
 
 const b = crearBitacora(`cpe-${VIA}`);
 vigilarProceso(b);
-b.log("info", "inicio", `corrida ${b.corrida} · vía ${VIA} · modo ${MODO} · períodos ${PERIODOS.join(",") || "TODOS"} · series ${SERIES} · tipos ${TIPOS.join(",")}${RUCS.length ? ` · RUCS ${RUCS.join(",")}` : ""} · ${WORKERS} en paralelo · logs en ${b.dir}`);
+b.log(
+  "info",
+  "inicio",
+  `corrida ${b.corrida} · vía ${VIA} · modo ${MODO} · períodos ${PERIODOS.join(",") || "TODOS"} · series ${SERIES} · tipos ${TIPOS.join(",")}${RUCS.length ? ` · RUCS ${RUCS.join(",")}` : ""} · ${WORKERS} en paralelo · logs en ${b.dir}`,
+);
 
-if (MODO === "pdf" && VIA !== "api") { b.log("error", "inicio", "MODO=pdf solo funciona con VIA=api"); process.exit(1); }
+if (MODO === "pdf" && VIA !== "api") {
+  b.log("error", "inicio", "MODO=pdf solo funciona con VIA=api");
+  process.exit(1);
+}
 const lista = MODO === "pdf" ? await pendientesSinPdf(b) : await pendientes(b);
 const aProcesar = LIMITE > 0 ? lista.slice(0, LIMITE) : lista;
 b.log("info", "inicio", `pendientes: ${lista.length} · se procesan: ${aProcesar.length}`);
@@ -45,8 +53,10 @@ if (!aProcesar.length) process.exit(0);
 const tuberia = new Tuberia(b, aProcesar, {
   politica: {
     // Por API los 500 son intermitentes y responden en ~200 ms: se reintenta en 30 s. Por pantalla, lo que pide SUNAT (5 min).
-    maxIntentos: num("MAX_INTENTOS", 6), esperaCaidoMs: num("ESPERA_CAIDO_S", VIA === "api" ? 30 : 300) * 1000,
-    esperaReintentoMs: num("ESPERA_REINTENTO_S", 20) * 1000, esperaLimiteMs: num("ESPERA_LIMITE_S", 60) * 1000,
+    maxIntentos: num("MAX_INTENTOS", 6),
+    esperaCaidoMs: num("ESPERA_CAIDO_S", VIA === "api" ? 30 : 300) * 1000,
+    esperaReintentoMs: num("ESPERA_REINTENTO_S", 20) * 1000,
+    esperaLimiteMs: num("ESPERA_LIMITE_S", 60) * 1000,
   },
   subidasEnParalelo: Math.max(1, num("SUBIDAS", 6)),
   pdfEnParalelo: Math.max(1, num("PDF_EN_PARALELO", 6)),
@@ -59,12 +69,16 @@ const tuberia = new Tuberia(b, aProcesar, {
 const nav = await abrirNavegador();
 const principal = await nuevoContexto(nav);
 const login = await principal.newPage();
-login.on("dialog", d => { d.accept().catch(() => {}); });
-try { await entrar(b, login, "login"); }
-catch (e) {
+login.on("dialog", d => {
+  d.accept().catch(() => {});
+});
+try {
+  await entrar(b, login, "login");
+} catch (e) {
   await login.screenshot({ path: join(b.dir, "errores", "login.png"), fullPage: true }).catch(() => {});
   b.log("error", "login", primeraLinea(e));
-  await nav.close(); process.exit(1);
+  await nav.close();
+  process.exit(1);
 }
 await login.close();
 
@@ -79,10 +93,14 @@ if (VIA === "api") {
 } else {
   const contextos: BrowserContext[] = [];
   for (let i = 0; i < cantidad; i++) {
-    if (MODO_SESION !== "separada") { contextos.push(principal); continue; }
+    if (MODO_SESION !== "separada") {
+      contextos.push(principal);
+      continue;
+    }
     const ctx = await nuevoContexto(nav);
     const p = await ctx.newPage();
-    await entrar(b, p, `login-${i + 1}`); await p.close();
+    await entrar(b, p, `login-${i + 1}`);
+    await p.close();
     contextos.push(ctx);
   }
   trabajadores = contextos.map((ctx, i) => new TrabajadorUi(b, ctx, i + 1, num("ESPERA_RESULTADO_S", 45) * 1000));
@@ -94,10 +112,15 @@ usarSalida(linea => barra.escribir(linea));
 barra.iniciar();
 const tLatido = setInterval(() => tuberia.latido(trabajadores), 30000);
 const tVigilante = setInterval(() => tuberia.vigilar(trabajadores), 15000);
-const tVolcado = setInterval(() => { void tuberia.volcar(); }, 60000);
+const tVolcado = setInterval(() => {
+  void tuberia.volcar();
+}, 60000);
 let interrupciones = 0;
 process.on("SIGINT", () => {
-  if (++interrupciones > 1) { b.log("error", "proceso", "segundo Ctrl+C: salida inmediata (lo bajado sigue en salida/cpe)"); process.exit(130); }
+  if (++interrupciones > 1) {
+    b.log("error", "proceso", "segundo Ctrl+C: salida inmediata (lo bajado sigue en salida/cpe)");
+    process.exit(130);
+  }
   tuberia.detener = true;
   b.log("aviso", "proceso", "Ctrl+C: se terminan los intentos en curso y se guarda lo bajado. Otro Ctrl+C sale ya.");
 });
@@ -105,7 +128,9 @@ process.on("SIGINT", () => {
 await Promise.all(trabajadores.map((w, i) => tuberia.correr(w, i * RAMPA_MS)));
 b.log("info", "cierre", "consultas terminadas; esperando subidas y guardado");
 await tuberia.cerrar();
-clearInterval(tLatido); clearInterval(tVigilante); clearInterval(tVolcado);
+clearInterval(tLatido);
+clearInterval(tVigilante);
+clearInterval(tVolcado);
 barra.terminar();
 usarSalida(linea => console.log(linea));
 await nav.close().catch(() => {});
@@ -116,9 +141,26 @@ if (tuberia.base.guardados > 0 && texto("PUBLICAR", "fin") !== "nunca") {
 } else tuberia.etapas.omitir("hoja", tuberia.base.guardados > 0 ? "PUBLICAR=nunca" : "no se guardó nada nuevo");
 tuberia.etapas.escribir({ progreso: tuberia.progreso(), terminada: true });
 
-const resumen = tuberia.resumen({ etapas: tuberia.etapas.instantanea().etapas, corrida: b.corrida, via: VIA, workers: WORKERS, periodos: PERIODOS, pendientes: lista.length, renovacionesToken: renovador?.renovaciones ?? 0, http: b.conteoHttp() });
+const resumen = tuberia.resumen({
+  etapas: tuberia.etapas.instantanea().etapas,
+  corrida: b.corrida,
+  via: VIA,
+  workers: WORKERS,
+  periodos: PERIODOS,
+  pendientes: lista.length,
+  renovacionesToken: renovador?.renovaciones ?? 0,
+  http: b.conteoHttp(),
+});
 writeFileSync(join(b.dir, "resumen.json"), JSON.stringify(resumen, null, 2));
-b.log("info", "resumen", `${resumen.minutos} min · OK ${resumen.finales.ok}/${aProcesar.length} · no existe ${resumen.finales.noExiste} · agotados ${resumen.finales.agotados} · sin terminar ${resumen.quedanEnCola} · ${resumen.okPorHora}/hora`);
-b.log("info", "resumen", `Drive ${JSON.stringify(resumen.drive)} · base ${JSON.stringify(resumen.base)} · por clase ${JSON.stringify(resumen.porClase)}`);
+b.log(
+  "info",
+  "resumen",
+  `${resumen.minutos} min · OK ${resumen.finales.ok}/${aProcesar.length} · no existe ${resumen.finales.noExiste} · agotados ${resumen.finales.agotados} · sin terminar ${resumen.quedanEnCola} · ${resumen.okPorHora}/hora`,
+);
+b.log(
+  "info",
+  "resumen",
+  `Drive ${JSON.stringify(resumen.drive)} · base ${JSON.stringify(resumen.base)} · por clase ${JSON.stringify(resumen.porClase)}`,
+);
 for (const [k, n] of Object.entries(resumen.http).slice(0, 12)) b.log("info", "http", `${String(n).padStart(5)}× ${k}`);
 b.log("info", "resumen", `detalle: ${join(b.dir, "resumen.json")} · intentos: intentos.jsonl · errores HTTP crudos: http.jsonl`);

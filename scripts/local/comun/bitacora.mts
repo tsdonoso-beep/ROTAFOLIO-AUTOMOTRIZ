@@ -12,7 +12,9 @@ export type Nivel = "info" | "aviso" | "error";
 
 /** Por dónde salen las líneas de consola: la barra de progreso la cambia para escribir por encima de ella. */
 let salida: (linea: string) => void = linea => console.log(linea);
-export function usarSalida(fn: (linea: string) => void): void { salida = fn; }
+export function usarSalida(fn: (linea: string) => void): void {
+  salida = fn;
+}
 
 export interface Bitacora {
   dir: string;
@@ -24,7 +26,14 @@ export interface Bitacora {
   conteoHttp(): Record<string, number>;
 }
 
-export interface RespuestaHttp { metodo: string; url: string; status: number; cuerpo?: string; quien?: string; ms?: number }
+export interface RespuestaHttp {
+  metodo: string;
+  url: string;
+  status: number;
+  cuerpo?: string;
+  quien?: string;
+  ms?: number;
+}
 
 export function crearBitacora(prefijo: string): Bitacora {
   const corrida = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
@@ -33,11 +42,17 @@ export function crearBitacora(prefijo: string): Bitacora {
   const conteo = new Map<string, number>();
 
   const jsonl = (archivo: string, dato: unknown) => {
-    try { appendFileSync(join(dir, archivo), JSON.stringify(dato) + "\n"); } catch { /* la bitácora nunca tumba la corrida */ }
+    try {
+      appendFileSync(join(dir, archivo), JSON.stringify(dato) + "\n");
+    } catch {
+      /* la bitácora nunca tumba la corrida */
+    }
   };
 
   return {
-    dir, corrida, jsonl,
+    dir,
+    corrida,
+    jsonl,
     log(nivel, quien, msg, extra) {
       const t = new Date();
       const marca = nivel === "error" ? "✗" : nivel === "aviso" ? "⚠" : "·";
@@ -59,8 +74,15 @@ export function crearBitacora(prefijo: string): Bitacora {
  * conteos agrupen por servicio y no por comprobante.
  */
 export function claveHttp(metodo: string, url: string, status: number): string {
-  let host = "?", ruta = url;
-  try { const u = new URL(url); host = u.host; ruta = u.pathname; } catch { /* url rara: se deja tal cual */ }
+  let host = "?",
+    ruta = url;
+  try {
+    const u = new URL(url);
+    host = u.host;
+    ruta = u.pathname;
+  } catch {
+    /* url rara: se deja tal cual */
+  }
   ruta = ruta
     .replace(/\/\d{11}-\w{2}-\w{4}-\d+-\d(?=\/|$)/g, "/:id")
     .replace(/\/\d{11}-\w{2}-\d(?=\/|$)/g, "/:lista")

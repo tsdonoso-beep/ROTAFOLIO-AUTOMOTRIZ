@@ -15,13 +15,24 @@ export async function nuevoContexto(nav: Browser): Promise<BrowserContext> {
   return nav.newContext({ acceptDownloads: true, locale: "es-PE", userAgent: USER_AGENT });
 }
 
-export class ErrorSesion extends Error { constructor(m: string) { super(m); this.name = "ErrorSesion"; } }
+export class ErrorSesion extends Error {
+  constructor(m: string) {
+    super(m);
+    this.name = "ErrorSesion";
+  }
+}
 
 export async function irConReintento(b: Bitacora, page: Page, url: string, quien: string, intentos = 4): Promise<void> {
   let ultimo: unknown;
   for (let i = 1; i <= intentos; i++) {
-    try { await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 }); return; }
-    catch (e) { ultimo = e; b.log("aviso", quien, `ir a ${url} falló (${i}/${intentos}): ${primeraLinea(e)}`); await dormir(3000 * i); }
+    try {
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
+      return;
+    } catch (e) {
+      ultimo = e;
+      b.log("aviso", quien, `ir a ${url} falló (${i}/${intentos}): ${primeraLinea(e)}`);
+      await dormir(3000 * i);
+    }
   }
   throw ultimo;
 }
@@ -35,9 +46,15 @@ export async function entrar(b: Bitacora, page: Page, quien: string): Promise<vo
   const { usuario, clave } = credencialesSol();
   b.log("info", quien, `entrando a SOL como ${RUC} / ${usuario}`);
   await irConReintento(b, page, LOGIN_URL, quien);
-  const hay = await page.waitForSelector("#txtRuc", { timeout: 20000 }).then(() => true).catch(() => false);
+  const hay = await page
+    .waitForSelector("#txtRuc", { timeout: 20000 })
+    .then(() => true)
+    .catch(() => false);
   if (!hay) {
-    if (/MenuInternet/i.test(page.url())) { b.log("info", quien, "la sesión ya estaba abierta"); return; }
+    if (/MenuInternet/i.test(page.url())) {
+      b.log("info", quien, "la sesión ya estaba abierta");
+      return;
+    }
     throw new ErrorSesion(`sin formulario de ingreso ni menú en ${page.url()}`);
   }
   await page.fill("#txtRuc", RUC);
@@ -57,11 +74,17 @@ export async function entrar(b: Bitacora, page: Page, quien: string): Promise<vo
 export async function sesionCaida(page: Page): Promise<boolean> {
   if (page.isClosed()) return false;
   if ((await page.$("#txtRuc").catch(() => null)) !== null) return true;
-  const t = await page.locator("body").innerText({ timeout: 2000 }).catch(() => "");
+  const t = await page
+    .locator("body")
+    .innerText({ timeout: 2000 })
+    .catch(() => "");
   return /saliendo del Men[uú] SOL/i.test(t);
 }
 
-interface PasoMenu { texto: string; posicion?: "primera" | "ultima" }
+interface PasoMenu {
+  texto: string;
+  posicion?: "primera" | "ultima";
+}
 // Mismo camino que consultar-cpe-individual.mts (ver ahí por qué cada paso).
 const MENU: PasoMenu[] = [
   { texto: "Empresas" },
@@ -80,9 +103,21 @@ async function clicVisible(page: Page, texto: string, posicion: "primera" | "ult
         const c = f.locator(`text=${texto}`);
         const n = await c.count();
         const vis: number[] = [];
-        for (let i = 0; i < n; i++) if (await c.nth(i).isVisible().catch(() => false)) vis.push(i);
-        if (vis.length) { await c.nth(posicion === "ultima" ? vis[vis.length - 1] : vis[0]).click({ timeout: 5000 }); return true; }
-      } catch { /* el marco puede estar navegando */ }
+        for (let i = 0; i < n; i++)
+          if (
+            await c
+              .nth(i)
+              .isVisible()
+              .catch(() => false)
+          )
+            vis.push(i);
+        if (vis.length) {
+          await c.nth(posicion === "ultima" ? vis[vis.length - 1] : vis[0]).click({ timeout: 5000 });
+          return true;
+        }
+      } catch {
+        /* el marco puede estar navegando */
+      }
     }
     await page.waitForTimeout(400);
   }
@@ -92,7 +127,7 @@ async function clicVisible(page: Page, texto: string, posicion: "primera" | "ult
 export async function marcoFormulario(page: Page): Promise<Frame | null> {
   for (const f of page.frames()) {
     const ruc = f.locator('input[name="rucEmisor"]').first();
-    if (await ruc.count().catch(() => 0) && await ruc.isVisible().catch(() => false)) return f;
+    if ((await ruc.count().catch(() => 0)) && (await ruc.isVisible().catch(() => false))) return f;
   }
   return null;
 }
@@ -104,7 +139,8 @@ export async function abrirFormulario(b: Bitacora, page: Page, quien: string): P
   if (await sesionCaida(page)) throw new ErrorSesion("el menú devolvió la pantalla de ingreso");
   for (const [i, paso] of MENU.entries()) {
     const posicion = paso.posicion ?? (i > 0 && MENU[i - 1].texto === paso.texto ? "ultima" : "primera");
-    if (!(await clicVisible(page, paso.texto, posicion))) throw new Error(`no se llegó al formulario: falta «${paso.texto}» (paso ${i + 1})`);
+    if (!(await clicVisible(page, paso.texto, posicion)))
+      throw new Error(`no se llegó al formulario: falta «${paso.texto}» (paso ${i + 1})`);
     if (i < MENU.length - 1) await page.waitForTimeout(MENU[i + 1]?.texto === paso.texto ? 2500 : 1200);
   }
   const fin = Date.now() + 30000;
@@ -122,12 +158,15 @@ export async function abrirFormulario(b: Bitacora, page: Page, quien: string): P
  */
 export class Token {
   valor: string | null = null;
-  expira: number | null = null;   // segundos epoch
+  expira: number | null = null; // segundos epoch
   vigilar(ctx: BrowserContext): void {
     ctx.on("request", req => {
       if (!/api-cpe\.sunat\.gob\.pe/i.test(req.url())) return;
       const a = req.headers()["authorization"];
-      if (a && a !== this.valor) { this.valor = a; this.expira = expiracionJwt(a); }
+      if (a && a !== this.valor) {
+        this.valor = a;
+        this.expira = expiracionJwt(a);
+      }
     });
   }
   vigente(margenS = 60): boolean {
@@ -135,7 +174,10 @@ export class Token {
   }
   async esperar(ms = 30000): Promise<string> {
     const fin = Date.now() + ms;
-    while (Date.now() < fin) { if (this.valor) return this.valor; await dormir(250); }
+    while (Date.now() < fin) {
+      if (this.valor) return this.valor;
+      await dormir(250);
+    }
     throw new ErrorSesion("la app no llamó a api-cpe: no hay token");
   }
 }

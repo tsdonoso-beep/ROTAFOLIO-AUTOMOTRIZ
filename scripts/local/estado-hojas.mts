@@ -12,26 +12,45 @@ import { normalizarClavePrivada, correoDeServicio } from "../../lib/drive/servid
 const email = correoDeServicio(process.env.GOOGLE_SA_EMAIL, process.env.GOOGLE_SA_PRIVATE_KEY);
 const key = normalizarClavePrivada(process.env.GOOGLE_SA_PRIVATE_KEY);
 const raiz = process.env.GOOGLE_DRIVE_FOLDER_ID?.trim();
-if (!email || !key || !raiz) { console.error("✗ Faltan GOOGLE_SA_EMAIL / clave / GOOGLE_DRIVE_FOLDER_ID."); process.exit(1); }
+if (!email || !key || !raiz) {
+  console.error("✗ Faltan GOOGLE_SA_EMAIL / clave / GOOGLE_DRIVE_FOLDER_ID.");
+  process.exit(1);
+}
 
-const auth = new google.auth.JWT({ email, key, scopes: ["https://www.googleapis.com/auth/drive.readonly", "https://www.googleapis.com/auth/spreadsheets.readonly"] });
+const auth = new google.auth.JWT({
+  email,
+  key,
+  scopes: ["https://www.googleapis.com/auth/drive.readonly", "https://www.googleapis.com/auth/spreadsheets.readonly"],
+});
 const drive = google.drive({ version: "v3", auth });
 const sheets = google.sheets({ version: "v4", auth });
 const DRIVES = { supportsAllDrives: true, includeItemsFromAllDrives: true } as const;
 
-const sub = await drive.files.list({ q: `mimeType='application/vnd.google-apps.folder' and name='SUNAT' and '${raiz}' in parents and trashed=false`, fields: "files(id)", ...DRIVES });
+const sub = await drive.files.list({
+  q: `mimeType='application/vnd.google-apps.folder' and name='SUNAT' and '${raiz}' in parents and trashed=false`,
+  fields: "files(id)",
+  ...DRIVES,
+});
 const carpetaSunat = sub.data.files?.[0]?.id;
-if (!carpetaSunat) { console.error("✗ No hay carpeta SUNAT dentro de GOOGLE_DRIVE_FOLDER_ID."); process.exit(1); }
+if (!carpetaSunat) {
+  console.error("✗ No hay carpeta SUNAT dentro de GOOGLE_DRIVE_FOLDER_ID.");
+  process.exit(1);
+}
 
 const hojas = await drive.files.list({
   q: `mimeType='application/vnd.google-apps.spreadsheet' and '${carpetaSunat}' in parents and trashed=false`,
-  fields: "files(id,name,modifiedTime,webViewLink)", orderBy: "name", ...DRIVES,
+  fields: "files(id,name,modifiedTime,webViewLink)",
+  orderBy: "name",
+  ...DRIVES,
 });
 
 for (const h of hojas.data.files ?? []) {
   console.log(`\n■ ${h.name}  (modificada ${h.modifiedTime})\n  ${h.webViewLink}`);
   const meta = await sheets.spreadsheets.get({ spreadsheetId: h.id!, fields: "sheets(properties(title,gridProperties))" });
-  for (const s of meta.data.sheets ?? []) console.log(`  · pestaña «${s.properties?.title}»: ${s.properties?.gridProperties?.rowCount} filas × ${s.properties?.gridProperties?.columnCount} columnas (tamaño de grilla)`);
+  for (const s of meta.data.sheets ?? [])
+    console.log(
+      `  · pestaña «${s.properties?.title}»: ${s.properties?.gridProperties?.rowCount} filas × ${s.properties?.gridProperties?.columnCount} columnas (tamaño de grilla)`,
+    );
   const primera = meta.data.sheets?.[0]?.properties?.title;
   if (!primera) continue;
   const v = await sheets.spreadsheets.values.get({ spreadsheetId: h.id!, range: `'${primera}'` });
@@ -49,8 +68,7 @@ for (const h of hojas.data.files ?? []) {
     const bruto = String(f[col] ?? "");
     const iso = bruto.match(/(\d{4})-(\d{2})/);
     const dmy = bruto.match(/\d{2}\/(\d{2})\/(\d{4})/);
-    const per = iPer >= 0 ? bruto.replace(/\D/g, "").slice(0, 6)
-      : iso ? `${iso[1]}${iso[2]}` : dmy ? `${dmy[2]}${dmy[1]}` : "?";
+    const per = iPer >= 0 ? bruto.replace(/\D/g, "").slice(0, 6) : iso ? `${iso[1]}${iso[2]}` : dmy ? `${dmy[2]}${dmy[1]}` : "?";
     const r = conteo.get(per) ?? { filas: 0, noE: 0 };
     r.filas++;
     if (iSerie >= 0 && !/^E/i.test(String(f[iSerie] ?? ""))) r.noE++;

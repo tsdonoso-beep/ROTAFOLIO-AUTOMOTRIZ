@@ -12,7 +12,13 @@ import { duracion } from "./barra.mts";
 
 export type NombreEtapa = "sunat" | "pdf" | "drive" | "base" | "hoja";
 export const ORDEN: NombreEtapa[] = ["sunat", "pdf", "drive", "base", "hoja"];
-export const TITULO: Record<NombreEtapa, string> = { sunat: "SUNAT (API)", pdf: "PDF", drive: "Drive", base: "Supabase", hoja: "Hoja de detalle" };
+export const TITULO: Record<NombreEtapa, string> = {
+  sunat: "SUNAT (API)",
+  pdf: "PDF",
+  drive: "Drive",
+  base: "Supabase",
+  hoja: "Hoja de detalle",
+};
 
 export interface Etapa {
   estado: "esperando" | "en curso" | "terminada" | "omitida";
@@ -29,16 +35,24 @@ export class Etapas {
 
   constructor(b: Bitacora) {
     this.b = b;
-    this.e = Object.fromEntries(ORDEN.map(k => [k, { estado: "esperando", inicio: null, fin: null, n: {} }])) as unknown as Record<NombreEtapa, Etapa>;
+    this.e = Object.fromEntries(ORDEN.map(k => [k, { estado: "esperando", inicio: null, fin: null, n: {} }])) as unknown as Record<
+      NombreEtapa,
+      Etapa
+    >;
   }
 
   sumar(k: NombreEtapa, contador: string, cuanto = 1) {
     const et = this.e[k];
-    if (et.estado === "esperando") { et.estado = "en curso"; et.inicio = Date.now(); }
+    if (et.estado === "esperando") {
+      et.estado = "en curso";
+      et.inicio = Date.now();
+    }
     et.n[contador] = (et.n[contador] ?? 0) + cuanto;
   }
 
-  fijar(k: NombreEtapa, contador: string, valor: number) { this.e[k].n[contador] = valor; }
+  fijar(k: NombreEtapa, contador: string, valor: number) {
+    this.e[k].n[contador] = valor;
+  }
 
   /** La marca terminada una sola vez, si la anterior ya terminó y no queda nada suyo pendiente. */
   cerrarSi(k: NombreEtapa, sinPendientes: boolean) {
@@ -47,9 +61,18 @@ export class Etapas {
     const i = ORDEN.indexOf(k);
     const previa = i > 0 ? this.e[ORDEN[i - 1]] : null;
     if (previa && previa.estado !== "terminada" && previa.estado !== "omitida") return;
-    et.estado = "terminada"; et.fin = Date.now(); et.inicio ??= et.fin;
-    const nums = Object.entries(et.n).map(([c, v]) => `${c} ${v}`).join(", ") || "sin nada que hacer";
-    this.b.log("info", "etapa", `✔ ${TITULO[k]} terminada a los ${duracion(et.fin - this.t0)} de empezar (${duracion(et.fin - et.inicio)} de trabajo): ${nums}`);
+    et.estado = "terminada";
+    et.fin = Date.now();
+    et.inicio ??= et.fin;
+    const nums =
+      Object.entries(et.n)
+        .map(([c, v]) => `${c} ${v}`)
+        .join(", ") || "sin nada que hacer";
+    this.b.log(
+      "info",
+      "etapa",
+      `✔ ${TITULO[k]} terminada a los ${duracion(et.fin - this.t0)} de empezar (${duracion(et.fin - et.inicio)} de trabajo): ${nums}`,
+    );
   }
 
   omitir(k: NombreEtapa, motivo: string) {
@@ -59,18 +82,34 @@ export class Etapas {
 
   instantanea(extra: Record<string, unknown> = {}) {
     return {
-      actualizado: new Date().toISOString(), corrida: this.b.corrida, minutos: Number(((Date.now() - this.t0) / 60000).toFixed(1)),
-      etapas: Object.fromEntries(ORDEN.map(k => {
-        const et = this.e[k];
-        return [k, { titulo: TITULO[k], estado: et.estado, ...et.n,
-          inicio: et.inicio && new Date(et.inicio).toISOString(), fin: et.fin && new Date(et.fin).toISOString(),
-          duracion: et.inicio ? duracion((et.fin ?? Date.now()) - et.inicio) : null }];
-      })),
+      actualizado: new Date().toISOString(),
+      corrida: this.b.corrida,
+      minutos: Number(((Date.now() - this.t0) / 60000).toFixed(1)),
+      etapas: Object.fromEntries(
+        ORDEN.map(k => {
+          const et = this.e[k];
+          return [
+            k,
+            {
+              titulo: TITULO[k],
+              estado: et.estado,
+              ...et.n,
+              inicio: et.inicio && new Date(et.inicio).toISOString(),
+              fin: et.fin && new Date(et.fin).toISOString(),
+              duracion: et.inicio ? duracion((et.fin ?? Date.now()) - et.inicio) : null,
+            },
+          ];
+        }),
+      ),
       ...extra,
     };
   }
 
   escribir(extra: Record<string, unknown> = {}) {
-    try { writeFileSync(join(this.b.dir, "estado.json"), JSON.stringify(this.instantanea(extra), null, 2)); } catch { /* nunca tumba la corrida */ }
+    try {
+      writeFileSync(join(this.b.dir, "estado.json"), JSON.stringify(this.instantanea(extra), null, 2));
+    } catch {
+      /* nunca tumba la corrida */
+    }
   }
 }

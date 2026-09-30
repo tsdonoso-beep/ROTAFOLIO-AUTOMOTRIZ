@@ -36,18 +36,29 @@ describe("claveHttp", () => {
   test("agrupa por servicio, no por comprobante", () => {
     assert.equal(
       claveHttp("GET", "https://api-cpe.sunat.gob.pe/v1/contribuyente/consultacpe/comprobantes/10181820328-01-F002-3792-2", 500),
-      "GET 500 api-cpe.sunat.gob.pe /v1/contribuyente/consultacpe/comprobantes/:id");
+      "GET 500 api-cpe.sunat.gob.pe /v1/contribuyente/consultacpe/comprobantes/:id",
+    );
     assert.equal(
       claveHttp("GET", "https://api-cpe.sunat.gob.pe/v1/contribuyente/consultacpe/comprobantes/20100070970-01-F001-15-2/02", 200),
-      "GET 200 api-cpe.sunat.gob.pe /v1/contribuyente/consultacpe/comprobantes/:id/02");
+      "GET 200 api-cpe.sunat.gob.pe /v1/contribuyente/consultacpe/comprobantes/:id/02",
+    );
     assert.equal(
-      claveHttp("GET", "https://api-cpe.sunat.gob.pe/v1/contribuyente/consultacpe/comprobantes/20512201611-01-2?fecEmisionIni=01/08/2026", 200),
-      "GET 200 api-cpe.sunat.gob.pe /v1/contribuyente/consultacpe/comprobantes/:lista");
+      claveHttp(
+        "GET",
+        "https://api-cpe.sunat.gob.pe/v1/contribuyente/consultacpe/comprobantes/20512201611-01-2?fecEmisionIni=01/08/2026",
+        200,
+      ),
+      "GET 200 api-cpe.sunat.gob.pe /v1/contribuyente/consultacpe/comprobantes/:lista",
+    );
   });
 });
 
 describe("claveDesdeTexto", () => {
-  const google = { type: "service_account", private_key: "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----\n", client_email: "x@y" };
+  const google = {
+    type: "service_account",
+    private_key: "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----\n",
+    client_email: "x@y",
+  };
   test("el .json de Google tal cual", () => {
     assert.deepEqual(JSON.parse(claveDesdeTexto(JSON.stringify(google))), google);
   });

@@ -31,7 +31,7 @@ import { join } from "node:path";
 import { Readable } from "node:stream";
 import { google } from "googleapis";
 import { createClient } from "@supabase/supabase-js";
-import { normalizarClavePrivada, correoDeServicio, carpeta, publicarHoja } from "../lib/drive/servidor.ts";
+import { normalizarClavePrivada, correoDeServicio, carpeta, publicarHoja, publicarHojaPorAnio } from "../lib/drive/servidor.ts";
 import { leerZip } from "../lib/sunat/zip.ts";
 import { documentoPrincipal, leerComprobanteXml, type ComprobanteCpe } from "../lib/sunat/cpe-xml.ts";
 import { prepararLote, origenDe, periodoDe, identidad, type DocLote } from "../lib/sunat/cpe-importacion.ts";
@@ -1045,13 +1045,14 @@ async function publicarLaHojaDetalle(sb: SupabaseClient): Promise<void> {
   }
 
   const filas = datos.map(filaDetalleDesdeRpc);
-  const r = await publicarHoja({
+  const r = await publicarHojaPorAnio({
     filas: filasItemsSunat(filas),
     nombre: "COMPROBANTES SUNAT - DETALLE",
     carpetas: ["SUNAT"],
     tipos: TIPOS_ITEMS,
   });
   console.log(`Hoja de detalle al día: ${filas.length} ítems · ${r.url}`);
+  for (const a of r.anteriores) console.log(`Hoja aparte ${a.anio}: ${a.filas} filas · ${a.url}`);
 }
 
 /**

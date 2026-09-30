@@ -3,7 +3,10 @@
 import { readFileSync } from "node:fs";
 
 export function pedir(...nombres: string[]): string {
-  for (const n of nombres) { const v = (process.env[n] ?? "").trim(); if (v) return v; }
+  for (const n of nombres) {
+    const v = (process.env[n] ?? "").trim();
+    if (v) return v;
+  }
   console.error(`✗ Falta ${nombres.join(" o ")} en el entorno.`);
   process.exit(1);
 }
@@ -35,7 +38,7 @@ export function claveDesdeTexto(bruto: string): string {
   const t = bruto.replace(/^﻿/, "");
   try {
     const j = JSON.parse(t) as Record<string, unknown>;
-    const valor = j.private_key ? j : j.GOOGLE_SA_PRIVATE_KEY ?? j;
+    const valor = j.private_key ? j : (j.GOOGLE_SA_PRIVATE_KEY ?? j);
     return typeof valor === "string" ? valor : JSON.stringify(valor);
   } catch {
     return t;
@@ -55,10 +58,16 @@ export function credencialesSol(): { usuario: string; clave: string } {
   };
 }
 
-export const PERIODOS = texto("PERIODO", "202608,202609").split(",").map(p => p.trim()).filter(p => p && p !== "todos");
+export const PERIODOS = texto("PERIODO", "202608,202609")
+  .split(",")
+  .map(p => p.trim())
+  .filter(p => p && p !== "todos");
 export const MAS_RECIENTE_PRIMERO = process.env.ORDEN?.trim() === "reciente";
 /** Solo estos proveedores (RUC separados por coma). Vacío = todos. Útil para mandar por pantallas solo a los que la API rechaza. */
-export const RUCS = texto("RUCS", "").split(",").map(r => r.trim()).filter(Boolean);
+export const RUCS = texto("RUCS", "")
+  .split(",")
+  .map(r => r.trim())
+  .filter(Boolean);
 /**
  * Qué series: `noE` (por omisión: las que la consulta por rango nunca trae),
  * `E` (solo E001…, las del portal de SUNAT) o `todas`.
@@ -68,7 +77,10 @@ export const SERIES = ((): "noE" | "E" | "todas" => {
   return v === "e" ? "E" : v === "todas" ? "todas" : "noE";
 })();
 /** Tipos de comprobante a pedir: 01 factura, 07/08 notas, 03 boleta (por la API, a probar). */
-export const TIPOS = texto("TIPOS", "01,07,08").split(",").map(t => t.trim()).filter(Boolean);
+export const TIPOS = texto("TIPOS", "01,07,08")
+  .split(",")
+  .map(t => t.trim())
+  .filter(Boolean);
 export const LIMITE = num("LIMITE", 0);
 export const HEADLESS = process.env.HEADLESS?.trim() !== "0";
 export const CARPETA_DRIVE = texto("SUNAT_DRIVE_FOLDER", "1RnyGimYdnhbQ3nKxGOoBc_iRz38fxCnX");

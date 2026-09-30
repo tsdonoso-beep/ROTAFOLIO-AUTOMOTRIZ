@@ -8,14 +8,30 @@ import type { Clase, Pendiente } from "../comun/tipos.mts";
 const mudo: Bitacora = { dir: ".", corrida: "test", log() {}, jsonl() {}, http() {}, conteoHttp: () => ({}) };
 const opciones = (maxIntentos = 3) => ({
   politica: { maxIntentos, esperaCaidoMs: 0, esperaReintentoMs: 0, esperaLimiteMs: 0 },
-  subidasEnParalelo: 1, pdfEnParalelo: 1, loteGuardado: 100, umbralCaido: 2, pausaCaidoMs: 0, watchdogMs: 60_000,
+  subidasEnParalelo: 1,
+  pdfEnParalelo: 1,
+  loteGuardado: 100,
+  umbralCaido: 2,
+  pausaCaidoMs: 0,
+  watchdogMs: 60_000,
 });
-const pend = (n: number): Pendiente => ({ proveedorRuc: "20100", proveedorNombre: null, tipoComprobante: "01", serie: "F001", numero: String(n), fechaEmision: null, periodo: "202608" });
+const pend = (n: number): Pendiente => ({
+  proveedorRuc: "20100",
+  proveedorNombre: null,
+  tipoComprobante: "01",
+  serie: "F001",
+  numero: String(n),
+  fechaEmision: null,
+  periodo: "202608",
+});
 
 /** Responde según un guion por número de comprobante; lo que no está en el guion es OK (sin xml, para no subir nada). */
 function falso(id: string, guion: Record<string, Clase[]>, vistos: string[]): Trabajador {
   return {
-    id, estado: "creado", desde: Date.now(), destrabar() {},
+    id,
+    estado: "creado",
+    desde: Date.now(),
+    destrabar() {},
     async procesar(t: Tarea): Promise<Resultado> {
       vistos.push(`${id}:${t.p.numero}`);
       await new Promise(r => setTimeout(r, 1));
@@ -69,7 +85,16 @@ describe("Tuberia", () => {
   test("un trabajador que revienta cuenta como EXCEPCION y la tarea se reintenta", async () => {
     const t = new Tuberia(mudo, [pend(1)], opciones());
     let n = 0;
-    const w: Trabajador = { id: "x", estado: "creado", desde: Date.now(), destrabar() {}, async procesar() { if (n++ === 0) throw new Error("boom"); return { clase: "OK" }; } };
+    const w: Trabajador = {
+      id: "x",
+      estado: "creado",
+      desde: Date.now(),
+      destrabar() {},
+      async procesar() {
+        if (n++ === 0) throw new Error("boom");
+        return { clase: "OK" };
+      },
+    };
     await t.correr(w, 0);
     assert.equal(t.porClase.EXCEPCION, 1);
     assert.equal(t.finales.ok, 1);

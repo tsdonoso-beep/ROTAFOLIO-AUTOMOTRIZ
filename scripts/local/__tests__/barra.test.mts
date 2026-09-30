@@ -25,7 +25,10 @@ describe("textoBarra", () => {
     assert.equal((t.match(/█/g) ?? []).length, (t.match(/░/g) ?? []).length);
   });
   test("SUNAT terminado pero Drive no: lo dice, y la barra NO marca 100%", () => {
-    assert.match(textoBarra({ ...base, hechos: 20, consultados: 100, subidas: 80 }, 220, 60_000), /20% 20\/100 guardados · SUNAT listo · 80 en PDF\/Drive/);
+    assert.match(
+      textoBarra({ ...base, hechos: 20, consultados: 100, subidas: 80 }, 220, 60_000),
+      /20% 20\/100 guardados · SUNAT listo · 80 en PDF\/Drive/,
+    );
   });
   test("nunca más ancha que la terminal", () => {
     assert.ok(textoBarra({ ...base, hechos: 1 }, 40, 60_000).length <= 39);

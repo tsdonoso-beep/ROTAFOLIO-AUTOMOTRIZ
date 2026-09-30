@@ -13,10 +13,19 @@ describe("clave", () => {
 
 describe("clasificarTexto", () => {
   test("el modal real de SUNAT (30/09/2026) es SUNAT_CAIDO", () => {
-    assert.equal(clasificarTexto(["Error del Servidor", "Señor contribuyente disculpe la molestia, en estos momentos no se puede acceder a los servicios de SUNAT, por favor reintentar en 5 minutos"]), "SUNAT_CAIDO");
+    assert.equal(
+      clasificarTexto([
+        "Error del Servidor",
+        "Señor contribuyente disculpe la molestia, en estos momentos no se puede acceder a los servicios de SUNAT, por favor reintentar en 5 minutos",
+      ]),
+      "SUNAT_CAIDO",
+    );
   });
   test("el cuerpo crudo del 500 de api-cpe también", () => {
-    assert.equal(clasificarTexto(['{"code":500,"message":"There was an error processing your request. It has been logged (ID 561168407dcfa701)."}']), "SUNAT_CAIDO");
+    assert.equal(
+      clasificarTexto(['{"code":500,"message":"There was an error processing your request. It has been logged (ID 561168407dcfa701)."}']),
+      "SUNAT_CAIDO",
+    );
   });
   test("no existe / sesión / validación", () => {
     assert.equal(clasificarTexto(["El comprobante no existe"]), "NO_EXISTE");
@@ -68,7 +77,10 @@ describe("decidir", () => {
 
 describe("idApi", () => {
   test("igual que la URL que armó la app en la corrida real", () => {
-    assert.equal(idApi({ proveedorRuc: "10181820328", tipoComprobante: "01", serie: "F002", numero: "3792" }), "10181820328-01-F002-3792-2");
+    assert.equal(
+      idApi({ proveedorRuc: "10181820328", tipoComprobante: "01", serie: "F002", numero: "3792" }),
+      "10181820328-01-F002-3792-2",
+    );
   });
   test("número sin ceros y serie en mayúsculas", () => {
     assert.equal(idApi({ proveedorRuc: "20100", tipoComprobante: "07", serie: "fc01", numero: "00045" }), "20100-07-FC01-45-2");

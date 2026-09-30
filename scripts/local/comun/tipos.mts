@@ -33,8 +33,18 @@ export type Clase = "OK" | "SUNAT_CAIDO" | "NO_EXISTE" | "SESION" | "LIMITE" | "
 export function clasificarTexto(textos: string[]): Clase | null {
   const t = textos.join(" | ");
   if (!t) return null;
-  if (/error del servidor|reintentar|intente(lo)? (nuevamente|m[aá]s tarde)|no disponible|temporalmente|error processing your request/i.test(t)) return "SUNAT_CAIDO";
-  if (/no existe|no se encontr|no se ha encontrado|no (est[aá] )?registrad|no hay (resultados|informaci)|sin resultados|no fue (emitid|informad)/i.test(t)) return "NO_EXISTE";
+  if (
+    /error del servidor|reintentar|intente(lo)? (nuevamente|m[aá]s tarde)|no disponible|temporalmente|error processing your request/i.test(
+      t,
+    )
+  )
+    return "SUNAT_CAIDO";
+  if (
+    /no existe|no se encontr|no se ha encontrado|no (est[aá] )?registrad|no hay (resultados|informaci)|sin resultados|no fue (emitid|informad)/i.test(
+      t,
+    )
+  )
+    return "NO_EXISTE";
   if (/sesi[oó]n.*(expir|termin|finaliz)|vuelva a (ingresar|iniciar)|saliendo del men[uú] sol/i.test(t)) return "SESION";
   if (/obligatori|inv[aá]lid|incorrect|debe (ingresar|seleccionar)|formato/i.test(t)) return "VALIDACION";
   return null;
@@ -51,14 +61,22 @@ export function clasificarHttp(status: number, cuerpo: string): Clase {
   return "DESCONOCIDO";
 }
 
-export interface Politica { maxIntentos: number; esperaCaidoMs: number; esperaReintentoMs: number; esperaLimiteMs: number }
+export interface Politica {
+  maxIntentos: number;
+  esperaCaidoMs: number;
+  esperaReintentoMs: number;
+  esperaLimiteMs: number;
+}
 
 /**
  * Qué hacer después de un intento: `fin` (OK / no existe / se rinde) o
  * `reintentar` con cuánta espera. SESION no gasta intento: no es culpa del comprobante.
  */
-export function decidir(clase: Clase, intentosHechos: number, pol: Politica):
-  { accion: "fin"; motivo: "ok" | "no_existe" | "agotado" } | { accion: "reintentar"; esperaMs: number; cuentaIntento: boolean } {
+export function decidir(
+  clase: Clase,
+  intentosHechos: number,
+  pol: Politica,
+): { accion: "fin"; motivo: "ok" | "no_existe" | "agotado" } | { accion: "reintentar"; esperaMs: number; cuentaIntento: boolean } {
   if (clase === "OK") return { accion: "fin", motivo: "ok" };
   if (clase === "NO_EXISTE") return { accion: "fin", motivo: "no_existe" };
   if (clase === "SESION") return { accion: "reintentar", esperaMs: 0, cuentaIntento: false };
@@ -78,7 +96,11 @@ export function expiracionJwt(bearer: string): number | null {
   const partes = bearer.replace(/^Bearer\s+/i, "").split(".");
   if (partes.length < 2) return null;
   try {
-    const payload = JSON.parse(Buffer.from(partes[1].replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8")) as { exp?: unknown };
+    const payload = JSON.parse(Buffer.from(partes[1].replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8")) as {
+      exp?: unknown;
+    };
     return typeof payload.exp === "number" ? payload.exp : null;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }

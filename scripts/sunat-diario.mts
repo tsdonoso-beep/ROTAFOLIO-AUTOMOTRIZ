@@ -20,7 +20,7 @@ import { leerPropuestaRce, revisarIdentidad } from "../lib/sunat/rce.ts";
 import {
   filasComprobantesSunat, mapaPadronPorRuc, TIPOS_SUNAT, type ComprobanteHistorico,
 } from "../lib/export/comprobantes-sunat.ts";
-import { publicarHoja } from "../lib/drive/servidor.ts";
+import { publicarHojaPorAnio } from "../lib/drive/servidor.ts";
 
 const EMPRESA = process.env.SUNAT_EMPRESA ?? "INROPRIN";
 const RUC     = process.env.SUNAT_RUC ?? "20512201611";
@@ -229,13 +229,14 @@ async function publicarLaHoja(): Promise<void> {
     .select("ruc, condicion, buen_contribuyente, agente_retencion, agente_percepcion");
   const padron = mapaPadronPorRuc((padronCrudo as Array<Record<string, unknown>>) ?? []);
 
-  const r = await publicarHoja({
+  const r = await publicarHojaPorAnio({
     filas: filasComprobantesSunat(historico, padron),
     nombre: "COMPROBANTES SUNAT",
     carpetas: ["SUNAT"],
     tipos: TIPOS_SUNAT,
   });
   console.log(`\nHoja al día: ${historico.length} comprobantes · ${r.url}`);
+  for (const a of r.anteriores) console.log(`Hoja aparte ${a.anio}: ${a.filas} filas · ${a.url}`);
 }
 
 const hoy = new Date();

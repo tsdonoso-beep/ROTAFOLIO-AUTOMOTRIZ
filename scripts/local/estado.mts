@@ -13,7 +13,10 @@ const cuantas = Number(process.argv[2] ?? 0);
 let dirs = existsSync(LOGS) ? readdirSync(LOGS).filter(d => existsSync(join(LOGS, d, "estado.json"))) : [];
 dirs = dirs.filter(d => d.includes(hoy)).sort((a, b) => statSync(join(LOGS, b)).mtimeMs - statSync(join(LOGS, a)).mtimeMs);
 if (cuantas > 0) dirs = dirs.slice(0, cuantas);
-if (!dirs.length) { console.log("No hay corridas de hoy con estado.json (se escribe desde el primer latido, a los 30 s)."); process.exit(0); }
+if (!dirs.length) {
+  console.log("No hay corridas de hoy con estado.json (se escribe desde el primer latido, a los 30 s).");
+  process.exit(0);
+}
 
 for (const d of dirs) {
   const e = JSON.parse(readFileSync(join(LOGS, d, "estado.json"), "utf8"));
@@ -24,17 +27,21 @@ for (const d of dirs) {
   if (!e.etapas) {
     // Script viejo corrido con con-bitacora: sin etapas, pero con líneas y HTTP.
     const l = e.lineas ?? {};
-    console.log(`  ${l.info ?? 0} líneas · ${l.aviso ?? 0} avisos · ${l.error ?? 0} errores${e.codigoSalida != null ? ` · salida ${e.codigoSalida}` : ""}`);
+    console.log(
+      `  ${l.info ?? 0} líneas · ${l.aviso ?? 0} avisos · ${l.error ?? 0} errores${e.codigoSalida != null ? ` · salida ${e.codigoSalida}` : ""}`,
+    );
     for (const [k, n] of Object.entries(e.http ?? {}).slice(0, 6)) console.log(`    ${String(n).padStart(5)}× ${k}`);
     continue;
   }
-  if (pr.total) console.log(`  ${pr.hechos}/${pr.total} terminados de punta a punta (${Math.round(100 * pr.hechos / pr.total)}%)`);
+  if (pr.total) console.log(`  ${pr.hechos}/${pr.total} terminados de punta a punta (${Math.round((100 * pr.hechos) / pr.total)}%)`);
   for (const k of ORDEN) {
     const et = e.etapas[k];
     const { estado, duracion } = et;
     const n = Object.fromEntries(Object.entries(et).filter(([c]) => !["titulo", "estado", "inicio", "fin", "duracion"].includes(c)));
     const marca = estado === "terminada" ? "✔" : estado === "en curso" ? "…" : estado === "omitida" ? "—" : " ";
-    const nums = Object.entries(n).map(([c, v]) => `${c} ${v}`).join(" · ");
+    const nums = Object.entries(n)
+      .map(([c, v]) => `${c} ${v}`)
+      .join(" · ");
     console.log(`  ${marca} ${TITULO[k].padEnd(16)} ${String(estado).padEnd(10)} ${duracion ?? ""}${nums ? "  ·  " + nums : ""}`);
   }
 }

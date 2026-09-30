@@ -31,14 +31,22 @@ export function consolidar(archivos: Array<{ nombre: string; sql: string }>): st
     "",
   ];
   for (const a of archivos) {
-    partes.push("", `-- ┌──────────────────────────────────────────────────────────────`, `-- │ ${a.nombre}`, `-- └──────────────────────────────────────────────────────────────`, "");
+    partes.push(
+      "",
+      `-- ┌──────────────────────────────────────────────────────────────`,
+      `-- │ ${a.nombre}`,
+      `-- └──────────────────────────────────────────────────────────────`,
+      "",
+    );
     partes.push(a.sql.replace(/^﻿/, "").replace(/\s+$/, ""), "");
   }
   return partes.join("\n") + "\n";
 }
 
 export function leerMigraciones(dir = DIR): Array<{ nombre: string; sql: string }> {
-  const nombres = readdirSync(dir).filter(n => /^\d{3}_.+\.sql$/.test(n)).sort();
+  const nombres = readdirSync(dir)
+    .filter(n => /^\d{3}_.+\.sql$/.test(n))
+    .sort();
   nombres.forEach((n, i) => {
     const esperado = String(i + 1).padStart(3, "0");
     if (!n.startsWith(esperado)) throw new Error(`falta la migración ${esperado} (encontré ${n}): no se consolida con huecos`);
@@ -50,7 +58,10 @@ if (process.argv[1]?.endsWith("consolidar-db.mts")) {
   const texto = consolidar(leerMigraciones());
   if (process.argv.includes("--revisar")) {
     const actual = existsSync(SALIDA) ? readFileSync(SALIDA, "utf8") : "";
-    if (actual !== texto) { console.error("✗ db/database.full.sql está desactualizado: corre pnpm db:consolidar"); process.exit(1); }
+    if (actual !== texto) {
+      console.error("✗ db/database.full.sql está desactualizado: corre pnpm db:consolidar");
+      process.exit(1);
+    }
     console.log("✓ db/database.full.sql al día");
   } else {
     writeFileSync(SALIDA, texto);

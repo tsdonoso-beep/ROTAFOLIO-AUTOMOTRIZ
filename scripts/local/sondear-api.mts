@@ -30,11 +30,22 @@ const N = num("SONDEO_N", 12);
 const SALIDA = join(process.cwd(), "salida", "sondeo");
 mkdirSync(SALIDA, { recursive: true });
 
-interface Medida { prueba: string; comprobante: string; status: number; clase: string; ms: number; nota?: string }
+interface Medida {
+  prueba: string;
+  comprobante: string;
+  status: number;
+  clase: string;
+  ms: number;
+  nota?: string;
+}
 const medidas: Medida[] = [];
 function anotar(m: Medida) {
   medidas.push(m);
-  b.log(m.clase === "OK" ? "info" : "aviso", m.prueba, `${m.comprobante}: HTTP ${m.status} ${m.clase} en ${m.ms} ms${m.nota ? " · " + m.nota : ""}`);
+  b.log(
+    m.clase === "OK" ? "info" : "aviso",
+    m.prueba,
+    `${m.comprobante}: HTTP ${m.status} ${m.clase} en ${m.ms} ms${m.nota ? " · " + m.nota : ""}`,
+  );
 }
 
 /** Muestra repartida a lo largo de la lista (no los N primeros: los primeros siempre son los mismos, y F002-3792 da 500 siempre). */
@@ -53,7 +64,9 @@ async function pruebaXml(api: ClienteApi, p: Pendiente, prueba: string) {
     try {
       const c = leerComprobanteXml(documentoPrincipal(xmlsDe(archivo)) ?? "");
       nota = `${archivo.nombre} ${archivo.datos.length} B · leído: ${c.serie}-${c.numero} ${c.moneda} ${c.total}, ${c.items.length} ítems`;
-    } catch (e) { nota = `${archivo.nombre}: bajó pero no se pudo leer (${primeraLinea(e)})`; }
+    } catch (e) {
+      nota = `${archivo.nombre}: bajó pero no se pudo leer (${primeraLinea(e)})`;
+    }
   }
   anotar({ prueba, comprobante: etiqueta(p), status: r.status, clase: r.clase, ms: r.ms, nota });
   return r.clase;
@@ -63,7 +76,14 @@ async function pruebaXml(api: ClienteApi, p: Pendiente, prueba: string) {
 async function pruebaPdf(api: ClienteApi, p: Pendiente) {
   const { r, archivo } = await api.archivo(p, "PDF");
   if (archivo) writeFileSync(join(SALIDA, archivo.nombre), archivo.datos);
-  anotar({ prueba: "C-pdf", comprobante: etiqueta(p), status: r.status, clase: r.clase, ms: r.ms, nota: archivo ? `${archivo.nombre} ${archivo.datos.length} B` : r.texto.slice(0, 200) });
+  anotar({
+    prueba: "C-pdf",
+    comprobante: etiqueta(p),
+    status: r.status,
+    clase: r.clase,
+    ms: r.ms,
+    nota: archivo ? `${archivo.nombre} ${archivo.datos.length} B` : r.texto.slice(0, 200),
+  });
 }
 
 /** D: formas posibles de la lista masiva de recibidos, una semana de agosto. */
@@ -80,7 +100,14 @@ async function pruebaLista(api: ClienteApi, ejemplo: Pendiente) {
     const r = await api.lista(v.ruc, ejemplo.tipoComprobante, `01/${m}/${a}`, `28/${m}/${a}`, v.extra);
     const n = Array.isArray(r.json?.comprobantes) ? r.json.comprobantes.length : null;
     const primero = n ? JSON.stringify(r.json!.comprobantes![0]).slice(0, 300) : r.texto.slice(0, 200);
-    anotar({ prueba: `D-lista (${v.nombre})`, comprobante: `${v.ruc} ${ejemplo.tipoComprobante} ${m}/${a}`, status: r.status, clase: r.clase, ms: r.ms, nota: n !== null ? `${n} comprobantes · ${primero}` : primero });
+    anotar({
+      prueba: `D-lista (${v.nombre})`,
+      comprobante: `${v.ruc} ${ejemplo.tipoComprobante} ${m}/${a}`,
+      status: r.status,
+      clase: r.clase,
+      ms: r.ms,
+      nota: n !== null ? `${n} comprobantes · ${primero}` : primero,
+    });
   }
 }
 
@@ -89,29 +116,40 @@ async function pruebaParalelo(api: ClienteApi, lista: Pendiente[], concurrencia:
   const t0 = Date.now();
   const cola = [...lista];
   const clases: Record<string, number> = {};
-  await Promise.all(Array.from({ length: concurrencia }, async () => {
-    for (let p = cola.shift(); p; p = cola.shift()) {
-      const clase = await pruebaXml(api, p, `E-paralelo-${concurrencia}`);
-      clases[clase] = (clases[clase] ?? 0) + 1;
-    }
-  }));
+  await Promise.all(
+    Array.from({ length: concurrencia }, async () => {
+      for (let p = cola.shift(); p; p = cola.shift()) {
+        const clase = await pruebaXml(api, p, `E-paralelo-${concurrencia}`);
+        clases[clase] = (clases[clase] ?? 0) + 1;
+      }
+    }),
+  );
   const s = (Date.now() - t0) / 1000;
-  b.log("info", `E-paralelo-${concurrencia}`, `${lista.length} en ${s.toFixed(1)} s → ${(lista.length / s * 60).toFixed(0)}/min · ${JSON.stringify(clases)}`);
-  return { concurrencia, n: lista.length, segundos: Number(s.toFixed(1)), porMinuto: Math.round(lista.length / s * 60), clases };
+  b.log(
+    "info",
+    `E-paralelo-${concurrencia}`,
+    `${lista.length} en ${s.toFixed(1)} s → ${((lista.length / s) * 60).toFixed(0)}/min · ${JSON.stringify(clases)}`,
+  );
+  return { concurrencia, n: lista.length, segundos: Number(s.toFixed(1)), porMinuto: Math.round((lista.length / s) * 60), clases };
 }
 
 async function principal(b: Bitacora) {
   const todos = await pendientes(b);
   b.log("info", "sondeo", `pendientes: ${todos.length}; muestra de ${N} (+ ${N * 3} para el paralelo)`);
   const base = muestra(todos, N);
-  const extra = muestra(todos.filter(p => !base.includes(p)), N * 3);
+  const extra = muestra(
+    todos.filter(p => !base.includes(p)),
+    N * 3,
+  );
 
   const nav = await abrirNavegador();
   const ctx = await nuevoContexto(nav);
   const token = new Token();
   token.vigilar(ctx);
   const page = await ctx.newPage();
-  page.on("dialog", d => { d.accept().catch(() => {}); });
+  page.on("dialog", d => {
+    d.accept().catch(() => {});
+  });
   try {
     await entrar(b, page, "login");
     const t0 = Date.now();
@@ -142,7 +180,10 @@ async function principal(b: Bitacora) {
   }
 }
 
-const { paralelo } = await principal(b).catch(e => { b.log("error", "sondeo", primeraLinea(e)); return { paralelo: [] }; });
+const { paralelo } = await principal(b).catch(e => {
+  b.log("error", "sondeo", primeraLinea(e));
+  return { paralelo: [] };
+});
 
 // Informe: por prueba, cuántos OK, tiempo mediano y los estados HTTP que devolvió SUNAT.
 const porPrueba = new Map<string, Medida[]>();
@@ -155,8 +196,12 @@ const tabla = [...porPrueba.entries()].map(([prueba, ms]) => {
 });
 writeFileSync(join(b.dir, "informe.json"), JSON.stringify({ tabla, paralelo, http: b.conteoHttp(), medidas }, null, 2));
 console.log("\n── Informe ──");
-for (const f of tabla) console.log(`${f.prueba.padEnd(22)} ${String(f.ok).padStart(3)}/${String(f.intentos).padEnd(3)} OK · mediana ${String(f.msMediano).padStart(5)} ms · HTTP ${JSON.stringify(f.estados)}`);
-for (const p of paralelo) console.log(`paralelo ${p.concurrencia}: ${p.n} en ${p.segundos}s → ${p.porMinuto}/min ${JSON.stringify(p.clases)}`);
+for (const f of tabla)
+  console.log(
+    `${f.prueba.padEnd(22)} ${String(f.ok).padStart(3)}/${String(f.intentos).padEnd(3)} OK · mediana ${String(f.msMediano).padStart(5)} ms · HTTP ${JSON.stringify(f.estados)}`,
+  );
+for (const p of paralelo)
+  console.log(`paralelo ${p.concurrencia}: ${p.n} en ${p.segundos}s → ${p.porMinuto}/min ${JSON.stringify(p.clases)}`);
 console.log("\nEstados HTTP por servicio:");
 for (const [k, n] of Object.entries(b.conteoHttp())) console.log(`${String(n).padStart(4)}× ${k}`);
 console.log(`\nDetalle: ${join(b.dir, "informe.json")} · errores HTTP crudos: ${join(b.dir, "http.jsonl")}`);

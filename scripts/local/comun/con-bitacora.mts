@@ -17,6 +17,10 @@ import { basename, join } from "node:path";
 import { writeFileSync } from "node:fs";
 import { crearBitacora, type Nivel } from "./bitacora.mts";
 import { duracion } from "./barra.mts";
+// La clave de Google desde GOOGLE_SA_KEY_FILE (secrets/sa.json), también para
+// los scripts viejos, que solo leían GOOGLE_SA_PRIVATE_KEY del entorno.
+import { cargarClaveDeArchivo } from "./config.mts";
+cargarClaveDeArchivo();
 
 const script = basename(process.argv[1] ?? "script").replace(/\.(m?ts|m?js)$/, "");
 const b = crearBitacora(script);
@@ -32,13 +36,16 @@ export function nivelDe(linea: string, porOmision: Nivel): Nivel {
 }
 
 function texto(args: unknown[]): string {
-  return args.map(a => typeof a === "string" ? a : a instanceof Error ? (a.stack ?? a.message) : JSON.stringify(a)).join(" ");
+  return args.map(a => (typeof a === "string" ? a : a instanceof Error ? (a.stack ?? a.message) : JSON.stringify(a))).join(" ");
 }
 
 function escribir(porOmision: Nivel, args: unknown[]) {
   const todo = texto(args);
   for (const linea of todo.split("\n")) {
-    if (!linea.trim()) { original.log(""); continue; }
+    if (!linea.trim()) {
+      original.log("");
+      continue;
+    }
     const nivel = nivelDe(linea, porOmision);
     cuenta[nivel]++;
     const marca = nivel === "error" ? "✗" : nivel === "aviso" ? "⚠" : "·";
@@ -61,11 +68,20 @@ globalThis.fetch = async (entrada: Parameters<typeof fetch>[0], init?: Parameter
   const t0 = Date.now();
   try {
     const r = await fetchOriginal(entrada, init);
-    const cuerpo = r.status >= 400 ? await r.clone().text().catch(() => "") : undefined;
+    const cuerpo =
+      r.status >= 400
+        ? await r
+            .clone()
+            .text()
+            .catch(() => "")
+        : undefined;
     b.http({ metodo, url, status: r.status, cuerpo, ms: Date.now() - t0 });
     return r;
   } catch (e) {
-    const causa = e instanceof Error ? `${e.message}${(e as { cause?: { code?: string; message?: string } }).cause ? ` (${(e as { cause: { code?: string; message?: string } }).cause.code ?? ""} ${(e as { cause: { message?: string } }).cause.message ?? ""})` : ""}` : String(e);
+    const causa =
+      e instanceof Error
+        ? `${e.message}${(e as { cause?: { code?: string; message?: string } }).cause ? ` (${(e as { cause: { code?: string; message?: string } }).cause.code ?? ""} ${(e as { cause: { message?: string } }).cause.message ?? ""})` : ""}`
+        : String(e);
     b.http({ metodo, url, status: 0, cuerpo: causa, ms: Date.now() - t0 });
     throw e;
   }
@@ -73,18 +89,48 @@ globalThis.fetch = async (entrada: Parameters<typeof fetch>[0], init?: Parameter
 
 function estado(terminada: boolean, codigo?: number) {
   const r = {
-    actualizado: new Date().toISOString(), corrida: b.corrida, script, minutos: Number(((Date.now() - inicio) / 60000).toFixed(1)),
-    terminada, codigoSalida: codigo ?? null, lineas: cuenta, http: b.conteoHttp(),
+    actualizado: new Date().toISOString(),
+    corrida: b.corrida,
+    script,
+    minutos: Number(((Date.now() - inicio) / 60000).toFixed(1)),
+    terminada,
+    codigoSalida: codigo ?? null,
+    lineas: cuenta,
+    http: b.conteoHttp(),
   };
-  try { writeFileSync(join(b.dir, terminada ? "resumen.json" : "estado.json"), JSON.stringify(r, null, 2)); } catch { /* nunca tumba el script */ }
+  try {
+    writeFileSync(join(b.dir, terminada ? "resumen.json" : "estado.json"), JSON.stringify(r, null, 2));
+  } catch {
+    /* nunca tumba el script */
+  }
   return r;
 }
+// Lo que revienta sin que el script lo atrape también queda en la bitácora,
+// con su mensaje completo (sin esto, Node lo escribe directo a stderr y el
+// log se quedaba solo con la pila — 30/09/2026, al publicar la hoja).
+process.on("uncaughtException", e => {
+  escribir("error", [`excepción sin manejar: ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`]);
+  process.exitCode = 1;
+  process.exit(1);
+});
+process.on("unhandledRejection", e => {
+  escribir("error", [`promesa sin manejar: ${e instanceof Error ? (e.stack ?? e.message) : JSON.stringify(e)}`]);
+  process.exitCode = 1;
+  process.exit(1);
+});
+
 const latido = setInterval(() => estado(false), 30000);
 latido.unref();
 
 process.on("exit", codigo => {
   estado(true, codigo);
   writeFileSync(join(b.dir, "estado.json"), JSON.stringify({ ...estado(true, codigo), terminada: true }, null, 2));
-  const http = Object.entries(b.conteoHttp()).filter(([k]) => !/ 2\d\d /.test(k)).map(([k, n]) => `${n}× ${k}`).slice(0, 5).join(" · ");
-  original.log(`${new Date().toTimeString().slice(0, 8)} ${codigo === 0 ? "·" : "✗"} [resumen] ${script} terminó en ${duracion(Date.now() - inicio)} (salida ${codigo}) · ${cuenta.aviso} avisos · ${cuenta.error} errores${http ? ` · HTTP con error: ${http}` : ""} · logs en ${b.dir}`);
+  const http = Object.entries(b.conteoHttp())
+    .filter(([k]) => !/ 2\d\d /.test(k))
+    .map(([k, n]) => `${n}× ${k}`)
+    .slice(0, 5)
+    .join(" · ");
+  original.log(
+    `${new Date().toTimeString().slice(0, 8)} ${codigo === 0 ? "·" : "✗"} [resumen] ${script} terminó en ${duracion(Date.now() - inicio)} (salida ${codigo}) · ${cuenta.aviso} avisos · ${cuenta.error} errores${http ? ` · HTTP con error: ${http}` : ""} · logs en ${b.dir}`,
+  );
 });
