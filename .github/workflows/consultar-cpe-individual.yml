@@ -144,7 +144,8 @@ jobs:
           PERIODO: ${{ github.event_name == 'schedule' && steps.periodos.outputs.valor || inputs.periodo }}
           ORDEN: ${{ github.event_name == 'schedule' && 'reciente' || inputs.orden }}
           LIMITE: ${{ inputs.limite || (github.event_name == 'schedule' && '100' || '3') }}
-        run: node --experimental-strip-types scripts/consultar-cpe-individual.mts
+        # con-bitacora: hora y nivel en cada línea y logs/<script>-<fecha>/ (eventos, HTTP con error, resumen).
+        run: node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/local/comun/con-bitacora.mts scripts/consultar-cpe-individual.mts
 
       - name: Subir capturas
         if: always()
@@ -154,3 +155,12 @@ jobs:
           path: capturas/
           if-no-files-found: warn
           retention-days: 7
+
+      - name: Subir bitácoras
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bitacoras-consultar-cpe-individual
+          path: logs/
+          if-no-files-found: ignore
+          retention-days: 14

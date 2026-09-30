@@ -67,6 +67,8 @@ export const SERIES = ((): "noE" | "E" | "todas" => {
   const v = texto("SERIES", "noE").toLowerCase();
   return v === "e" ? "E" : v === "todas" ? "todas" : "noE";
 })();
+/** Tipos de comprobante a pedir: 01 factura, 07/08 notas, 03 boleta (por la API, a probar). */
+export const TIPOS = texto("TIPOS", "01,07,08").split(",").map(t => t.trim()).filter(Boolean);
 export const LIMITE = num("LIMITE", 0);
 export const HEADLESS = process.env.HEADLESS?.trim() !== "0";
 export const CARPETA_DRIVE = texto("SUNAT_DRIVE_FOLDER", "1RnyGimYdnhbQ3nKxGOoBc_iRz38fxCnX");
