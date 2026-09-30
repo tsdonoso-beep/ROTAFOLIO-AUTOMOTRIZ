@@ -61,7 +61,7 @@ lib/                 Lógica compartida por la app Y los scripts (sección 9)
   ocr/ extraccion/   Lectura de comprobantes: Tesseract en el navegador + Gemini
   supabase/          Clientes de la base (navegador y servidor)
   word/              Generación del memo en .docx
-db/migrations/       42 migraciones SQL, en orden (001 → 042)
+db/migrations/       43 migraciones SQL, en orden (001 → 043)
 db/database.full.sql Todas las migraciones en un archivo (GENERADO: pnpm db:consolidar)
 db/carga/            Carga inicial del padrón de personas
 docs/                Documentos de detalle (sección 13)
@@ -287,7 +287,7 @@ La versión vigente de cada función es la de la **última** migración que la t
 ### 6.3 Migraciones
 `db/migrations/NNN_nombre_descriptivo.sql`, **en orden, sin saltarse
 ninguna**. Cada una explica en su encabezado por qué existe. La última es
-`042_el_legajo_de_la_oc.sql`. Se aplican a mano (editor SQL de Supabase) y se
+`043_lectura_de_cpe_sin_evaluar_por_fila.sql` (pendiente de aplicar al 30/09/2026). Se aplican a mano (editor SQL de Supabase) y se
 versionan acá.
 
 ---

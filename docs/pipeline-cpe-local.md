@@ -265,7 +265,8 @@ En orden de impacto, con lo que se midió el 30/09/2026:
 | 7 | **Validar el workflow en GitHub** | Actions → SUNAT CPE por API → Run workflow con `limite` 5. Si SUNAT bloquea los servidores de GitHub, volver a correr desde una laptop |
 | 8 | **Drive es el cuello (~70-80/min)** | Ideas: subir a Drive después de guardar en la base (que la hoja no espere a Drive), o más `SUBIDAS` hasta que aparezca «User rate limit» |
 | 9 | **Llevar las mismas estrategias** a «descargar XML», «extraer rango» y «padrón de RUC» | Colas por etapa, sondeo previo, logs crudos |
-| 10 | **Hoja «COBERTURA»** desactualizada y cortada en 1 000 filas | Es de la app web (límite de PostgREST) |
+| 10 | **Aplicar la migración 043** (lecturas de cpe_comprobante sin timeout) | Supabase → SQL Editor → pegar `db/migrations/043_…sql` → Run. Mientras tanto el script lee lo guardado vía `detalle_cpe` y funciona igual |
+| 11 | **Hoja «COBERTURA»** desactualizada y cortada en 1 000 filas | Es de la app web (límite de PostgREST) |
 
 ## 10. Para continuar en otra laptop (entrega del 30/09/2026)
 
