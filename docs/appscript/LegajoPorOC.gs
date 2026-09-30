@@ -49,6 +49,15 @@
  *    usa dos hojas nuevas, cada una con este script: corren a la vez.
  * 5. «Revisar solo (3 en paralelo)»: tres revisores recorren las carpetas a
  *    la vez, por tandas, y se detienen al terminar. El avance, en RESUMEN.
+ * 6. «Programar actualización cada noche (20:00)»: cada noche se vuelve a
+ *    leer el cuadro de aprobaciones (que está en vivo), se suman las OC
+ *    nuevas, se actualizan estatus, aprobaciones y montos, y se revisan solo
+ *    las carpetas nuevas o con faltantes. Lo ya revisado se conserva. Para
+ *    hacerlo en el momento: «Actualizar ahora desde el cuadro».
+ *
+ * Las columnas del cuadro se buscan por su NOMBRE (o uno parecido), no por
+ * su posición: si Compras agrega o mueve columnas, se siguen encontrando. La
+ * pestaña COLUMNAS dice dónde encontró cada una.
  */
 
 // ── Configuración ──
@@ -71,6 +80,8 @@ var CG_PESTANA = '3. Registro Compras Grupo';
 var EMPRESA = 'INROPRIN';        // (modo proyecto) las OC de Inroplas tienen otra numeración
 var MINUTOS_POR_TANDA = 4;       // Apps Script corta a los 6; el resto es para escribir
 var MINUTOS_ENTRE_TANDAS = 10;
+var DIAS_PARA_REVISAR_FALTANTES = 7; // en la actualización nocturna, una OC a la que le falta algo se vuelve a mirar cada tantos días
+var HORA_NOCTURNA = 20;          // la actualización automática desde el cuadro: 8 PM (zona horaria del proyecto)
 var LIMITE_ARCHIVOS = 800;       // más que esto: el enlace es de una carpeta general, no de la OC
 // Leer por dentro (OCR) los PDF e imágenes que el nombre no delata («docs
 // solpack oc150-2026.pdf», «scan001.pdf»), solo si a la OC le falta factura,
@@ -97,11 +108,44 @@ var DOCS = [
   { col: '11. Acta de conformidad', clave: 'ACTA', solo: 'SERVICIO' }
 ];
 
+// Lo que se trae del cuadro de aprobaciones para Contabilidad. Cada campo se
+// busca por el nombre de su columna, o por uno PARECIDO (ver `leerTabla_`):
+// si alguien inserta, mueve o renombra un poco una columna, se sigue hallando.
+// La pestaña COLUMNAS dice, en cada actualización, dónde encontró cada uno.
+//   numero: se escribe como número (para poder sumar), si hay un solo valor.
+var CAMPOS_APROBACIONES = [
+  { col: 'Fecha OC', buscar: ['Fecha', 'Fecha OC', 'Fecha de OC'] },
+  { col: 'Comprador', buscar: ['Comprador'] },
+  { col: 'Concepto', buscar: ['Concepto'] },
+  { col: 'Estatus (aprobaciones)', buscar: ['Estatus Compra', 'Estado de compra', 'Estatus'] },
+  { col: 'Estado de aprobación', buscar: ['Estado de Aprobación'] },
+  { col: 'Tipo de aprobación', buscar: ['Tipo de aprobación'] },
+  { col: 'Aprobación Ppto', buscar: ['Aprobación Ppto', 'Aprobación Presupuesto'] },
+  { col: 'Aprobación GOP', buscar: ['Aprobación GOP'] },
+  { col: 'Aprobación GAF', buscar: ['Aprobación GAF'] },
+  { col: 'VB Control de Gestión', buscar: ['VB C. GESTION', 'VB Control de Gestión', 'Check Control Gestión'] },
+  { col: 'Condición', buscar: ['Condición'] },
+  { col: 'Monto (con IGV)', buscar: ['Monto', 'Monto con IGV'], numero: true },
+  { col: 'Moneda', buscar: ['Moneda original', 'Moneda'] },
+  { col: 'Monto en soles', buscar: ['Monto en Soles'], numero: true },
+  { col: 'Forma de pago', buscar: ['Forma de pago'] },
+  { col: '% adelanto', buscar: ['% adelanto', 'Porcentaje de adelanto', 'Adelanto'], numero: true },
+  { col: 'Días de crédito', buscar: ['Días de crédito', 'Dias credito'], numero: true },
+  { col: 'Legajo para pago (aprobaciones)', buscar: ['LEGAJO PARA PAGO'] },
+  { col: 'Comentario legajo incompleto', buscar: ['COMENTARIOS POR LEG. INCOMPLETO', 'Comentarios por legajo incompleto'] },
+  { col: 'OC cerrada', buscar: ['OC CERRADA'] },
+  { col: 'Cuadro de pagos', buscar: ['Cuadro de pagos'] },
+  { col: 'Observación finanzas', buscar: ['Observación finanzas', 'Observaciones finanzas'] },
+  { col: 'Criterio observación finanzas', buscar: ['Criterio de observación finanzas'] },
+  { col: 'Comentarios compras', buscar: ['Comentarios compras'] },
+  { col: 'Observaciones Control de Gestión', buscar: ['OBSERVACIONES CONTROL DE GESTIÓN'] }
+];
+
 var CAB_DATOS = ['OC', 'Unidad de negocio', 'Proyecto', 'Aparece en', 'Procedencia', 'Área que la completa', 'Proveedor',
   'RUC (CG)', 'N° Requerimiento', 'Centro de costo (CG)', 'Nombre del centro de costo (CG)',
-  'Código SIDIGE (CG)', 'Ítems en el plan', 'Estado de compra (plan)',
-  'Estatus (aprobaciones)', 'Legajo para pago (aprobaciones)', 'Comentario legajo incompleto',
-  'Bien o servicio', 'Enlace de la carpeta', 'Revisar el cruce'];
+  'Código SIDIGE (CG)', 'Ítems en el plan', 'Estado de compra (plan)', 'Situación del pago']
+  .concat(CAMPOS_APROBACIONES.map(function (c) { return c.col; }),
+    ['Bien o servicio', 'Enlace de la carpeta', 'Revisar el cruce']);
 var CAB_REVISION = ['Estado de la revisión', 'Archivos'].concat(
   DOCS.map(function (d) { return d.col; }), ['Le falta', 'Revisado en']);
 var CAB_TABLA = CAB_DATOS.concat(CAB_REVISION);
@@ -115,6 +159,7 @@ var I_AREA = CAB_DATOS.indexOf('Área que la completa');
 var I_UNIDAD = CAB_DATOS.indexOf('Unidad de negocio');
 var I_APARECE = CAB_DATOS.indexOf('Aparece en');
 var I_REVISAR = CAB_DATOS.indexOf('Revisar el cruce');
+var I_SITUACION = CAB_DATOS.indexOf('Situación del pago');
 
 // Los revisores que corren a la vez. Cada uno toma una fila de cada tres.
 var TRABAJADORES = ['trabajadorLegajo1', 'trabajadorLegajo2', 'trabajadorLegajo3'];
@@ -142,6 +187,10 @@ function onOpen() {
     .addItem('1. Armar tabla del proyecto ' + PROYECTO.nombre, 'armarTablaLegajo')
     .addItem('1. Armar tabla de TODO el cuadro de aprobaciones 2026', 'armarTablaAprobaciones')
     .addItem('2. Revisar siguiente tanda', 'revisarTandaLegajo')
+    .addSeparator()
+    .addItem('Actualizar ahora desde el cuadro (conserva lo revisado)', 'actualizarAhora')
+    .addItem('Programar actualización cada noche (' + HORA_NOCTURNA + ':00)', 'programarActualizacionNocturna')
+    .addItem('Quitar actualización nocturna', 'quitarActualizacionNocturna')
     .addSeparator()
     .addItem('Revisar solo (' + TRABAJADORES.length + ' en paralelo, cada ' + MINUTOS_ENTRE_TANDAS + ' min)', 'activarLegajoAutomatico')
     .addItem('Detener revisión automática', 'detenerLegajoAutomatico')
@@ -253,11 +302,20 @@ function idDeArchivo_(url) {
 
 /** «OC 2601-0001 (II)» → «2601-0001»: para las OC que no tienen forma NNNN-AAAA (Inroplas). */
 function ocCruda_(texto) {
-  return String(texto == null ? '' : texto).replace(/\(.*?\)/g, '').replace(/^\s*O[CS]\s*/i, '')
+  return String(texto == null ? '' : texto).replace(/\(.*?\)/g, '').replace(/^\s*O[CS]\s*[-.:#°]?\s*/i, '')
     .replace(/\s+/g, ' ').trim().toUpperCase();
 }
 
-function armarTabla_(libro, modo) {
+/**
+ * Arma la tabla desde las fuentes. Con `conservar` (la actualización de cada
+ * noche) no empieza de cero: las OC que ya se revisaron y siguen con la misma
+ * carpeta guardan su revisión, y solo quedan PENDIENTE las nuevas, las que
+ * cambiaron de carpeta, las sin acceso, las que aún no tienen factura y las
+ * que tienen faltantes revisados hace más de DIAS_PARA_REVISAR_FALTANTES.
+ * La revisión anterior se lee por el NOMBRE de sus columnas, así que sirve
+ * aunque la tabla haya cambiado de forma entre versiones del script.
+ */
+function armarTabla_(libro, modo, conservar) {
   var todo2026 = modo === MODO_APROBACIONES;
   var ocs = {}, orden = [];
   // En el modo proyecto todas son de EMPRESA; en el de todo 2026 la misma OC
@@ -267,7 +325,7 @@ function armarTabla_(libro, modo) {
     var k = claveDe(unidad, oc);
     if (!ocs[k]) {
       ocs[k] = { oc: oc, unidad: [], proyecto: [], fuentes: {}, proc: [], prov: [], ruc: [], req: [], ceco: [], cecoNombre: [],
-        sidige: [], items: 0, estado: [], estatus: [], legajo: [], coment: [], tipo: [], otroCeco: [], otroProyBase: [],
+        sidige: [], items: 0, estado: [], cuadro: {}, tipo: [], otroCeco: [], otroProyBase: [],
         links: { aprob: [], planCA: [], plan: [], cg: [] } };
       agregar_(ocs[k].unidad, unidad);
       orden.push(k);
@@ -277,14 +335,15 @@ function armarTabla_(libro, modo) {
   var existe = function (unidad, oc) { return !!ocs[claveDe(unidad, oc)]; };
 
   if (!todo2026) armarDesdeElPlan_(registro, existe);
-  armarDesdeAprobaciones_(registro, existe, todo2026);
+  var mapeo = armarDesdeAprobaciones_(registro, existe, todo2026);
   armarDesdeControlDeGestion_(registro, existe, todo2026);
 
-  // Las filas. Un enlace por OC: primero el del cuadro de aprobaciones (lo
-  // pone Compras al pedir la aprobación), después el del plan, al final el de CG.
+  // Las filas, como {columna: valor}. Un enlace por OC: primero el del cuadro
+  // de aprobaciones (lo pone Compras al pedir la aprobación), después el del
+  // plan, al final el de CG.
   var conCarpeta = 0;
   var filas = orden.map(function (k) {
-    var r = ocs[k];
+    var r = ocs[k], o = {};
     var links = [].concat(r.links.aprob, r.links.planCA, r.links.plan, r.links.cg);
     var ids = [];
     links.forEach(function (u) { var id = idDeDrive_(u); if (id && ids.indexOf(id) === -1) ids.push(id); });
@@ -293,7 +352,6 @@ function armarTabla_(libro, modo) {
     if (enlace) conCarpeta++;
 
     var proc = procedencia_(r.proc);
-    var tipo = r.tipo.indexOf('SERVICIO') !== -1 ? 'Servicio' : r.tipo.indexOf('BIEN') !== -1 ? 'Bien' : '';
     var fuentes = [];
     if (r.fuentes.plan) fuentes.push('Plan de compras');
     if (r.fuentes.base) fuentes.push('Base de OC');
@@ -314,33 +372,186 @@ function armarTabla_(libro, modo) {
     if (ids.length > 1) revisar.push(ids.length + ' carpetas distintas entre las fuentes');
     if (!proc) revisar.push('sin procedencia');
 
-    return [r.oc, r.unidad.join(' / '), r.proyecto.slice(0, 2).join(' / '), fuentes.join(' · '), proc,
-      proc === 'Importación' ? COMEX : proc === 'Nacional' ? NACIONAL : '',
-      r.prov.slice(0, 2).join(' / '), r.ruc.join(' / '), r.req.join(' / '), r.ceco.join(' / '),
-      r.cecoNombre.join(' / '), r.sidige.slice(0, 5).join(' / ') + (r.sidige.length > 5 ? ' …' : ''),
-      r.items || '', r.estado.join(' / '), r.estatus.join(' / '), r.legajo.join(' / '),
-      r.coment.join(' / '), tipo, enlace, revisar.join('; ')]
-      .concat([enlace ? 'PENDIENTE' : 'SIN CARPETA'], CAB_REVISION.slice(1).map(function () { return ''; }));
+    o['OC'] = r.oc;
+    o['Unidad de negocio'] = r.unidad.join(' / ');
+    o['Proyecto'] = r.proyecto.slice(0, 2).join(' / ');
+    o['Aparece en'] = fuentes.join(' · ');
+    o['Procedencia'] = proc;
+    o['Área que la completa'] = proc === 'Importación' ? COMEX : proc === 'Nacional' ? NACIONAL : '';
+    o['Proveedor'] = r.prov.slice(0, 2).join(' / ');
+    o['RUC (CG)'] = r.ruc.join(' / ');
+    o['N° Requerimiento'] = r.req.join(' / ');
+    o['Centro de costo (CG)'] = r.ceco.join(' / ');
+    o['Nombre del centro de costo (CG)'] = r.cecoNombre.join(' / ');
+    o['Código SIDIGE (CG)'] = r.sidige.slice(0, 5).join(' / ') + (r.sidige.length > 5 ? ' …' : '');
+    o['Ítems en el plan'] = r.items || '';
+    o['Estado de compra (plan)'] = r.estado.join(' / ');
+    CAMPOS_APROBACIONES.forEach(function (c) {
+      var lista = r.cuadro[c.col] || [];
+      o[c.col] = c.numero && lista.length === 1 && !isNaN(Number(lista[0])) && lista[0] !== '' ? Number(lista[0]) : lista.join(' / ');
+    });
+    o['Situación del pago'] = situacionDelPago_(o);
+    o['Bien o servicio'] = r.tipo.indexOf('SERVICIO') !== -1 ? 'Servicio' : r.tipo.indexOf('BIEN') !== -1 ? 'Bien' : '';
+    o['Enlace de la carpeta'] = enlace;
+    o['Revisar el cruce'] = revisar.join('; ');
+    o['Estado de la revisión'] = enlace ? 'PENDIENTE' : 'SIN CARPETA';
+    return o;
   });
   // Proyecto: primero las del plan. Todo 2026: por unidad y OC.
   filas.sort(function (a, b) {
-    var pa = todo2026 ? a[I_UNIDAD] : (a[I_APARECE].indexOf('Plan') === 0 ? 0 : 1);
-    var pb = todo2026 ? b[I_UNIDAD] : (b[I_APARECE].indexOf('Plan') === 0 ? 0 : 1);
-    return (pa < pb ? -1 : pa > pb ? 1 : 0) || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+    var pa = todo2026 ? a['Unidad de negocio'] : (a['Aparece en'].indexOf('Plan') === 0 ? 0 : 1);
+    var pb = todo2026 ? b['Unidad de negocio'] : (b['Aparece en'].indexOf('Plan') === 0 ? 0 : 1);
+    return (pa < pb ? -1 : pa > pb ? 1 : 0) || (a.OC < b.OC ? -1 : a.OC > b.OC ? 1 : 0);
   });
 
+  // Lo ya revisado, para no repetirlo.
+  var previo = conservar ? tablaPrevia_(libro) : null;
+  var cuenta = { filas: filas.length, conCarpeta: conCarpeta, nuevas: 0, aRevisar: 0, conservadas: 0, quitadas: 0, pendientes: 0 };
+  var guardadas = {}; // «OC|id de carpeta» cuyas filas de ARCHIVOS se quedan
+  var ricos = filas.map(function (o) {
+    var viejo = previo ? previo.buscar(o['Unidad de negocio'], o.OC) : null;
+    if (previo && !viejo) cuenta.nuevas++;
+    if (viejo) viejo.usado = true;
+    if (viejo && seConserva_(viejo.valores, o)) {
+      CAB_REVISION.forEach(function (h) { if (h in viejo.valores) o[h] = viejo.valores[h]; });
+      guardadas[o.OC + '|' + idDeDrive_(o['Enlace de la carpeta'])] = true;
+      cuenta.conservadas++;
+      return viejo.ricos;
+    }
+    if (viejo && o['Estado de la revisión'] === 'PENDIENTE') cuenta.aRevisar++;
+    return DOCS.map(function () { return rico_(''); });
+  });
+  if (previo) cuenta.quitadas = previo.sinUsar();
+  cuenta.pendientes = filas.filter(function (o) { return o['Estado de la revisión'] === 'PENDIENTE'; }).length;
+
+  // ARCHIVOS: se quedan solo los de las OC cuya revisión se conservó.
+  var archivosQueQuedan = [];
+  var hojaA = libro.getSheetByName('ARCHIVOS');
+  if (previo && hojaA && hojaA.getLastRow() > 1) {
+    archivosQueQuedan = hojaA.getRange(2, 1, hojaA.getLastRow() - 1, CAB_ARCHIVOS.length).getValues()
+      .filter(function (a) { return guardadas[a[0] + '|' + idDeDrive_(a[2])]; });
+  }
+
   var hojaT = prepararHoja_(libro, 'TABLA', CAB_TABLA);
-  prepararHoja_(libro, 'ARCHIVOS', CAB_ARCHIVOS);
+  hojaA = prepararHoja_(libro, 'ARCHIVOS', CAB_ARCHIVOS);
+  if (archivosQueQuedan.length) hojaA.getRange(2, 1, archivosQueQuedan.length, CAB_ARCHIVOS.length).setValues(archivosQueQuedan);
   if (filas.length) {
     // Como texto: que «0115-2026» o un RUC no se conviertan en fecha o número.
     hojaT.getRange(2, 1, filas.length, CAB_DATOS.length).setNumberFormat('@');
+    CAMPOS_APROBACIONES.forEach(function (c) {
+      if (!c.numero) return;
+      hojaT.getRange(2, CAB_DATOS.indexOf(c.col) + 1, filas.length, 1)
+        .setNumberFormat(c.col === '% adelanto' ? '0%' : c.col === 'Días de crédito' ? '0' : '#,##0.00');
+    });
     hojaT.getRange(2, CAB_TABLA.length, filas.length, 1).setNumberFormat('dd/mm/yyyy hh:mm');
-    hojaT.getRange(2, 1, filas.length, CAB_TABLA.length).setValues(filas);
+    hojaT.getRange(2, 1, filas.length, CAB_TABLA.length).setValues(filas.map(function (o) {
+      return CAB_TABLA.map(function (h) { return o[h] == null ? '' : o[h]; });
+    }));
+    hojaT.getRange(2, COL_PRIMER_DOC, filas.length, DOCS.length).setRichTextValues(ricos);
   }
   hojaT.setFrozenColumns(1);
   hojaT.getRange(1, COL_PRIMER_DOC, 1, DOCS.length).setBackground('#375623');
-  actualizarResumen_(libro, 'Tabla armada. Todavía no se revisa ninguna carpeta.');
-  return { filas: filas.length, conCarpeta: conCarpeta };
+  hojaT.getRange(1, I_SITUACION + 1, 1, CAMPOS_APROBACIONES.length + 1).setBackground('#7F6000');
+  escribirColumnas_(libro, mapeo);
+
+  var texto = conservar
+    ? 'Actualizado desde el cuadro: ' + cuenta.filas + ' OC (' + cuenta.nuevas + ' nuevas, ' + cuenta.quitadas +
+      ' ya no están). ' + cuenta.conservadas + ' conservan su revisión; ' + cuenta.pendientes + ' por revisar.'
+    : 'Tabla armada. Todavía no se revisa ninguna carpeta.';
+  PropertiesService.getDocumentProperties().setProperty('LEGAJO_ULTIMA_ACTUALIZACION',
+    Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm') + ' — ' + texto);
+  actualizarResumen_(libro, texto);
+  return cuenta;
+}
+
+/**
+ * Si una OC ya revisada se queda como está. Se vuelve a revisar si cambió
+ * de carpeta, si la revisión no terminó bien, si aún no tiene factura, o si
+ * le falta algo y se revisó hace más de DIAS_PARA_REVISAR_FALTANTES (en ese
+ * tiempo Compras pudo subirlo). Una OC anulada no se vuelve a revisar.
+ */
+function seConserva_(viejo, nuevo) {
+  var id = idDeDrive_(nuevo['Enlace de la carpeta']);
+  if (!id || id !== idDeDrive_(viejo['Enlace de la carpeta'])) return false;
+  var estado = String(viejo['Estado de la revisión'] || '');
+  if (!estado || /^(PENDIENTE|SIN ACCESO|SIN CARPETA|SIN TERMINAR|ERROR)/.test(estado)) return false;
+  if (nuevo['Situación del pago'] === 'ANULADA') return true;
+  if (String(viejo[DOCS[0].col]) === '✗') return false;
+  var revisado = viejo['Revisado en'];
+  var dias = revisado instanceof Date ? (Date.now() - revisado.getTime()) / 86400000 : Infinity;
+  if (String(viejo['Le falta'] || '') && dias >= DIAS_PARA_REVISAR_FALTANTES) return false;
+  return true;
+}
+
+/**
+ * La TABLA que había: por cada OC, sus valores por nombre de columna y las
+ * celdas de los 11 documentos con sus enlaces. Se busca por unidad + OC; si
+ * la tabla vieja no tenía unidad, solo por OC.
+ */
+function tablaPrevia_(libro) {
+  var hoja = libro.getSheetByName('TABLA');
+  if (!hoja || hoja.getLastRow() < 2) return null;
+  var n = hoja.getLastRow() - 1, ancho = hoja.getLastColumn();
+  var cab = hoja.getRange(1, 1, 1, ancho).getValues()[0].map(String);
+  var valores = hoja.getRange(2, 1, n, ancho).getValues();
+  var iDocs = DOCS.map(function (d) { return cab.indexOf(d.col); });
+  var ricosPorDoc = iDocs.map(function (c) { return c >= 0 ? hoja.getRange(2, c + 1, n, 1).getRichTextValues() : null; });
+  var iOc = cab.indexOf('OC'), iUnidad = cab.indexOf('Unidad de negocio');
+  var porClave = {}, todas = [];
+  valores.forEach(function (f, k) {
+    var v = {};
+    cab.forEach(function (h, j) { if (h) v[h] = f[j]; });
+    var x = { valores: v, ricos: ricosPorDoc.map(function (rs) { return rs ? rs[k][0] : rico_(''); }), usado: false };
+    todas.push(x);
+    porClave[normalizar_(iUnidad >= 0 ? f[iUnidad] : '') + '|' + f[iOc]] = x;
+    if (!porClave['|' + f[iOc]]) porClave['|' + f[iOc]] = x;
+  });
+  return {
+    buscar: function (unidad, oc) {
+      return porClave[normalizar_(unidad) + '|' + oc] || (iUnidad < 0 ? porClave['|' + oc] : null);
+    },
+    sinUsar: function () { return todas.filter(function (x) { return !x.usado; }).length; }
+  };
+}
+
+/**
+ * Para Contabilidad, en una palabra: ¿esta compra ya está pagada, aprobada
+ * pero sin pagar, o todavía sin aprobar? Sale del estatus, el estado de
+ * aprobación y la columna OC CERRADA del cuadro.
+ */
+function situacionDelPago_(o) {
+  var est = textoPlano_(o['Estatus (aprobaciones)']), apr = textoPlano_(o['Estado de aprobación']);
+  var cerrada = textoPlano_(o['OC cerrada']);
+  if (/ANULAD/.test(est + ' ' + cerrada)) return 'ANULADA';
+  if (/FALTA APROBACION/.test(est + ' ' + apr)) return 'FALTA APROBACIÓN';
+  if (/LEGAJO INCOMPLETO/.test(est)) return 'LEGAJO INCOMPLETO';
+  if (/OC PAGADA|^PAGADA/.test(est)) return 'PAGADA';
+  if (/TARJETA/.test(est)) return 'PAGADA CON TARJETA';
+  if (/PENDIENTE|CREDITO|LETRA|CONTRA ENTREGA|DIAS/.test(est)) return 'APROBADA, PAGO PENDIENTE';
+  if (/APROBADO PARA PAGO/.test(apr)) return 'APROBADA PARA PAGO';
+  if (/APROBADO/.test(apr)) return 'APROBADA PARA COMPRA';
+  if (/CERRADA|^SI$/.test(cerrada)) return 'OC CERRADA';
+  return String(o['Estatus (aprobaciones)'] || '');
+}
+
+/** La pestaña COLUMNAS: dónde encontró cada campo en el cuadro de aprobaciones. */
+function escribirColumnas_(libro, mapeo) {
+  if (!mapeo) return;
+  var filas = [['Campo', 'Encabezado encontrado en el cuadro', 'Columna', 'Cómo se encontró']];
+  CAMPOS_APROBACIONES.forEach(function (c) {
+    var m = mapeo[c.buscar.join('|')];
+    filas.push(m ? [c.col, m.encabezado, m.letra, m.como] : [c.col, '— NO ENCONTRADA —', '', 'Revisa si cambió mucho el nombre']);
+  });
+  Object.keys(mapeo).forEach(function (k) {
+    if (/^(OC|PROVEEDOR|UNIDADDENEGOCIO|PROCEDENCIA|PROYECTO|LINK)/.test(normalizar_(k))) {
+      var m = mapeo[k];
+      filas.push(['(' + k.split('|')[0] + ')', m.encabezado, m.letra, m.como]);
+    }
+  });
+  var h = prepararHoja_(libro, 'COLUMNAS', filas[0]);
+  h.getRange(2, 1, filas.length - 1, 4).setValues(filas.slice(1));
+  h.setColumnWidth(1, 260);
+  h.setColumnWidth(2, 320);
 }
 
 /** Modo proyecto: el plan de compras, la base de OC de Compras y el cuadro de aprobaciones del plan. */
@@ -432,8 +643,11 @@ function armarDesdeElPlan_(registro, existe) {
  * proyecto (o las que ya están). Todo 2026: todas, de todas las unidades.
  */
 function armarDesdeAprobaciones_(registro, existe, todo2026) {
-  var ap = leerTabla_(SpreadsheetApp.openById(APROBACIONES_ID), APROBACIONES_PESTANA, ['OC', 'Link de la carpeta OC'], true);
-  if (!ap) return;
+  var ap = leerTabla_(SpreadsheetApp.openById(APROBACIONES_ID), APROBACIONES_PESTANA, ['OC', 'Proveedor'], true);
+  if (!ap) return [];
+  // El enlace de la carpeta: por su nombre, o la columna con más enlaces de Drive.
+  var iLink = ap.col(['Link de la carpeta OC', 'Link carpeta OC', 'Link de carpeta', 'Carpeta OC', 'Link OC', 'Link legajo']);
+  if (iLink < 0) iLink = ap.columnaConEnlaces();
   ap.filas.forEach(function (f, k) {
     var unidad = String(valor_(f, ap.col(['Unidad de negocio'])) || '').trim();
     if (!todo2026 && normalizar_(unidad) !== normalizar_(EMPRESA)) return;
@@ -449,12 +663,14 @@ function armarDesdeAprobaciones_(registro, existe, todo2026) {
     agregar_(r.req, valor_(f, ap.col(['N° Requerimiento'])));
     agregar_(r.proc, proc);
     agregar_(r.prov, valor_(f, ap.col(['PROVEEDOR'])));
-    agregar_(r.estatus, valor_(f, ap.col(['Estatus Compra'])));
-    agregar_(r.legajo, valor_(f, ap.col(['LEGAJO PARA PAGO'])));
-    agregar_(r.coment, valor_(f, ap.col(['COMENTARIOS POR LEG. INCOMPLETO'])));
+    CAMPOS_APROBACIONES.forEach(function (c) {
+      var lista = r.cuadro[c.col] || (r.cuadro[c.col] = []);
+      agregar_(lista, valor_(f, ap.col(c.buscar)));
+    });
     agregar_(r.tipo, /SERVICIO/i.test(String(valor_(f, ap.col(['Concepto'])))) ? 'SERVICIO' : '');
-    agregar_(r.links.aprob, ap.url(k, ap.col(['Link de la carpeta OC'])));
+    agregar_(r.links.aprob, ap.url(k, iLink));
   });
+  return ap.mapeo;
 }
 
 /**
@@ -1061,13 +1277,82 @@ function activarLegajoAutomatico() {
       'Para activarlo: Apps Script → «Servicios» (+) → «Drive API» → Agregar.\n\n¿Seguir igual, sin leerlos?', ui.ButtonSet.YES_NO);
     if (r !== ui.Button.YES) return;
   }
+  arrancarRevisores_();
+  libro.toast('En un minuto arrancan ' + TRABAJADORES.length + ' revisores a la vez. Siguen solos cada ' +
+    MINUTOS_ENTRE_TANDAS + ' minutos y se detienen al terminar. El avance se ve en RESUMEN.', 'Legajo por OC', 15);
+}
+
+/** Los relojes de los revisores: cada MINUTOS_ENTRE_TANDAS, más un arranque único al minuto. */
+function arrancarRevisores_() {
   detenerLegajoAutomatico_();
   TRABAJADORES.forEach(function (fn, k) {
     ScriptApp.newTrigger(fn).timeBased().everyMinutes(MINUTOS_ENTRE_TANDAS).create();
     ScriptApp.newTrigger(fn).timeBased().after(60000 + k * 20000).create();
   });
-  libro.toast('En un minuto arrancan ' + TRABAJADORES.length + ' revisores a la vez. Siguen solos cada ' +
-    MINUTOS_ENTRE_TANDAS + ' minutos y se detienen al terminar. El avance se ve en RESUMEN.', 'Legajo por OC', 15);
+}
+
+// ── Actualización desde el cuadro de aprobaciones (cada noche o a mano) ──
+
+/**
+ * Lo que corre cada noche: vuelve a leer el cuadro de aprobaciones (que está
+ * en vivo), suma las OC nuevas, actualiza estatus, aprobaciones y montos de
+ * todas, conserva lo ya revisado y arranca los revisores para lo pendiente.
+ */
+function actualizacionNocturna() {
+  actualizarDesdeElCuadro_();
+}
+
+/** Lo mismo, a mano, desde el menú. */
+function actualizarAhora() {
+  var ui = SpreadsheetApp.getUi();
+  var c = actualizarDesdeElCuadro_();
+  ui.alert('Actualizado desde el cuadro', c.filas + ' OC en total: ' + c.nuevas + ' nuevas, ' + c.quitadas +
+    ' que ya no están en el cuadro.\n' + c.conservadas + ' conservan su revisión.\n' + c.pendientes +
+    ' por revisar' + (c.pendientes ? ': los revisores arrancan en un minuto.' : '.'), ui.ButtonSet.OK);
+}
+
+function actualizarDesdeElCuadro_() {
+  var libro = SpreadsheetApp.getActiveSpreadsheet();
+  var props = PropertiesService.getDocumentProperties();
+  detenerLegajoAutomatico_();
+  props.setProperty('LEGAJO_GEN', String(Date.now())); // lo de una tanda a medias se descarta
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(150000)) throw new Error('Una tanda estaba escribiendo; la actualización se reintenta en la próxima.');
+  var c;
+  try {
+    c = armarTabla_(libro, modoActual_(), true);
+  } catch (e) {
+    anotarError_(libro, 'ERROR al actualizar desde el cuadro: ' + (e.message || e));
+    throw e;
+  } finally {
+    lock.releaseLock();
+  }
+  if (c.pendientes) arrancarRevisores_();
+  return c;
+}
+
+function programarActualizacionNocturna() {
+  quitarActualizacionNocturna_();
+  ScriptApp.newTrigger('actualizacionNocturna').timeBased().atHour(HORA_NOCTURNA).nearMinute(0).everyDays(1).create();
+  SpreadsheetApp.getUi().alert('Programado', 'Cada día entre las ' + HORA_NOCTURNA + ':00 y las ' + HORA_NOCTURNA +
+    ':59 (zona horaria: ' + Session.getScriptTimeZone() + ') se vuelve a leer el cuadro de aprobaciones y se revisa lo nuevo.\n\n' +
+    'Si la zona no es America/Lima: Apps Script → Configuración del proyecto (engranaje) → Zona horaria.',
+    SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
+function quitarActualizacionNocturna() {
+  quitarActualizacionNocturna_();
+  SpreadsheetApp.getActiveSpreadsheet().toast('Actualización nocturna quitada.', 'Legajo por OC', 5);
+}
+
+function quitarActualizacionNocturna_() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'actualizacionNocturna') ScriptApp.deleteTrigger(t);
+  });
+}
+
+function hayActualizacionNocturna_() {
+  return ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'actualizacionNocturna'; });
 }
 
 function detenerLegajoAutomatico() {
@@ -1111,9 +1396,11 @@ function actualizarResumen_(libro, resultado) {
   var cuenta = {};
   areas.forEach(function (a) { cuenta[a] = { ocs: 0, docs: DOCS.map(function () { return { si: 0, aplica: 0 }; }) }; });
 
-  var porUnidad = {};
+  var porUnidad = {}, porSituacion = {}, anuladas = 0;
   tabla.forEach(function (f) {
     var aparece = String(f[I_APARECE]), revisar = String(f[I_REVISAR]);
+    var situacion = String(f[I_SITUACION] || '(sin dato)');
+    porSituacion[situacion] = (porSituacion[situacion] || 0) + 1;
     if (aparece.indexOf('Plan') !== -1) cruce.plan++; else cruce.soloFuera++;
     if (aparece.indexOf('Aprobaciones') !== -1) cruce.aprob++; else cruce.sinAprob++;
     if (aparece.indexOf('Control') !== -1) cruce.cg++; else cruce.sinCg++;
@@ -1131,6 +1418,8 @@ function actualizarResumen_(libro, resultado) {
     if (/^VACÍA/.test(estado)) rev.vacias++;
     if (/^MUY GRANDE/.test(estado)) rev.grandes++;
     if (/subcarpeta/.test(estado)) rev.subidas++;
+    // Una OC anulada no debe documentos: no cuenta en los porcentajes.
+    if (situacion === 'ANULADA') { anuladas++; return; }
 
     [f[I_AREA] || '', 'Total'].forEach(function (a) {
       if (!cuenta[a]) return;
@@ -1165,6 +1454,10 @@ function actualizarResumen_(libro, resultado) {
   fila('Con carpetas distintas entre fuentes', cruce.variasCarpetas);
   fila('Sin enlace de carpeta', cruce.sinCarpeta);
   filas.push(['', '', '', '']);
+  titulo('Situación del pago (del cuadro de aprobaciones)');
+  Object.keys(porSituacion).sort(function (a, b) { return porSituacion[b] - porSituacion[a]; })
+    .forEach(function (k) { fila('   ' + k, porSituacion[k]); });
+  filas.push(['', '', '', '']);
   titulo('Revisión de carpetas');
   fila('Revisadas', rev.revisadas);
   fila('Pendientes', rev.pendientes);
@@ -1173,13 +1466,17 @@ function actualizarResumen_(libro, resultado) {
   fila('El enlace era de una subcarpeta (se revisó desde la carpeta de la OC)', rev.subidas);
   fila('Enlace a una carpeta general (muy grande)', rev.grandes);
   filas.push(['', '', '', '']);
-  titulo('Documento (% de las OC a las que les corresponde)', NACIONAL, COMEX, 'Total');
+  titulo('Documento (% de las OC a las que les corresponde; sin las ' + anuladas + ' anuladas)', NACIONAL, COMEX, 'Total');
   filas.push(['OC revisadas', cuenta[NACIONAL].ocs, cuenta[COMEX].ocs, cuenta.Total.ocs]);
   DOCS.forEach(function (d, j) {
     filas.push([d.col + (d.opcional ? ' (opcional)' : ''),
       pct(cuenta[NACIONAL].docs[j]), pct(cuenta[COMEX].docs[j]), pct(cuenta.Total.docs[j])]);
   });
-  filas.push(['', '', '', ''], ['Última tanda', new Date(), '', ''], ['Resultado de la última tanda', resultado, '', '']);
+  var props = PropertiesService.getDocumentProperties();
+  filas.push(['', '', '', ''],
+    ['Última actualización desde el cuadro', props.getProperty('LEGAJO_ULTIMA_ACTUALIZACION') || '(todavía ninguna)', '', ''],
+    ['Actualización cada noche', hayActualizacionNocturna_() ? 'SÍ, a las ' + HORA_NOCTURNA + ':00' : 'NO (menú: «Programar actualización cada noche»)', '', ''],
+    ['Última tanda', new Date(), '', ''], ['Resultado de la última tanda', resultado, '', '']);
 
   var h = libro.getSheetByName('RESUMEN') || libro.insertSheet('RESUMEN');
   h.clear();
@@ -1227,23 +1524,45 @@ function leerTabla_(libro, nombre, requeridas, buscarSiNoEsta) {
   var filaCab = filaDeTitulos_(valores.slice(0, 10), requeridas);
   if (filaCab < 0) throw new Error('En «' + libro.getName() + '» / «' + hoja.getName() +
     '» no encontré la fila de títulos con: ' + requeridas.join(', '));
-  var cab = valores[filaCab].map(normalizar_);
+  var titulos = valores[filaCab];
   var filas = valores.slice(filaCab + 1);
-  var ricosPorCol = {};
+  var ricosPorCol = {}, halladas = {}, mapeo = {};
   return {
     filas: filas,
-    /** El índice de la primera columna cuyo título calce con alguno de `nombres`; -1 si no hay. */
+    mapeo: mapeo,
+    /**
+     * La columna de un campo, por su título: primero igual (sin tildes ni
+     * espacios), y si no, el más PARECIDO (ver `parecidoDeTitulos_`). Así una
+     * columna que se movió o cambió un poco de nombre se sigue encontrando.
+     * -1 si ninguna se parece lo suficiente.
+     */
     col: function (nombres) {
-      for (var j = 0; j < nombres.length; j++) {
-        var k = cab.indexOf(normalizar_(nombres[j]));
-        if (k !== -1) return k;
+      var clave = nombres.join('|');
+      if (clave in halladas) return halladas[clave];
+      var mejor = -1, puntaje = 0, como = '';
+      for (var j = 0; j < nombres.length && mejor < 0; j++) {
+        for (var c = 0; c < titulos.length; c++) {
+          if (normalizar_(titulos[c]) && normalizar_(titulos[c]) === normalizar_(nombres[j])) { mejor = c; como = 'igual'; break; }
+        }
       }
-      return -1;
+      if (mejor < 0) {
+        nombres.forEach(function (n) {
+          titulos.forEach(function (t, c) {
+            var p = parecidoDeTitulos_(n, t);
+            if (p > puntaje) { puntaje = p; mejor = c; }
+          });
+        });
+        if (puntaje < PARECIDO_MINIMO) mejor = -1;
+        else como = 'parecido (' + Math.round(puntaje * 100) + '%)';
+      }
+      halladas[clave] = mejor;
+      if (mejor >= 0) mapeo[clave] = { encabezado: String(titulos[mejor]).trim(), letra: letraDeColumna_(mejor + 1), como: como };
+      return mejor;
     },
     /** La columna con más enlaces de Drive, para las que no tienen título. */
     columnaConEnlaces: function () {
       var mejor = -1, max = 0;
-      for (var c = 0; c < cab.length; c++) {
+      for (var c = 0; c < titulos.length; c++) {
         var n = 0;
         for (var r = 0; r < Math.min(filas.length, 200); r++) if (/drive\.google\.com/.test(String(filas[r][c]))) n++;
         if (n > max) { max = n; mejor = c; }
@@ -1265,13 +1584,58 @@ function leerTabla_(libro, nombre, requeridas, buscarSiNoEsta) {
   };
 }
 
+/** La fila (de las primeras) donde están todos los títulos `requeridas`, iguales o parecidos. */
 function filaDeTitulos_(valores, requeridas) {
-  var buscadas = requeridas.map(normalizar_);
   for (var i = 0; i < valores.length; i++) {
-    var fila = valores[i].map(normalizar_);
-    if (buscadas.every(function (b) { return fila.indexOf(b) !== -1; })) return i;
+    var fila = valores[i];
+    var estan = requeridas.every(function (b) {
+      return fila.some(function (v) { return parecidoDeTitulos_(b, v) >= PARECIDO_MINIMO; });
+    });
+    if (estan) return i;
   }
   return -1;
+}
+
+// Palabras que no ayudan a distinguir un título.
+var PALABRAS_VACIAS = ['DE', 'DEL', 'LA', 'LAS', 'EL', 'LOS', 'Y', 'EN', 'POR', 'PARA', 'A', 'N', 'NO', 'NRO', 'NUM', 'NUMERO'];
+var PARECIDO_MINIMO = 0.75;
+
+function palabrasDeTitulo_(s) {
+  return String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase()
+    .replace(/[^A-Z0-9%]+/g, ' ').replace(/%/g, ' ').trim().split(' ')
+    .filter(function (p) { return p && PALABRAS_VACIAS.indexOf(p) === -1; })
+    .map(function (p) { return p.length > 5 ? p.replace(/(ES|S)$/, '') : p; });
+}
+
+/**
+ * Cuánto se parecen dos títulos de columna, de 0 a 1: la parte de sus
+ * palabras que coinciden, sin contar «de», «la», «N°»… y aceptando plurales
+ * y un error de tipeo en palabras largas. «Link de la carpeta OC» y «Link
+ * carpeta OC» → 1; «Estatus Compra» y «Estatus de compra» → 1. Pero
+ * «Aprobación GAF» y «Aprobación GOP» → 0,5: se parecen en letras, no en lo
+ * que dicen, y no se confunden.
+ */
+function parecidoDeTitulos_(a, b) {
+  var na = normalizar_(a), nb = normalizar_(b);
+  if (!na || !nb) return 0;
+  if (na === nb) return 1;
+  var pa = palabrasDeTitulo_(a), pb = palabrasDeTitulo_(b);
+  if (!pa.length || !pb.length) return 0;
+  var usadas = {}, iguales = 0;
+  pa.forEach(function (x) {
+    for (var j = 0; j < pb.length; j++) {
+      if (usadas[j]) continue;
+      var y = pb[j];
+      if (x === y || (x.length >= 5 && y.length >= 5 && distancia_(x, y) <= 1)) { usadas[j] = true; iguales++; return; }
+    }
+  });
+  return iguales / Math.max(pa.length, pb.length);
+}
+
+function letraDeColumna_(n) {
+  var s = '';
+  while (n > 0) { var r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); }
+  return s;
 }
 
 function valor_(fila, i) { return i >= 0 ? fila[i] : ''; }
@@ -1404,9 +1768,9 @@ function serieEnNombre_(nombre) {
  */
 function ocNormalizada_(texto, proc) {
   var s = String(texto == null ? '' : texto);
-  var num, anio, m = /(\d{1,6})\s*-\s*(20\d\d)(?!\d)/.exec(s);
+  var num, anio, m = /(\d{1,6})\s*-\s*(202\d)(?!\d)/.exec(s);
   if (m) { num = m[1]; anio = m[2]; }
-  else if ((m = /(20\d\d)\s*-\s*(\d{1,6})/.exec(s))) { num = m[2]; anio = m[1]; }
+  else if ((m = /(?:^|\D)(202\d)\s*-\s*(\d{1,6})(?!\d)/.exec(s))) { num = m[2]; anio = m[1]; }
   else return '';
   var p = String(proc || '').toUpperCase();
   var impo = /IMPO|INTERNAC|EXTRANJ/.test(p) ? true : /NAC/.test(p) ? false : num.length <= 3;
@@ -1495,6 +1859,7 @@ function idDeDrive_(url) {
 
 function agregar_(lista, v) {
   if (v instanceof Date) v = Utilities.formatDate(v, Session.getScriptTimeZone(), 'dd/MM/yyyy');
+  if (v === true || v === false) v = v ? 'Sí' : 'No'; // las casillas del cuadro
   var s = String(v == null ? '' : v).trim();
   if (s && s !== '-' && s !== '#N/A' && s !== '#REF!' && lista.indexOf(s) === -1) lista.push(s);
 }

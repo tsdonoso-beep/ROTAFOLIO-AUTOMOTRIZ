@@ -434,6 +434,26 @@ La serie-número que lee (F001-113668, con los errores típicos del OCR como
 la celda de la factura: «✓ 1 · F001-113668». Un nombre como
 «01F0010031388.pdf» (tipo pegado a serie y número) ya se reconoce sin leer.
 
+**En vivo, cada noche.** «Programar actualización cada noche (20:00)» vuelve
+a leer el cuadro de aprobaciones a las 8 PM (zona horaria del proyecto de
+Apps Script): suma las OC nuevas, actualiza estatus, aprobaciones y montos, y
+conserva lo ya revisado. Solo vuelven a revisarse las carpetas nuevas, las que
+cambiaron de enlace, las sin acceso, las que aún no tienen factura y las que
+tienen faltantes revisados hace más de 7 días (`DIAS_PARA_REVISAR_FALTANTES`).
+La revisión vieja se lee por el nombre de sus columnas, así que la misma
+opción sirve para pasar a una versión nueva del script sin perder nada.
+
+Las columnas del cuadro se buscan **por nombre, o por uno parecido**
+(`parecidoDeTitulos_`: mismas palabras sin contar «de», «la», «N°», con
+plurales y un error de tipeo; «Aprobación GAF» no se confunde con «Aprobación
+GOP»). La pestaña COLUMNAS dice dónde encontró cada campo. Para Contabilidad
+se traen: situación del pago (pagada, aprobada con pago pendiente, falta
+aprobación, legajo incompleto, anulada…), estatus, estado y tipo de
+aprobación, aprobaciones Ppto/GOP/GAF, VB de Control de Gestión, montos,
+moneda, forma de pago, adelanto, días de crédito, legajo para pago, OC
+cerrada, observaciones de finanzas, compras y Control de Gestión. Las OC
+anuladas no cuentan en los porcentajes de documentos.
+
 Menú: **Probar la lectura por dentro (OCR)** confirma que Drive API y los
 permisos están bien; **Volver a revisar las que NO tienen factura** repite solo
 esas OC (y limpia sus filas viejas de ARCHIVOS).
