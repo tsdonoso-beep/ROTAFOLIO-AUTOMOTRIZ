@@ -60,7 +60,7 @@ function subirLegajo_() {
       var nA = subirLotesLegajo_(cfg, token, ruc, 'ARCHIVOS', d.archivos);
       textos.push(nL + ' OC y ' + nA + ' archivos de factura');
     });
-    var vinculos = rpcLegajo_(cfg, token, 'vinculos_oc', { p_empresa_ruc: LEGAJO_RUC_POR_UNIDAD.INROPRIN });
+    var vinculos = todosLosVinculos_(cfg, token);
     var conLegajo = vinculos.filter(function (v) { return v.legajo; }).length;
     var texto = 'Subido a la base: ' + textos.join('; ') + '. ' + vinculos.length + ' facturas de SUNAT unidas con su OC, ' +
       conLegajo + ' con el legajo de la OC.';
@@ -176,8 +176,22 @@ function sesionRobotLegajo_(cfg) {
   return JSON.parse(resp.getContentText()).access_token;
 }
 
-function rpcLegajo_(cfg, token, funcion, args) {
-  var resp = UrlFetchApp.fetch(cfg.supabaseUrl + '/rest/v1/rpc/' + funcion, {
+/**
+ * La base entrega como mucho 1000 filas por consulta: se piden por páginas
+ * para que la cuenta del mensaje sea la real (y no se quede en 1000).
+ */
+function todosLosVinculos_(cfg, token) {
+  var todos = [], pagina = 1000;
+  for (var desde = 0; ; desde += pagina) {
+    var parte = rpcLegajo_(cfg, token, 'vinculos_oc', { p_empresa_ruc: LEGAJO_RUC_POR_UNIDAD.INROPRIN },
+      '?select=legajo&order=proveedor_ruc,serie,numero,oc&limit=' + pagina + '&offset=' + desde);
+    todos = todos.concat(parte);
+    if (parte.length < pagina) return todos;
+  }
+}
+
+function rpcLegajo_(cfg, token, funcion, args, consulta) {
+  var resp = UrlFetchApp.fetch(cfg.supabaseUrl + '/rest/v1/rpc/' + funcion + (consulta || ''), {
     method: 'post', contentType: 'application/json',
     headers: { apikey: cfg.anonKey, Authorization: 'Bearer ' + token },
     payload: JSON.stringify(args), muteHttpExceptions: true
