@@ -1,178 +1,210 @@
 <!DOCTYPE html>
 <html>
 <head>
+<meta charset="utf-8">
 <base target="_top">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  /* Misma identidad que VistaEjecutiva.gs —el otro tablero publicado—: la
-     paleta oficial de Roland Print/INROPRIN, no una inventada. Un solo
-     lugar (:root) para que las dos páginas se mantengan iguales si la marca
-     cambia. Sin variante oscura a propósito: es la vista "formal" que se
-     comparte por enlace, y una marca no cambia con el modo del sistema de
-     quien la mira. */
+  /* Paleta e identidad de INRO (app/globals.css): la misma familia visual que
+     la aplicación y el tablero del legajo por OC. */
   :root {
-    --bg:           #EDF1F4;
-    --surface:      #FFFFFF;
-    --surface2:     #F6F8FA;
-    --border:       #E4E9EE;
-    --border2:      #D2DAE2;
-    --accent:       #00A298;
-    --accent-texto: #007A72;
-    --accent-suave: #E6F5F4;
-    --accent-borde: #A8DED9;
-    --tinta:        #1D1D1B;
-    --text:         #101A24;
-    --text2:        #52627A;
-    --text3:        #8494A8;
-    --danger:       #C62828;
-    --warn:         #A15C07;
-    --success:      #0A6E4E;
-    --sombra:       0 2px 4px rgba(16,26,38,.05), 0 6px 16px rgba(16,26,38,.06);
+    --bg:#EDF1F4; --surface:#FFFFFF; --surface2:#F6F8FA; --surface3:#EEF2F6;
+    --border:#E4E9EE; --border2:#D2DAE2;
+    --accent:#00A298; --accent-texto:#007A72; --accent-suave:#E1F4F2;
+    --azul:#006DB1; --azul-suave:#E3EEF7; --amarillo:#FFDD00;
+    --tinta:#1D1D1B; --text:#101A24; --text2:#52627A; --text3:#8494A8;
+    --danger:#C62828; --danger-suave:#FBE9E9; --warn:#A15C07; --warn-suave:#FCF1E0;
+    --ok:#1E7F4F; --ok-suave:#E4F4EB;
+    --sombra: 0 2px 4px rgba(16,26,38,.05), 0 6px 16px rgba(16,26,38,.06);
   }
-
   * { box-sizing: border-box; }
-  body {
-    margin: 0; padding: 28px 24px 56px;
-    background: var(--bg); color: var(--text);
-    font: 14px/1.5 "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-    -webkit-font-smoothing: antialiased;
-  }
-  .pagina { max-width: 1200px; margin: 0 auto; }
-  .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
-  .rotulo {
-    font-size: 10.5px; font-weight: 600; letter-spacing: .09em;
-    text-transform: uppercase; color: var(--text3);
-  }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font-family: "DM Sans", system-ui, sans-serif; -webkit-font-smoothing: antialiased; font-size: 14px; }
+  h2 { font-family: "Sora", sans-serif; font-size: 15px; font-weight: 700; margin: 0; }
+  button, select, input { font-family: inherit; font-size: 13.5px; }
+  .pagina { max-width: 1240px; margin: 0 auto; padding: 28px 24px 56px; }
+  a { color: var(--azul); }
 
-  header.cabecera {
-    display: flex; justify-content: space-between; align-items: center;
-    gap: 16px; flex-wrap: wrap; margin-bottom: 24px; padding-bottom: 20px;
-    border-bottom: 1px solid var(--border2);
-  }
+  #cargando { max-width: 1240px; margin: 80px auto; padding: 0 24px; color: var(--text2); font-size: 14px; display: flex; align-items: center; gap: 12px; }
+  .giro { width: 18px; height: 18px; border: 2.5px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: giro .8s linear infinite; }
+  @keyframes giro { to { transform: rotate(360deg); } }
+  #error { max-width: 520px; margin: 60px auto; }
+
+  /* ── Cabecera ── */
+  .cabecera { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+              margin-bottom: 22px; padding-bottom: 20px; border-bottom: 1px solid var(--border2); }
   .marca { display: flex; align-items: center; gap: 16px; }
-  .marca-texto { line-height: 1.35; }
-  .marca-titulo { font-family: "Sora", sans-serif; font-weight: 700; font-size: 17px; color: var(--text); }
+  .marca-titulo { font-family: "Sora", sans-serif; font-weight: 700; font-size: 17px; }
   .marca-sub { font-size: 12.5px; color: var(--text2); margin-top: 2px; }
+  .boton { display: inline-flex; align-items: center; gap: 6px; background: var(--tinta); color: #fff; border: 0; cursor: pointer;
+           text-decoration: none; font-weight: 600; font-size: 13.5px; padding: 11px 18px; border-radius: 10px; box-shadow: var(--sombra); white-space: nowrap; }
+  .boton:hover { background: #000; }
+  .boton-accent { background: var(--accent); }
+  .boton-accent:hover { background: var(--accent-texto); }
 
-  .boton-hoja {
-    display: inline-flex; align-items: center; gap: 6px;
-    background: var(--tinta); color: #fff; text-decoration: none;
-    font-weight: 600; font-size: 13.5px; padding: 11px 18px; border-radius: 10px;
-    box-shadow: var(--sombra); white-space: nowrap;
+  /* ── Franja de estado ── */
+  .estado { display: grid; grid-template-columns: 1.2fr 1fr 1fr; background: var(--surface); border: 1px solid var(--border);
+            border-radius: 14px; box-shadow: var(--sombra); margin-bottom: 18px; overflow: hidden; }
+  .estado > div { padding: 16px 20px; min-width: 0; }
+  .estado > div + div { border-left: 1px solid var(--border); }
+  .rotulo { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text3); margin-bottom: 8px; }
+  .chip { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; font-size: 12.5px; padding: 5px 11px; border-radius: 999px; white-space: nowrap; }
+  .chip-ok { background: var(--ok-suave); color: var(--ok); }
+  .chip-warn { background: var(--warn-suave); color: var(--warn); }
+  .chip-azul { background: var(--azul-suave); color: var(--azul); }
+  .chip-gris { background: var(--surface3); color: var(--text2); }
+  .punto { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
+  .pasos { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--text2); }
+  .paso { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 4px 9px; }
+  .linea { font-size: 13px; color: var(--text2); line-height: 1.45; }
+  .linea b { color: var(--text); }
+  .grande { font-family: "Sora", sans-serif; font-size: 20px; font-weight: 700; margin: 2px 0 4px; }
+
+  /* ── Filtros ── */
+  .filtros { position: sticky; top: 0; z-index: 5; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+             background: rgba(237,241,244,.94); backdrop-filter: blur(6px); padding: 10px 24px 12px; margin: 0 -24px 8px; }
+  .filtros label { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--text3); margin-right: -4px; }
+  .filtros select { background: var(--surface); border: 1px solid var(--border2); border-radius: 9px; padding: 8px 10px; color: var(--text); }
+  .segmento { display: inline-flex; background: var(--surface); border: 1px solid var(--border2); border-radius: 9px; padding: 3px; }
+  .segmento button { background: none; border: 0; padding: 6px 12px; border-radius: 7px; cursor: pointer; color: var(--text2); font-weight: 600; font-size: 12.5px; }
+  .segmento button.activo { background: var(--tinta); color: #fff; }
+  .limpiar { background: none; border: 0; color: var(--azul); cursor: pointer; font-weight: 600; font-size: 12.5px; padding: 6px 4px; }
+  .filtro-activo { font-size: 12px; color: var(--text2); margin-left: auto; }
+
+  /* ── KPIs ── */
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 18px; }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px 14px; box-shadow: var(--sombra); min-width: 0; }
+  .kpi-valor { font-family: "Sora", sans-serif; font-size: 25px; font-weight: 800; letter-spacing: -.01em; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .kpi-valor small { font-size: 13px; font-weight: 700; color: var(--text2); }
+  .kpi-extra { font-size: 12px; color: var(--text2); margin-top: 6px; }
+  .kpi-riesgo { border-color: #F2C9C9; background: linear-gradient(180deg, #FFF 0%, #FFF7F7 100%); }
+  .kpi-riesgo .kpi-valor { color: var(--danger); }
+  .kpi-anillo { display: flex; align-items: center; gap: 14px; }
+  .chispa { display: block; margin-top: 10px; }
+  .variacion { font-weight: 700; }
+  .sube { color: var(--danger); } .baja { color: var(--ok); } .igual { color: var(--text3); }
+
+  /* ── Tarjetas ── */
+  .grilla { display: grid; grid-template-columns: 1.55fr 1fr; gap: 14px; margin-bottom: 14px; }
+  .tarjeta { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px; box-shadow: var(--sombra); min-width: 0; }
+  .tarjeta-ancha { margin-bottom: 14px; }
+  .tarjeta-cab { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+  .nota { font-size: 12px; color: var(--text3); }
+  .vacio { color: var(--text3); font-size: 13px; margin: 0; }
+  .seccion { font-family: "Sora", sans-serif; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent-texto); margin: 26px 0 12px; }
+
+  /* Meses */
+  .meses { display: flex; align-items: flex-end; gap: 10px; height: 210px; padding-top: 6px; overflow-x: auto; }
+  .mes { flex: 1 0 46px; display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; height: 100%; justify-content: flex-end; }
+  .mes-cifra { font-size: 11.5px; font-weight: 700; color: var(--text2); white-space: nowrap; }
+  .mes-barra { width: 70%; max-width: 46px; border-radius: 7px 7px 3px 3px; background: var(--accent); transition: opacity .12s; min-height: 3px; }
+  .mes-barra.neg { background: var(--danger); }
+  .mes:hover .mes-barra { opacity: .8; }
+  .mes.atenuado .mes-barra { opacity: .3; }
+  .mes-etq { font-size: 12px; color: var(--text2); white-space: nowrap; }
+  .mes.activo .mes-etq { color: var(--text); font-weight: 700; }
+
+  /* Dona */
+  .dona { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+  .dona-leyenda { flex: 1; min-width: 180px; display: flex; flex-direction: column; gap: 10px; }
+  .ley { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; }
+  .ley i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 8px; vertical-align: -1px; }
+  .ley b { font-variant-numeric: tabular-nums; }
+
+  /* Barras */
+  .fila-barra { margin-bottom: 11px; border-radius: 8px; padding: 4px 6px; margin-left: -6px; margin-right: -6px; }
+  .fila-barra:hover { background: var(--surface2); }
+  .fb-cab { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; gap: 10px; }
+  .fb-etq { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fb-cifras { font-size: 12.5px; color: var(--text2); white-space: nowrap; }
+  .fb-pista { height: 8px; background: var(--surface3); border-radius: 6px; overflow: hidden; }
+  .fb-pista > span { display: block; height: 100%; border-radius: 6px; background: var(--accent); }
+
+  /* Mapa de calor proveedor × mes */
+  .calor-caja { overflow-x: auto; }
+  .calor { width: 100%; border-collapse: separate; border-spacing: 3px; font-size: 12.5px; }
+  .calor th { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text3); padding: 0 4px 4px; white-space: nowrap; }
+  .calor th.activo { color: var(--text); }
+  .calor td.prov { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; padding-right: 10px; }
+  .calor td.celda { text-align: center; border-radius: 7px; padding: 8px 4px; font-variant-numeric: tabular-nums; min-width: 66px; white-space: nowrap; }
+  .calor td.total { text-align: right; font-weight: 700; padding-left: 10px; white-space: nowrap; }
+
+  /* Buscador */
+  .buscador-caja { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+  .buscador { flex: 1; min-width: 260px; padding: 12px 14px 12px 40px; border: 1px solid var(--border2); border-radius: 12px; background: var(--surface) no-repeat 14px center;
+              background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%238494A8' stroke-width='2'%3E%3Ccircle cx='7' cy='7' r='5'/%3E%3Cpath d='m11 11 4 4'/%3E%3C/svg%3E"); font-size: 14px; color: var(--text); }
+  .buscador:focus { outline: 2px solid var(--accent-suave); border-color: var(--accent); }
+  .resultados { display: flex; flex-direction: column; }
+  .producto { display: grid; grid-template-columns: minmax(0, 2.2fr) 1fr 1.1fr 130px 92px; gap: 14px; align-items: center; padding: 12px 6px; border-top: 1px solid var(--border); }
+  .producto:first-child { border-top: 0; }
+  .producto:hover { background: var(--surface2); }
+  .p-nombre { font-weight: 600; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .p-sub { font-size: 12px; color: var(--text3); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .p-dato { font-size: 13px; font-variant-numeric: tabular-nums; }
+  .p-dato small { display: block; font-size: 11.5px; color: var(--text3); }
+  .p-pdf { font-size: 12.5px; font-weight: 600; text-decoration: none; white-space: nowrap; }
+  .p-cab { display: grid; grid-template-columns: minmax(0, 2.2fr) 1fr 1.1fr 130px 92px; gap: 14px; padding: 0 6px 8px; font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--text3); border-bottom: 1px solid var(--border2); }
+  .mas { margin-top: 10px; }
+
+  /* Tablas */
+  .tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .tabla th { text-align: left; padding: 0 10px 10px 0; font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--text3); border-bottom: 1px solid var(--border2); }
+  .tabla th.num { text-align: right; }
+  .tabla td { padding: 11px 10px 11px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .tabla td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .sub { font-size: 11.5px; color: var(--text3); margin-top: 2px; }
+
+  /* Buscador de facturas */
+  .buscar-factura { border-color: #BFE6E2; }
+  .facturas { display: flex; flex-direction: column; margin-top: 4px; }
+  .factura { display: grid; grid-template-columns: 92px minmax(0, 1.1fr) minmax(0, 1.6fr) 130px minmax(0, 1fr) 130px; gap: 12px; align-items: center;
+             padding: 11px 8px; border-top: 1px solid var(--border); cursor: pointer; border-radius: 8px; }
+  .factura:first-child { border-top: 0; }
+  .factura:hover, .factura.abierta { background: var(--surface2); }
+  .f-comp { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .f-total { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .f-acc { display: flex; gap: 8px; justify-content: flex-end; }
+  .f-acc a { font-size: 12.5px; font-weight: 600; text-decoration: none; padding: 5px 9px; border-radius: 7px; background: var(--azul-suave); color: var(--azul); white-space: nowrap; }
+  .f-acc a:hover { background: #D3E4F2; }
+  .f-det { padding: 14px 16px 16px; margin: 0 0 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; }
+  .f-meta { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 12.5px; color: var(--text2); margin-bottom: 12px; }
+  .f-meta b { color: var(--text); }
+  .ayuda { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+  .ayuda button { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 5px 10px; cursor: pointer; color: var(--text2); font-size: 12.5px; }
+  .ayuda button:hover { border-color: var(--accent); color: var(--accent-texto); }
+  .pie { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; margin-top: 24px; font-size: 12px; color: var(--text3); }
+
+  @media (max-width: 980px) {
+    .kpis { grid-template-columns: repeat(2, 1fr); }
+    .grilla, .estado { grid-template-columns: 1fr; }
+    .estado > div + div { border-left: 0; border-top: 1px solid var(--border); }
+    .producto { grid-template-columns: minmax(0, 1fr) auto; row-gap: 6px; }
+    .producto > :first-child { grid-column: 1 / -1; }
+    .producto > :nth-child(2), .producto > :nth-child(4) { display: none; }
+    .p-cab { display: none; }
+    .factura { grid-template-columns: minmax(0, 1fr) auto; row-gap: 4px; }
+    .factura > :nth-child(1), .factura > :nth-child(5) { display: none; }
   }
-  .boton-hoja:hover { background: #000; }
+  @media (max-width: 560px) { .kpis { grid-template-columns: 1fr; } .filtro-activo { margin-left: 0; } }
 
-  /* Las pestañas: dos vistas del mismo tablero, un solo botón hundido a la
-     vez. No son enlaces —no hay nada que compartir por URL de una sola
-     pestaña—, así que son botones simples. */
-  nav.pestanas { display: flex; gap: 6px; margin-bottom: 20px; border-bottom: 1px solid var(--border2); }
-  nav.pestanas button {
-    font: inherit; font-family: "Sora", sans-serif; font-weight: 700; font-size: 13px; cursor: pointer;
-    padding: 10px 4px; margin-bottom: -1px; border: none; border-bottom: 2px solid transparent;
-    background: none; color: var(--text3);
-  }
-  nav.pestanas button + button { margin-left: 14px; }
-  nav.pestanas button.activa { color: var(--text); border-bottom-color: var(--accent); }
-
-  select {
-    font: inherit; padding: 7px 11px; border-radius: 8px;
-    border: 1px solid var(--border2); background: var(--surface); color: var(--text);
-  }
-
-  .tarjeta {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 14px; padding: 20px 22px; box-shadow: var(--sombra);
-  }
-
-  .cifras { display: grid; gap: 14px; margin-bottom: 18px;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
-  .cifra { padding: 18px 18px 16px; }
-  .cifra .v { font-family: "Sora", sans-serif; font-size: 24px; font-weight: 800;
-              letter-spacing: -.01em; margin: 0 0 3px; color: var(--text); }
-  .cifra .v.critico { color: var(--danger); }
-  .cifra .v.bueno { color: var(--success); }
-  .cifra .n { font-size: 12px; color: var(--text2); margin: 6px 0 0; }
-
-  .dos { display: grid; gap: 14px; grid-template-columns: 1.35fr 1fr; align-items: start; }
-  @media (max-width: 900px) { .dos { grid-template-columns: 1fr; } header.cabecera { flex-direction: column; align-items: flex-start; } }
-
-  h2 { font-family: "Sora", sans-serif; margin: 0 0 3px; font-size: 15px; font-weight: 700; }
-  .sub { margin: 0 0 15px; font-size: 12px; color: var(--text2); line-height: 1.5; }
-
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th { text-align: left; padding: 0 10px 10px 0; border-bottom: 1px solid var(--border2);
-       font-size: 11px; font-weight: 600; letter-spacing: .05em;
-       text-transform: uppercase; color: var(--text3); white-space: nowrap; }
-  td { padding: 11px 10px 11px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
-  th.n, td.n { text-align: center; white-space: nowrap; }
-  table.derecha th.n, table.derecha td.n { text-align: right; padding-right: 0; }
-  .prov { font-weight: 600; }
-  .sec { display: block; font-size: 11.5px; color: var(--text3); margin-top: 2px; }
-
-  .marca-pill {
-    display: inline-block; padding: 2px 8px; border-radius: 100px;
-    font-size: 11px; font-weight: 600;
-  }
-  .marca-pill.si { background: var(--accent-suave); color: var(--accent-texto); }
-  .marca-pill.no { color: var(--text3); }
-  .marca-pill.riesgo { background: color-mix(in srgb, var(--danger) 13%, transparent); color: var(--danger); }
-
-  .vacio { padding: 26px 0; text-align: center; color: var(--text3); font-size: 13px; }
-  .aviso { display: flex; gap: 9px; padding: 12px 14px; border-radius: 10px;
-           font-size: 12.5px; line-height: 1.5; margin-bottom: 15px;
-           background: color-mix(in srgb, var(--danger) 8%, transparent);
-           border: 1px solid color-mix(in srgb, var(--danger) 24%, transparent);
-           color: var(--text); }
-  .aviso b { color: var(--danger); }
-
-  /* Barras horizontales de comparación (pestaña Padrón): la etiqueta a la
-     izquierda, la barra y el número a la derecha. Sin leyenda —el rótulo de
-     cada fila la hace innecesaria—. */
-  .barras { display: flex; flex-direction: column; gap: 14px; margin-top: 4px; }
-  .fila-barra { display: grid; grid-template-columns: 140px 1fr 56px; align-items: center; gap: 10px; }
-  .fila-barra .etq { font-size: 13px; font-weight: 500; color: var(--text2); }
-  .fila-barra .pista { height: 8px; border-radius: 6px; background: var(--surface2); overflow: hidden; }
-  .fila-barra .lleno { height: 100%; border-radius: 6px; background: var(--accent); transition: width .3s; }
-  .fila-barra .val { font-size: 12.5px; text-align: right; font-variant-numeric: tabular-nums; color: var(--text2); }
-
-  /* El gráfico de barras verticales (pestaña Comprobantes): una sola serie,
-     así que no lleva leyenda — el título la nombra. */
-  .grafico { position: relative; }
-  .barra-mes { cursor: default; transition: opacity .12s; }
-  .barra-mes:hover { opacity: .78; }
-  .rejilla { stroke: var(--border); stroke-width: 1; }
-  .eje { font-size: 10px; fill: var(--text3); font-family: inherit; }
-  .valorbarra { font-size: 10.5px; fill: var(--text2); font-variant-numeric: tabular-nums; }
-  #globo {
-    position: absolute; pointer-events: none; opacity: 0; transition: opacity .1s;
-    background: var(--tinta); color: #fff; padding: 7px 10px;
-    border-radius: 7px; font-size: 11.5px; white-space: nowrap; z-index: 5;
-    transform: translate(-50%, -100%);
-  }
-
-  .buscar {
-    width: 100%; font: inherit; padding: 9px 12px; margin-bottom: 12px;
-    border-radius: 9px; border: 1px solid var(--border2); background: var(--surface2); color: var(--text);
-  }
-  .buscar:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-
-  #cargando { padding: 90px 0; text-align: center; color: var(--text3); }
-  #error { display: none; }
-  footer.pie { margin-top: 22px; font-size: 12px; color: var(--text3); }
+  .bc-si { background: var(--ok-suave); color: var(--ok); }
+  .bc-no { background: var(--warn-suave); color: var(--warn); }
+  .bc-nd { background: var(--surface3); color: var(--text2); }
+  .chip-mini { font-size: 11.5px; padding: 3px 8px; }
+  .sire-factura { grid-template-columns: 92px minmax(0, 1fr) minmax(0, 1.7fr) 120px 110px 150px; cursor: default; }
+  .bc-barra { display: flex; height: 14px; border-radius: 8px; overflow: hidden; background: var(--surface3); margin: 10px 0 12px; }
+  .bc-barra span { height: 100%; }
+  @media (max-width: 980px) { .sire-factura { grid-template-columns: minmax(0, 1fr) auto; } .sire-factura > :nth-child(1), .sire-factura > :nth-child(5) { display: none; } }
 </style>
 </head>
 <body>
-<div class="pagina">
 
-<div id="cargando">Consultando la base…</div>
+<div id="cargando"><span class="giro"></span> Leyendo el registro de compras del SIRE…</div>
+<div id="error" class="tarjeta" style="display:none"><h2>No se pudo armar la vista</h2><p class="linea" id="errorTexto"></p></div>
 
-<div id="error" class="tarjeta">
-  <h2>No se pudo armar el tablero</h2>
-  <p class="sub" id="errorTexto"></p>
-</div>
+<div id="pagina" class="pagina" style="display:none">
 
-<div id="todo" style="display:none">
   <header class="cabecera">
     <div class="marca">
       <svg width="130" height="29" viewBox="0 0 183 41" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Roland Print">
@@ -198,443 +230,272 @@
         <path d="M183.001 22.6211H180.886V33.7495H177.325V16.1055H180.886V20.1562H183.001V22.6155" fill="#1D1D1B"/>
         <path d="M77.3037 22.8049C76.686 21.553 75.7234 20.6738 74.4159 20.1619C73.2808 19.7558 72.0066 19.6445 70.5988 19.8337C69.1855 20.0228 68.0393 20.6182 67.1435 21.6364C66.5926 22.2429 66.1865 23.0052 65.9305 23.9178C65.6746 24.8303 65.541 25.7484 65.541 26.6609C65.541 27.7793 65.6968 28.8532 66.0084 29.8825C66.3144 30.9175 66.8319 31.7354 67.5552 32.3475C68.2396 32.954 69.1633 33.388 70.3151 33.6439C71.4669 33.8999 72.6131 33.8721 73.7482 33.566C75.0224 33.2989 76.0684 32.6034 76.8975 31.485C77.2758 30.9453 77.5819 30.2832 77.8267 29.5042C78.066 28.7252 78.1884 27.796 78.1884 26.711C78.1884 25.2253 77.8935 23.9178 77.3092 22.7994L77.3037 22.8049ZM71.8619 30.9954C69.9144 30.9954 68.9741 29.1091 68.9741 26.7833C68.9741 24.4575 69.9089 22.5712 71.8619 22.5712C73.8149 22.5712 74.7497 24.4575 74.7497 26.7833C74.7497 29.1091 73.8038 30.9954 71.8619 30.9954Z" fill="#1D1D1B"/>
       </svg>
-      <div class="marca-texto">
-        <div class="marca-titulo">SUNAT · Comprobantes</div>
-        <div class="marca-sub">Padrón de RUC y registro de compras · INROPRIN S.A.C.</div>
+      <div>
+        <div class="marca-titulo">SUNAT · Registro de compras (SIRE)</div>
+        <div class="marca-sub">Lo que SUNAT tiene registrado de cada compra · INROPRIN S.A.C.</div>
       </div>
     </div>
-    <a id="enlaceHoja" class="boton-hoja" target="_blank" rel="noopener">Abrir la hoja de cálculo ↗</a>
+    <a class="boton" id="enlaceHoja" href="#" target="_blank" rel="noopener">Abrir la hoja ↗</a>
   </header>
 
-  <nav class="pestanas">
-    <button type="button" id="tabPadronBtn" class="activa">Padrón de RUC</button>
-    <button type="button" id="tabComprobantesBtn">Comprobantes SUNAT</button>
-  </nav>
-
-  <!-- ══════════════ Pestaña 1: Padrón de RUC ══════════════ -->
-  <div id="vistaPadron">
-    <div class="cifras" id="cifras"></div>
-
-    <div class="dos">
-      <div class="tarjeta">
-        <h2>Por padrón</h2>
-        <p class="sub">Sobre los proveedores ya consultados.</p>
-        <div class="barras" id="barras"></div>
-      </div>
-
-      <div class="tarjeta">
-        <h2>Todos los proveedores consultados</h2>
-        <p class="sub">Filtra por RUC o nombre.</p>
-        <input class="buscar" id="buscar" type="search" placeholder="Buscar por RUC o proveedor…">
-        <div style="max-height:420px; overflow:auto">
-          <table>
-            <thead>
-              <tr>
-                <th>Proveedor</th><th>Condición</th>
-                <th class="n">Buen Contrib.</th><th class="n">Ag. Retención</th><th class="n">Ag. Percepción</th>
-                <th>Consultado</th>
-              </tr>
-            </thead>
-            <tbody id="filas"></tbody>
-          </table>
-        </div>
-      </div>
+  <section class="estado">
+    <div>
+      <div class="rotulo">Cómo se alimenta</div>
+      <span class="chip chip-ok"><span class="punto"></span>Se actualiza solo, cada mañana</span>
+      <div class="pasos"><span class="paso">API del SIRE · 8:00</span><span>→</span><span class="paso">COMPROBANTES SUNAT</span><span>→</span><span class="paso">Esta vista</span></div>
     </div>
+    <div>
+      <div class="rotulo">Lo que hay en la hoja</div>
+      <div class="grande" id="estadoDocs">—</div>
+      <div class="linea" id="estadoRango"></div>
+    </div>
+    <div>
+      <div class="rotulo">Esta vista se armó</div>
+      <div class="grande" id="estadoHora">—</div>
+      <div class="linea">Montos en soles, con el tipo de cambio de SUNAT.</div>
+    </div>
+  </section>
 
-    <p class="sub" id="piePadron" style="margin-top:14px"></p>
+  <section class="tarjeta tarjeta-ancha buscar-factura">
+    <div class="tarjeta-cab"><h2>Buscar una factura</h2><span class="nota">En todo el registro · funciona aunque SUNAT esté caída</span></div>
+    <input class="buscador" id="buscarFactura" type="search" placeholder="F001-123, número, RUC, proveedor o monto (ej.: 43.64)">
+    <div class="facturas" id="facturas"></div>
+  </section>
+
+  <div class="filtros">
+    <label>Mes</label>
+    <select id="fMes"></select>
+    <span class="filtro-activo" id="fResumen"></span>
   </div>
 
-  <!-- ══════════════ Pestaña 2: Comprobantes SUNAT (IGV / notas) ══════════════ -->
-  <div id="vistaComprobantes" style="display:none">
-    <div id="cargandoComp" class="vacio">Leyendo la hoja…</div>
-    <div id="errorComp" class="tarjeta" style="display:none">
-      <h2>No se pudo leer la hoja</h2>
-      <p class="sub" id="errorTextoComp"></p>
+  <section class="kpis" id="kpis"></section>
+
+  <section class="grilla">
+    <div class="tarjeta">
+      <div class="tarjeta-cab"><h2>IGV de compras por mes</h2><span class="nota">Crédito fiscal, con las notas de crédito restadas · clic para filtrar</span></div>
+      <div class="meses" id="meses"></div>
     </div>
-
-    <div id="contenidoComp" style="display:none">
-      <div style="display:flex; justify-content:flex-end; margin-bottom:14px">
-        <label>
-          <span class="rotulo" style="display:block;margin-bottom:5px">Período</span>
-          <select id="periodoComp"></select>
-        </label>
-      </div>
-
-      <div class="cifras" id="cifrasComp"></div>
-
-      <div id="avisoNotasComp"></div>
-
-      <div class="dos">
-        <div class="tarjeta">
-          <h2>IGV neto por mes</h2>
-          <p class="sub">Lo que suman las compras menos lo que restan las notas de crédito.</p>
-          <div class="grafico">
-            <div id="globo"></div>
-            <svg id="chartComp" width="100%" height="230" role="img"
-                 aria-label="IGV neto por mes"></svg>
-          </div>
-        </div>
-
-        <div class="tarjeta">
-          <h2>Quién factura más</h2>
-          <p class="sub">Proveedores del período, sin contar notas de crédito.</p>
-          <table class="derecha">
-            <thead><tr><th>Proveedor</th><th class="n">Comprob.</th><th class="n">Total</th></tr></thead>
-            <tbody id="proveedoresComp"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="tarjeta" style="margin-top:14px">
-        <h2>Notas de crédito del período</h2>
-        <p class="sub">Cada una resta del crédito fiscal. «Corrige a» dice sobre qué factura cae.</p>
-        <table class="derecha">
-          <thead>
-            <tr>
-              <th>Proveedor</th><th>Nota</th><th>Corrige a</th>
-              <th>Lo rindió</th><th class="n">Monto</th><th class="n">IGV que resta</th>
-            </tr>
-          </thead>
-          <tbody id="notasComp"></tbody>
-        </table>
-        <p class="sub" id="masNotasComp" style="margin:11px 0 0"></p>
-      </div>
-
-      <div class="tarjeta" style="margin-top:14px">
-        <h2>Comprobantes que cambiaron</h2>
-        <p class="sub">Llegaron distintos de como estaban la última vez que se consultó su período.</p>
-        <table class="derecha">
-          <thead><tr><th>Proveedor</th><th>Comprobante</th><th class="n">Total</th><th class="n">Visto</th></tr></thead>
-          <tbody id="cambiadosComp"></tbody>
-        </table>
-      </div>
+    <div class="tarjeta">
+      <div class="tarjeta-cab"><h2>¿Son buenos contribuyentes?</h2><span class="nota" id="notaBc"></span></div>
+      <div id="bc"></div>
     </div>
-  </div>
+  </section>
 
-  <footer class="pie" id="pie"></footer>
+  <section class="grilla">
+    <div class="tarjeta">
+      <div class="tarjeta-cab"><h2>Notas de crédito</h2><span class="nota" id="notaNotas"></span></div>
+      <div id="notas"></div>
+    </div>
+    <div class="tarjeta">
+      <div class="tarjeta-cab"><h2>Comprobantes que SUNAT cambió</h2><span class="nota">llegaron distintos entre dos consultas</span></div>
+      <div id="cambiados"></div>
+    </div>
+  </section>
+
+  <footer class="pie">
+    <span id="pie"></span>
+    <a class="boton boton-accent" id="enlaceHoja2" href="#" target="_blank" rel="noopener">Ver el registro completo ↗</a>
+  </footer>
 </div>
 
-</div>
 <script>
-// ── Ayudantes compartidos por las dos pestañas ─────────────────────
-var soles = function (n) {
-  return 'S/ ' + Number(n || 0).toLocaleString('es-PE',
-    { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-};
-var miles = function (n) { return Number(n || 0).toLocaleString('es-PE'); };
-var esc = function (s) {
-  return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
-    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
-  });
-};
-function tarjeta(valor, rotulo, nota, tono) {
-  return '<div class="tarjeta cifra"><p class="v' + (tono ? ' ' + tono : '') + '">' + valor + '</p>' +
-    '<p class="rotulo">' + rotulo + '</p>' +
-    (nota ? '<p class="n">' + esc(nota) + '</p>' : '') + '</div>';
-}
+  var D = null, F = { mes: '' };
+  var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'set', 'oct', 'nov', 'dic'];
+  var TIPO = { F: 'Factura', B: 'Boleta', C: 'Nota de crédito', D: 'Nota de débito', O: 'Comprobante' };
+  var BC = { '1': ['Buen contribuyente', 'bc-si'], '0': ['No es buen contribuyente', 'bc-no'], '-1': ['Sin consultar', 'bc-nd'] };
 
-// ── Pestañas ─────────────────────────────────────────────────────
-var comprobantesCargados = false;
-
-document.addEventListener('DOMContentLoaded', function () {
-  document.getElementById('tabPadronBtn').addEventListener('click', function () { mostrarPestana('padron'); });
-  document.getElementById('tabComprobantesBtn').addEventListener('click', function () { mostrarPestana('comprobantes'); });
-});
-
-function mostrarPestana(cual) {
-  var esPadron = cual === 'padron';
-  document.getElementById('vistaPadron').style.display = esPadron ? '' : 'none';
-  document.getElementById('vistaComprobantes').style.display = esPadron ? 'none' : '';
-  document.getElementById('tabPadronBtn').classList.toggle('activa', esPadron);
-  document.getElementById('tabComprobantesBtn').classList.toggle('activa', !esPadron);
-
-  if (!esPadron && !comprobantesCargados) {
-    comprobantesCargados = true;
-    pedirComprobantes(null);
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  var plano = function (t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase(); };
+  var etqMes = function (p) { return /^\d{6}$/.test(p) ? MESES[Number(p.slice(4)) - 1] + ' ' + p.slice(2, 4) : (p || '—'); };
+  function dinero(n, mon, corto) {
+    var s = !mon || mon === 'PEN' ? 'S/' : mon === 'USD' ? 'US$' : mon, neg = n < 0, a = Math.abs(n);
+    if (corto && a >= 1e6) return (neg ? '-' : '') + s + ' ' + (a / 1e6).toFixed(a >= 1e7 ? 0 : 1) + ' M';
+    if (corto && a >= 1e4) return (neg ? '-' : '') + s + ' ' + Math.round(a / 1e3) + ' mil';
+    var p = a.toFixed(2).split('.');
+    return (neg ? '-' : '') + s + ' ' + p[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '.' + p[1];
   }
-}
+  var miles = function (n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ','); };
+  var pct = function (a, b) { return b ? Math.round(100 * a / b) : 0; };
+  var suma = function (l, i) { return l.reduce(function (a, x) { return a + x[i]; }, 0); };
+  var chipBc = function (v) { var b = BC[String(v)]; return '<span class="chip chip-mini ' + b[1] + '">' + b[0] + '</span>'; };
 
-// ══════════════════════════════════════════════════════════════════
-// Pestaña 1: Padrón de RUC
-// ══════════════════════════════════════════════════════════════════
+  google.script.run.withSuccessHandler(arrancar).withFailureHandler(function (e) { fallar(e && e.message ? e.message : String(e)); }).datosDeLaVistaSire();
 
-var TODAS_PADRON = [];
-
-function fechaCorta(iso) {
-  if (!iso) return '—';
-  var d = new Date(iso);
-  if (isNaN(d.getTime())) return '—';
-  return ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2) + '/' + d.getFullYear();
-}
-function marca(activo) {
-  if (activo == null) return '<span class="marca-pill no">—</span>';
-  return activo ? '<span class="marca-pill si">Sí</span>' : '<span class="marca-pill no">No</span>';
-}
-
-function pedirPadron() {
-  google.script.run
-    .withSuccessHandler(pintarPadron)
-    .withFailureHandler(function (e) {
-      document.getElementById('cargando').style.display = 'none';
-      document.getElementById('error').style.display = '';
-      document.getElementById('errorTexto').textContent = e && e.message ? e.message : String(e);
-    })
-    .datosDelPadron();
-}
-
-function pintarPadron(d) {
-  document.getElementById('cargando').style.display = 'none';
-
-  if (d.error) {
+  function fallar(t) {
+    document.getElementById('cargando').style.display = 'none';
     document.getElementById('error').style.display = '';
-    document.getElementById('errorTexto').textContent = d.error;
-    return;
+    document.getElementById('errorTexto').textContent = t;
   }
 
-  document.getElementById('todo').style.display = '';
-  document.getElementById('enlaceHoja').href = d.urlHoja;
-  TODAS_PADRON = d.filas;
-
-  var coberturaTxt = d.cobertura.porcentaje == null
-    ? (d.total + ' consultados')
-    : (d.cobertura.porcentaje + '%');
-  var coberturaNota = d.cobertura.pendientes == null
-    ? null
-    : (d.cobertura.pendientes + ' proveedor' + (d.cobertura.pendientes === 1 ? '' : 'es') + ' sin consultar todavía');
-
-  document.getElementById('cifras').innerHTML = [
-    tarjeta(d.total, 'RUC consultados', null),
-    tarjeta(coberturaTxt, 'cobertura del registro', coberturaNota),
-    tarjeta(d.categorias[0].pct + '%', 'Buen Contribuyente', d.categorias[0].cuenta + ' de ' + d.total, 'bueno'),
-    tarjeta(d.categorias[1].pct + '%', 'Agente de Retención', d.categorias[1].cuenta + ' de ' + d.total),
-    tarjeta(d.noHabido, 'RUC "No Habido"', 'riesgo de crédito fiscal', d.noHabido > 0 ? 'critico' : null)
-  ].join('');
-
-  document.getElementById('barras').innerHTML = d.categorias.map(function (c) {
-    return '<div class="fila-barra">' +
-      '<span class="etq">' + esc(c.nombre) + '</span>' +
-      '<span class="pista"><span class="lleno" style="width:' + c.pct + '%"></span></span>' +
-      '<span class="val mono">' + c.pct + '%</span>' +
-      '</div>';
-  }).join('');
-
-  document.getElementById('piePadron').textContent =
-    'Actualizado al abrir esta página, ' + new Date(d.actualizadoEl).toLocaleString('es-PE') + '.';
-  document.getElementById('pie').textContent =
-    'Generado el ' + new Date(d.actualizadoEl).toLocaleString('es-PE') + ' · SUNAT · INROPRIN S.A.C.';
-
-  pintarFilasPadron(TODAS_PADRON);
-  document.getElementById('buscar').oninput = function () {
-    var q = this.value.trim().toLowerCase();
-    if (!q) { pintarFilasPadron(TODAS_PADRON); return; }
-    pintarFilasPadron(TODAS_PADRON.filter(function (f) {
-      return (f.ruc || '').toLowerCase().indexOf(q) >= 0 ||
-        (f.razonSocial || '').toLowerCase().indexOf(q) >= 0;
-    }));
-  };
-}
-
-function pintarFilasPadron(filas) {
-  var cuerpo = document.getElementById('filas');
-  if (!filas.length) {
-    cuerpo.innerHTML = '<tr><td colspan="6" class="vacio">Sin resultados.</td></tr>';
-    return;
+  function arrancar(d) {
+    if (d.error) return fallar(d.error);
+    D = d;
+    D.meses = Array.from(new Set(d.docs.map(function (x) { return x[0]; }))).filter(function (p) { return /^\d{6}$/.test(p); }).sort();
+    F.mes = D.meses[D.meses.length - 1] || '';
+    document.getElementById('cargando').style.display = 'none';
+    document.getElementById('pagina').style.display = '';
+    ['enlaceHoja', 'enlaceHoja2'].forEach(function (id) { document.getElementById(id).href = d.urlHoja; });
+    document.getElementById('estadoDocs').textContent = miles(d.docs.length) + ' comprobantes';
+    document.getElementById('estadoRango').innerHTML = 'De <b>' + etqMes(D.meses[0]) + '</b> a <b>' + etqMes(D.meses[D.meses.length - 1]) + '</b> · ' + miles(d.prov.length) + ' proveedores';
+    document.getElementById('estadoHora').textContent = d.generadoEl.replace(/ de \d{4},/, ',');
+    document.getElementById('pie').textContent = 'Generado el ' + d.generadoEl + ' · a partir de «COMPROBANTES SUNAT»' +
+      (d.sinTipoDeCambio ? ' · ' + d.sinTipoDeCambio + ' comprobantes en otra moneda sin tipo de cambio no suman' : '');
+    var sel = document.getElementById('fMes');
+    sel.innerHTML = '<option value="">Todo el año</option>' + D.meses.slice().reverse().map(function (m) { return '<option value="' + m + '">' + etqMes(m) + '</option>'; }).join('');
+    sel.value = F.mes;
+    sel.onchange = function () { F.mes = this.value; pintar(); };
+    var tf, inF = document.getElementById('buscarFactura');
+    inF.oninput = function () { var v = this.value; clearTimeout(tf); tf = setTimeout(function () { buscar(v); }, 120); };
+    document.getElementById('facturas').onclick = function (e) {
+      var ej = e.target.closest('button[data-q]'); if (ej) { inF.value = ej.getAttribute('data-q'); buscar(inF.value); }
+    };
+    buscar('');
+    pintar();
   }
-  cuerpo.innerHTML = filas.map(function (f) {
-    var esNoHabido = f.condicion && f.condicion.toUpperCase().indexOf('NO HABIDO') >= 0;
-    return '<tr>' +
-      '<td class="prov">' + esc(f.razonSocial || '(sin nombre)') + '<span class="sec mono">' + esc(f.ruc) + '</span></td>' +
-      '<td>' + (esNoHabido ? '<span class="marca-pill riesgo">' + esc(f.condicion) + '</span>' : esc(f.condicion || '—')) + '</td>' +
-      '<td class="n">' + marca(f.buenContribuyente) + '</td>' +
-      '<td class="n">' + marca(f.agenteRetencion) + '</td>' +
-      '<td class="n">' + marca(f.agentePercepcion) + '</td>' +
-      '<td>' + fechaCorta(f.consultadoEl) + '</td>' +
-      '</tr>';
-  }).join('');
-}
 
-// ══════════════════════════════════════════════════════════════════
-// Pestaña 2: Comprobantes SUNAT (IGV / notas / quién rindió)
-// ══════════════════════════════════════════════════════════════════
+  function delMes() { return F.mes ? D.docs.filter(function (x) { return x[0] === F.mes; }) : D.docs; }
 
-var mesNombre = function (p) {
-  var n = ['ene','feb','mar','abr','may','jun','jul','ago','set','oct','nov','dic'];
-  return p.length === 6 ? n[Number(p.slice(4)) - 1] + ' ' + p.slice(2, 4) : p;
-};
+  function pintar() {
+    var docs = delMes();
+    document.getElementById('fResumen').textContent = (F.mes ? etqMes(F.mes) : 'Todo el año') + ' · ' + miles(docs.length) + ' comprobantes · montos en soles';
+    pintarKpis(docs);
+    pintarMeses();
+    pintarBc(docs);
+    pintarNotas(docs);
+    pintarCambiados(docs);
+  }
 
-var ultimoComp = null;
+  // ── Indicadores ──
+  function anillo(p, color) {
+    var r = 24, c = 2 * Math.PI * r;
+    return '<svg width="62" height="62" viewBox="0 0 62 62"><circle cx="31" cy="31" r="' + r + '" fill="none" stroke="#EEF2F6" stroke-width="8"/>' +
+      '<circle cx="31" cy="31" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="8" stroke-linecap="round" stroke-dasharray="' + (c * p / 100) + ' ' + c + '" transform="rotate(-90 31 31)"/>' +
+      '<text x="31" y="35.5" text-anchor="middle" font-family="Sora, sans-serif" font-size="13" font-weight="800" fill="#101A24">' + p + '%</text></svg>';
+  }
+  function kpi(rotulo, valor, extra, clase) {
+    return '<div class="kpi ' + (clase || '') + '"><div class="rotulo">' + rotulo + '</div><div class="kpi-valor">' + valor + '</div>' + (extra || '') + '</div>';
+  }
+  function variacion(i) {
+    if (!F.mes) return '';
+    var k = D.meses.indexOf(F.mes); if (k < 1) return '';
+    var a = suma(D.docs.filter(function (x) { return x[0] === D.meses[k - 1]; }), i), b = suma(D.docs.filter(function (x) { return x[0] === F.mes; }), i);
+    if (!a) return '';
+    var v = Math.round(100 * (b - a) / Math.abs(a));
+    return ' · <span class="variacion ' + (v > 0 ? 'sube' : v < 0 ? 'baja' : 'igual') + '">' + (v > 0 ? '+' : '') + v + '%</span> vs ' + etqMes(D.meses[k - 1]);
+  }
+  function pintarKpis(docs) {
+    var notas = docs.filter(function (x) { return x[2] === 'C'; });
+    var compras = docs.filter(function (x) { return x[2] !== 'C'; });
+    var porBc = { '1': 0, '0': 0, '-1': 0 };
+    docs.forEach(function (x) { porBc[String(D.prov[x[1]][2])] += x[3]; });
+    var totalBc = porBc['1'] + porBc['0'] + porBc['-1'];
+    document.getElementById('kpis').innerHTML =
+      kpi('Compras', dinero(suma(docs, 3)), '<div class="kpi-extra">' + miles(compras.length) + ' comprobantes' + variacion(3) + '</div>') +
+      kpi('IGV · crédito fiscal', dinero(suma(docs, 4)), '<div class="kpi-extra">con las notas restadas' + variacion(4) + '</div>') +
+      kpi('Notas de crédito', dinero(suma(notas, 3)), '<div class="kpi-extra">' + notas.length + ' notas · IGV ' + dinero(suma(notas, 4)) + '</div>', notas.length ? 'kpi-riesgo' : '') +
+      kpi('A buenos contribuyentes', '<div class="kpi-anillo">' + anillo(pct(porBc['1'], totalBc), '#1E7F4F') + '<div class="kpi-extra" style="margin:0">del monto comprado<br>' + dinero(porBc['0'], null, true) + ' a quienes no lo son</div></div>');
+  }
 
-function pedirComprobantes(periodo) {
-  document.getElementById('cargandoComp').style.display = '';
-  document.getElementById('contenidoComp').style.display = 'none';
-  document.getElementById('errorComp').style.display = 'none';
-  google.script.run
-    .withSuccessHandler(pintarComprobantes)
-    .withFailureHandler(function (e) {
-      document.getElementById('cargandoComp').style.display = 'none';
-      document.getElementById('errorComp').style.display = '';
-      document.getElementById('errorTextoComp').textContent = e && e.message ? e.message : String(e);
-    })
-    .datosDelTablero(periodo || null);
-}
+  // ── IGV por mes ──
+  function pintarMeses() {
+    var vals = D.meses.map(function (m) { var l = D.docs.filter(function (x) { return x[0] === m; }); return { m: m, v: suma(l, 4), t: suma(l, 3), n: l.length }; });
+    var max = Math.max.apply(null, vals.map(function (x) { return Math.abs(x.v); }).concat([1]));
+    var caja = document.getElementById('meses');
+    caja.innerHTML = vals.map(function (x) {
+      return '<div class="mes' + (F.mes === x.m ? ' activo' : F.mes ? ' atenuado' : '') + '" data-m="' + x.m + '" title="' + esc(etqMes(x.m) + ': IGV ' + dinero(x.v) + ' · compras ' + dinero(x.t) + ' · ' + x.n + ' comprobantes') + '">' +
+        '<span class="mes-cifra">' + esc(dinero(x.v, null, true)) + '</span><div class="mes-barra' + (x.v < 0 ? ' neg' : '') + '" style="height:' + Math.max(2, Math.abs(x.v) / max * 150) + 'px"></div>' +
+        '<span class="mes-etq">' + etqMes(x.m) + '</span></div>';
+    }).join('');
+    caja.onclick = function (e) {
+      var m = e.target.closest('.mes'); if (!m) return;
+      F.mes = F.mes === m.getAttribute('data-m') ? '' : m.getAttribute('data-m');
+      document.getElementById('fMes').value = F.mes; pintar();
+    };
+  }
 
-function pintarComprobantes(d) {
-  ultimoComp = d;
-  document.getElementById('cargandoComp').style.display = 'none';
-  document.getElementById('contenidoComp').style.display = '';
-
-  var sel = document.getElementById('periodoComp');
-  sel.innerHTML = d.periodos.map(function (p) {
-    return '<option value="' + p + '"' + (p === d.elegido ? ' selected' : '') + '>' + mesNombre(p) + '</option>';
-  }).join('');
-  sel.onchange = function () { pedirComprobantes(this.value); };
-
-  var r = d.resumen;
-  var neto = r.igvCompras - r.igvNotas;
-  document.getElementById('cifrasComp').innerHTML = [
-    tarjeta(soles(neto), 'IGV neto del mes',
-            r.igvNotas > 0 ? soles(r.igvCompras) + ' menos ' + soles(r.igvNotas) : null),
-    tarjeta(miles(r.comprobantes), 'comprobantes', miles(r.proveedores) + ' proveedores'),
-    tarjeta(soles(r.base), 'base imponible', null),
-    tarjeta(soles(r.total), 'total facturado', null),
-    tarjeta(miles(d.notas.length), 'notas de crédito',
-            d.notas.length ? soles(r.igvNotas) + ' de IGV' : 'ninguna', d.notas.length > 0 ? 'critico' : null)
-  ].join('');
-
-  document.getElementById('avisoNotasComp').innerHTML = d.notas.length
-    ? '<div class="aviso"><span>⚠</span><div><b>' + d.notas.length
-      + (d.notas.length === 1 ? ' nota de crédito resta ' : ' notas de crédito restan ')
-      + soles(r.igvNotas) + '</b> del crédito fiscal de este período.'
-      + (r.rendidos ? '' : ' Ninguno de estos comprobantes se rindió por la aplicación todavía.')
-      + '</div></div>'
-    : '';
-
-  document.getElementById('proveedoresComp').innerHTML = d.topProveedores.length
-    ? d.topProveedores.map(function (p) {
-        return '<tr><td class="prov">' + esc(p.proveedor)
-          + '<span class="sec mono">' + esc(p.ruc) + '</span></td>'
-          + '<td class="n mono">' + miles(p.n) + '</td>'
-          + '<td class="n mono">' + soles(p.total) + '</td></tr>';
-      }).join('')
-    : '<tr><td colspan="3" class="vacio">Sin comprobantes en este período.</td></tr>';
-
-  var notas = d.notas.slice(0, 25);
-  document.getElementById('notasComp').innerHTML = notas.length
-    ? notas.map(function (n) {
-        return '<tr><td class="prov">' + esc(n.proveedor)
-          + '<span class="sec mono">' + esc(n.ruc) + '</span></td>'
-          + '<td class="mono">' + esc(n.comprobante) + '<span class="sec">' + esc(n.fecha) + '</span></td>'
-          + '<td class="mono">' + esc(n.corrigeA || '—') + '</td>'
-          + '<td>' + esc(n.rindio || '—') + '</td>'
-          + '<td class="n mono">' + soles(n.monto) + '</td>'
-          + '<td class="n mono" style="color:var(--danger)">' + soles(n.igv) + '</td></tr>';
-      }).join('')
-    : '<tr><td colspan="6" class="vacio">Ninguna nota de crédito en este período.</td></tr>';
-  document.getElementById('masNotasComp').textContent =
-    d.notas.length > notas.length ? 'Se muestran ' + notas.length + ' de ' + d.notas.length + '.' : '';
-
-  document.getElementById('cambiadosComp').innerHTML = d.cambiados.length
-    ? d.cambiados.map(function (c) {
-        return '<tr><td class="prov">' + esc(c.proveedor) + '</td>'
-          + '<td class="mono">' + esc(c.comprobante) + '</td>'
-          + '<td class="n mono">' + soles(c.total) + '</td>'
-          + '<td class="n mono">' + esc(c.ultimaVez) + '</td></tr>';
-      }).join('')
-    : '<tr><td colspan="4" class="vacio">Ninguno cambió desde la última consulta. Eso es lo normal.</td></tr>';
-
-  dibujarGrafico(d.porMes, d.elegido);
-}
-
-/**
- * Barras del IGV neto por mes.
- *
- * Una sola serie, así que no lleva leyenda: el título la nombra. Se etiquetan
- * solo el mes elegido y el más alto — un número sobre cada barra convierte el
- * gráfico en una tabla mal hecha.
- */
-function dibujarGrafico(porMes, elegido) {
-  var svg = document.getElementById('chartComp');
-  var globo = document.getElementById('globo');
-  svg.innerHTML = '';
-  if (!porMes.length) return;
-
-  var W = svg.clientWidth || 640, H = 230;
-  var m = { top: 22, right: 8, bottom: 26, left: 58 };
-  var ancho = W - m.left - m.right, alto = H - m.top - m.bottom;
-
-  var max = Math.max.apply(null, porMes.map(function (p) { return p.igv; }).concat([0]));
-  var min = Math.min.apply(null, porMes.map(function (p) { return p.igv; }).concat([0]));
-  var rango = (max - min) || 1;
-  var y = function (v) { return m.top + alto - ((v - min) / rango) * alto; };
-  var cero = y(0);
-
-  var ns = 'http://www.w3.org/2000/svg';
-  var crear = function (t, a) {
-    var e = document.createElementNS(ns, t);
-    for (var k in a) e.setAttribute(k, a[k]);
-    return e;
-  };
-
-  [min, (min + max) / 2, max].forEach(function (v) {
-    svg.appendChild(crear('line', { x1: m.left, x2: W - m.right, y1: y(v), y2: y(v), class: 'rejilla' }));
-    var t = crear('text', { x: m.left - 9, y: y(v) + 3.5, class: 'eje', 'text-anchor': 'end' });
-    t.textContent = 'S/ ' + Math.round(v / 1000) + 'k';
-    svg.appendChild(t);
-  });
-
-  var paso = ancho / porMes.length;
-  var ancla = Math.max(Math.min(paso - 12, 34), 10);
-
-  porMes.forEach(function (p, i) {
-    var cx = m.left + paso * i + paso / 2;
-    var arriba = Math.min(y(p.igv), cero), abajo = Math.max(y(p.igv), cero);
-    var h = Math.max(abajo - arriba, 2);
-    var esElegido = p.periodo === elegido;
-
-    var b = crear('rect', {
-      x: cx - ancla / 2, y: arriba, width: ancla, height: h, rx: 4,
-      fill: p.igv < 0 ? 'var(--danger)' : 'var(--accent)',
-      opacity: esElegido ? 1 : 0.5, class: 'barra-mes'
+  // ── Buenos contribuyentes ──
+  function pintarBc(docs) {
+    var monto = { '1': 0, '0': 0, '-1': 0 }, provs = { '1': {}, '0': {}, '-1': {} }, noBc = {};
+    docs.forEach(function (x) {
+      var b = String(D.prov[x[1]][2]); monto[b] += x[3]; provs[b][x[1]] = 1;
+      if (b === '0' && x[2] !== 'C') noBc[x[1]] = (noBc[x[1]] || 0) + x[3];
     });
-    b.addEventListener('mousemove', function () {
-      globo.style.opacity = 1;
-      globo.style.left = cx + 'px';
-      globo.style.top = (arriba - 8) + 'px';
-      globo.innerHTML = '<b>' + mesNombre(p.periodo) + '</b> · ' + soles(p.igv)
-        + ' · ' + miles(p.comprobantes) + ' comprob.';
-    });
-    b.addEventListener('mouseleave', function () { globo.style.opacity = 0; });
-    svg.appendChild(b);
+    var total = monto['1'] + monto['0'] + monto['-1'] || 1;
+    var n = function (b) { return Object.keys(provs[b]).length; };
+    document.getElementById('notaBc').textContent = F.mes ? etqMes(F.mes) : 'todo el año';
+    var lista = Object.keys(noBc).sort(function (a, b) { return noBc[b] - noBc[a]; }).slice(0, 6);
+    document.getElementById('bc').innerHTML =
+      '<div class="bc-barra"><span style="width:' + (100 * monto['1'] / total) + '%;background:#1E7F4F"></span><span style="width:' + (100 * monto['0'] / total) + '%;background:#E0A33A"></span><span style="width:' + (100 * monto['-1'] / total) + '%;background:#C9D3DD"></span></div>' +
+      '<div class="dona-leyenda" style="margin-bottom:14px">' + ['1', '0', '-1'].map(function (b) {
+        return '<div class="ley"><span><i style="background:' + (b === '1' ? '#1E7F4F' : b === '0' ? '#E0A33A' : '#C9D3DD') + '"></i>' + BC[b][0] + ' <span class="nota">(' + n(b) + ' proveedores)</span></span><b>' + dinero(monto[b], null, true) + ' · ' + pct(monto[b], total) + '%</b></div>';
+      }).join('') + '</div>' +
+      (lista.length ? '<div class="rotulo">Los que más se les compró y no son buen contribuyente</div>' + lista.map(function (k) {
+        var p = D.prov[k];
+        return '<div class="fila-barra" style="cursor:pointer" data-ruc="' + esc(p[0]) + '"><div class="fb-cab"><span class="fb-etq">' + esc(p[1] || p[0]) + '</span><span class="fb-cifras"><b>' + dinero(noBc[k], null, true) + '</b> · ' + esc(p[0]) + '</span></div></div>';
+      }).join('') : '<p class="vacio">Todos los proveedores de este período son buenos contribuyentes o aún no se consultaron.</p>');
+    document.getElementById('bc').onclick = function (e) {
+      var f = e.target.closest('[data-ruc]'); if (!f) return;
+      var inF = document.getElementById('buscarFactura'); inF.value = f.getAttribute('data-ruc'); buscar(inF.value); inF.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    };
+  }
 
-    var e = crear('text', { x: cx, y: H - 8, class: 'eje', 'text-anchor': 'middle' });
-    e.textContent = mesNombre(p.periodo);
-    svg.appendChild(e);
+  // ── Notas de crédito y comprobantes cambiados ──
+  function pintarNotas(docs) {
+    var notas = docs.filter(function (x) { return x[2] === 'C'; }).sort(function (a, b) { return a[4] - b[4]; });
+    document.getElementById('notaNotas').textContent = notas.length ? 'IGV que restan: ' + dinero(suma(notas, 4)) : '';
+    document.getElementById('notas').innerHTML = notas.length ? '<table class="tabla"><thead><tr><th>Nota</th><th>Proveedor</th><th>Corrige a</th><th class="num">IGV</th></tr></thead><tbody>' +
+      notas.slice(0, 8).map(function (x) {
+        var p = D.prov[x[1]];
+        return '<tr><td><b>' + esc(x[5]) + '</b><div class="sub">' + esc(x[6]) + '</div></td><td>' + esc(p[1] || p[0]) + '<div class="sub">' + esc(p[0]) + '</div></td><td>' + esc(x[9] || '—') + '</td><td class="num sube"><b>' + dinero(x[4]) + '</b></td></tr>';
+      }).join('') + '</tbody></table>' + (notas.length > 8 ? '<p class="nota" style="margin-top:8px">y ' + (notas.length - 8) + ' notas más en la hoja.</p>' : '')
+      : '<p class="vacio">Sin notas de crédito en este período.</p>';
+  }
+  function pintarCambiados(docs) {
+    var l = docs.filter(function (x) { return x[10] > 0; });
+    document.getElementById('cambiados').innerHTML = l.length ? '<table class="tabla"><thead><tr><th>Comprobante</th><th>Proveedor</th><th class="num">Total</th><th class="num">Cambios</th></tr></thead><tbody>' +
+      l.slice(0, 8).map(function (x) {
+        var p = D.prov[x[1]];
+        return '<tr><td><b>' + esc(x[5]) + '</b><div class="sub">' + esc(x[6]) + '</div></td><td>' + esc(p[1] || p[0]) + '</td><td class="num">' + dinero(x[8], x[7]) + '</td><td class="num">' + x[10] + '</td></tr>';
+      }).join('') + '</tbody></table>' : '<p class="vacio">Ninguno cambió en este período.</p>';
+  }
 
-    if (esElegido || p.igv === max) {
-      var v = crear('text', { x: cx, y: arriba - 7, class: 'valorbarra', 'text-anchor': 'middle' });
-      v.textContent = 'S/ ' + Math.round(p.igv / 1000) + 'k';
-      svg.appendChild(v);
+  // ── Buscar una factura ──
+  function claveFecha(x) { var m = /(\d{2})\/(\d{2})\/(\d{4})/.exec(x[6] || ''); return m ? m[3] + m[2] + m[1] : (x[0] || '') + '00'; }
+  function buscar(q) {
+    q = String(q || '').trim();
+    var caja = document.getElementById('facturas');
+    if (!q) {
+      caja.innerHTML = '<div class="ayuda"><span class="nota" style="align-self:center">Prueba:</span>' +
+        ['F216-777773', 'DHL', '20101128777', '43.64'].map(function (e) { return '<button data-q="' + e + '">' + e + '</button>'; }).join('') + '</div>';
+      return;
     }
-  });
-
-  svg.appendChild(crear('line', {
-    x1: m.left, x2: W - m.right, y1: cero, y2: cero,
-    stroke: 'var(--text3)', 'stroke-width': 1
-  }));
-}
-
-// Al cambiar el ancho solo se redibuja el gráfico de la pestaña de
-// comprobantes, y solo si ya se cargó. Volver a pedir los datos costaría
-// releer trece mil filas por arrastrar el borde de la ventana.
-var redibujar;
-window.addEventListener('resize', function () {
-  clearTimeout(redibujar);
-  redibujar = setTimeout(function () {
-    if (ultimoComp) dibujarGrafico(ultimoComp.porMes, ultimoComp.elegido);
-  }, 150);
-});
-
-pedirPadron();
+    var Q = plano(q), lista;
+    var mSerie = /^([A-Z0-9]{3,4})[\s-]+0*(\d+)$/.exec(Q);
+    var mMonto = /^-?[\d,]*\.\d{1,2}$/.test(q.replace(/^S\/\s*|^US\$\s*/i, '')) ? Number(q.replace(/[^\d.\-]/g, '')) : null;
+    if (mSerie) { var b = mSerie[1] + '-' + mSerie[2]; lista = D.docs.filter(function (x) { return x[5] === b; }); }
+    else if (/^\d{11}$/.test(Q)) lista = D.docs.filter(function (x) { return D.prov[x[1]][0] === Q; });
+    else if (/^\d{1,8}$/.test(Q)) lista = D.docs.filter(function (x) { return x[5].split('-').pop() === String(Number(Q)); });
+    else if (mMonto !== null) lista = D.docs.filter(function (x) { return Math.abs(Math.abs(x[8]) - Math.abs(mMonto)) < 0.01 || Math.abs(Math.abs(x[3]) - Math.abs(mMonto)) < 0.01; });
+    else {
+      var palabras = Q.split(/\s+/).filter(function (w) { return w.length > 1; });
+      lista = D.docs.filter(function (x) {
+        var t = x.texto || (x.texto = plano(x[5] + ' ' + D.prov[x[1]][0] + ' ' + D.prov[x[1]][1]));
+        return palabras.every(function (w) { return t.indexOf(w) !== -1; });
+      });
+    }
+    lista.sort(function (a, b) { var ka = claveFecha(a), kb = claveFecha(b); return ka < kb ? 1 : ka > kb ? -1 : 0; });
+    var total = lista.length; lista = lista.slice(0, 30);
+    caja.innerHTML = total ? '<p class="nota" style="margin:2px 0 6px">' + miles(total) + (total === 1 ? ' comprobante' : ' comprobantes') + (total > 30 ? ' · se muestran los 30 más recientes' : '') + ' · el PDF y el detalle de productos están en la vista del DETALLE</p>' +
+      lista.map(function (x) {
+        var p = D.prov[x[1]];
+        return '<div class="factura sire-factura"><div class="p-dato">' + esc(x[6] || etqMes(x[0])) + '</div>' +
+          '<div><div class="f-comp">' + esc(x[5]) + '</div><div class="sub">' + TIPO[x[2]] + ' · ' + etqMes(x[0]) + '</div></div>' +
+          '<div style="min-width:0"><div class="fb-etq">' + esc(p[1] || p[0]) + '</div><div class="sub">' + esc(p[0]) + '</div></div>' +
+          '<div class="f-total' + (x[8] < 0 ? ' sube' : '') + '">' + dinero(x[8], x[7]) + '</div>' +
+          '<div class="p-dato">IGV ' + dinero(x[4]) + '</div>' +
+          '<div style="text-align:right">' + chipBc(p[2]) + '</div></div>';
+      }).join('') : '<p class="vacio" style="padding:10px 4px">No hay comprobantes con «' + esc(q) + '» en el registro. Prueba solo con el número o con el RUC.</p>';
+  }
 </script>
 </body>
 </html>

@@ -196,56 +196,34 @@ adelante, sobre esta misma pestaña.
 
 ## Tablero SUNAT, publicado (no dentro del Sheet)
 
-`CodigoPadron.gs` + `TableroPadron.html` arman un tablero **publicado como
-su propia URL, y autocontenido**: no necesita que `Codigo.gs`, `PadronRuc.gs`
-ni ningún otro archivo del proyecto exista para funcionar — se puede pegar
-en un proyecto de Apps Script en blanco y ya queda completo. Se llaman
-distinto a propósito: Apps Script no deja que un Script y un HTML compartan
-el mismo nombre en un proyecto (por eso tampoco `Codigo.gs` se llama
-`Tablero.gs`).
+`CodigoPadron.gs` + `TableroPadron.html`: **una sola vista** del registro de
+compras del SIRE (la hoja COMPROBANTES SUNAT), publicada como su propia URL,
+con el mismo lenguaje que la vista del DETALLE y el tablero del legajo.
+Desde octubre de 2026 lee **solo la hoja** —que ya trae la columna «Buen
+Contribuyente»—: no se conecta a la base ni necesita Propiedades del script.
 
-Lleva la identidad visual de Roland Print/INROPRIN —el mismo logo y la misma
-paleta que usa `VistaEjecutiva.gs`, el otro tablero publicado—, para que los
-dos se vean como parte de la misma familia.
+- **Buscar una factura** (todo el registro): serie-número, número, RUC,
+  proveedor o monto, con su IGV y si el proveedor es buen contribuyente.
+  Incluye lo que todavía no tiene XML; el PDF y los productos están en la
+  vista del DETALLE.
+- **Filtro por mes** (por omisión, el último) e indicadores: compras, IGV
+  (crédito fiscal), notas de crédito y **% del monto comprado a buenos
+  contribuyentes**, con la variación contra el mes anterior.
+- **IGV por mes** (clic = filtro), la barra **¿son buenos contribuyentes?**
+  (monto y proveedores: sí / no / sin consultar) con los que más se les
+  compró y no lo son (clic = los busca), las **notas de crédito** con la
+  factura que corrigen, y los **comprobantes que SUNAT cambió**.
 
-- **Padrón de RUC**: cuánto del registro ya se revisó, qué porcentaje son
-  Buenos Contribuyentes o Agentes de Retención/Percepción, cuántos «No
-  Habido», y la lista completa filtrable por RUC o nombre.
-- **Comprobantes SUNAT**: el mismo contenido de `Tablero.html` —IGV neto por
-  mes, notas de crédito, quién rindió, comprobantes que cambiaron, quién
-  factura más—. `CodigoPadron.gs` trae su propia copia de esa lógica
-  (`datosDelTablero()` con nombres de variable propios), no depende de
-  `Codigo.gs`.
-
-A diferencia de `Tablero.html` (que se abre como diálogo desde el menú de la
-hoja y necesita tenerla abierta), este es una página aparte que se comparte
-por enlace. `Tablero.html` y el menú «Abrir tablero» siguen existiendo y
-funcionando igual que antes —no hace falta borrarlos—; este tablero es la
-vista de conjunto para quien no quiere entrar al Sheet.
+Los montos van en soles con el tipo de cambio del mismo SIRE, y las notas de
+crédito restan.
 
 ### Instalación
-
-1. En **cualquier proyecto** de Apps Script —puede ser uno nuevo y vacío, o
-   el mismo donde ya está `PadronRuc.gs`, da igual—: el **+** · **Script**,
-   llámalo `CodigoPadron` —cualquier nombre sirve, menos `TableroPadron`,
-   que ya lo usa el HTML—, pega `CodigoPadron.gs`. El **+** · **HTML**,
-   llámalo exactamente `TableroPadron` (sin `.html`), pega
-   `TableroPadron.html`.
-2. **Extensiones → Configuración del proyecto → Propiedades del script**:
-   agrega `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `ROBOT_CORREO`,
-   `ROBOT_CLAVE` (los del robot de Supabase — los mismos que usa
-   `PadronRuc.gs`, si también está en este proyecto). Guarda.
-3. **Implementar → Nueva implementación → tipo «Aplicación web»**.
-   - **Ejecutar como**: tu cuenta — así corre con tus permisos, sin pedirle
-     nada a quien lo abra.
-   - **Quién tiene acceso**: **«Cualquier usuario de tu organización»**, no
-     «Cualquier usuario» — muestra información de proveedores, no hace falta
-     que sea público en internet.
-4. **Implementar** → copia la URL. Esa es la que se comparte.
-5. **Cada vez que cambies el código** hay que volver a **«Gestionar
-   implementaciones»** → el lápiz de editar → Versión: **«Nueva»** →
-   Implementar. Una implementación ya publicada no se actualiza sola con el
-   código nuevo — sin este paso, la URL sigue mostrando la versión vieja.
+1. En el proyecto: Script `CodigoPadron` (pega `CodigoPadron.gs`) y HTML
+   `TableroPadron` (pega `TableroPadron.html`). No hace falta nada más.
+2. **Implementar → Nueva implementación → Aplicación web**: Ejecutar como
+   tu cuenta; acceso «Cualquier usuario de tu organización».
+3. Cada vez que cambies el código: **Gestionar implementaciones** → lápiz →
+   Versión **Nueva** → Implementar (si no, la URL sigue con la versión vieja).
 
 ## Vista ejecutiva (para compartir de forma formal)
 
