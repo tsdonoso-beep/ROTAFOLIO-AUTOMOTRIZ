@@ -158,7 +158,8 @@
   <section class="tarjeta tarjeta-ancha">
     <h2>Precios en el tiempo</h2>
     <p class="nota">Lo que se pagó por cada producto la primera y la última vez que se compró (precio unitario sin IGV, en su moneda). Sirve para revalorizar el Kardex. Solo productos comprados en dos meses o más.</p>
-    <input class="buscador" id="buscarPrecio" type="search" placeholder="Buscar producto o proveedor…">
+    <input class="buscador" id="buscarPrecio" type="search" placeholder="Buscar producto o proveedor… (ej.: pollo brasa)">
+    <p class="nota" id="cuentaPrecios"></p>
     <div class="desplazable" id="tablaPrecios"></div>
   </section>
 
@@ -271,9 +272,21 @@
   }
 
   var PRECIOS = [];
+  // Sin tildes ni mayúsculas, para que «panaderia» encuentre «PANADERÍA».
+  var plano = function (t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase(); };
   function pintarPrecios(filtro) {
-    var f = String(filtro || '').toUpperCase();
-    var lista = PRECIOS.filter(function (p) { return !f || (p.desc + ' ' + p.proveedores).toUpperCase().indexOf(f) !== -1; }).slice(0, 25);
+    // Cada palabra por separado y en cualquier orden: «pollo brasa» encuentra
+    // «1/4 POLLO A LA BRASA». Se ignoran las palabras cortas («a», «la», «de»).
+    var palabras = plano(filtro).split(/\s+/).filter(function (w) { return w.length > 2; });
+    var todas = PRECIOS.filter(function (p) {
+      if (!palabras.length) return true;
+      var texto = p._texto || (p._texto = plano(p.desc + ' ' + p.proveedores));
+      return palabras.every(function (w) { return texto.indexOf(w) !== -1; });
+    });
+    var lista = todas.slice(0, 40);
+    document.getElementById('cuentaPrecios').textContent = palabras.length
+      ? todas.length + ' productos encontrados' + (todas.length > 40 ? ' (se muestran los 40 de más gasto)' : '')
+      : PRECIOS.length + ' productos comprados en dos meses o más · escribe para buscar';
     document.getElementById('tablaPrecios').innerHTML = lista.length ? tabla(['Producto', 'Primera compra', 'Última compra', 'Variación', 'Meses'],
       lista.map(function (p) {
         var clase = p.variacion > 0.5 ? 'sube' : p.variacion < -0.5 ? 'baja' : 'igual';

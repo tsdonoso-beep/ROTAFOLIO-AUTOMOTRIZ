@@ -304,8 +304,11 @@ function indicadoresNuevos_(docs, precios, clavesPeriodo) {
       variacion: ini > 0 ? Math.round(1000 * (fin - ini) / ini) / 10 : 0
     });
   }
+  // Todos los productos (no solo los de más gasto): el buscador tiene que
+  // encontrar también lo barato, como un 1/4 de pollo a la brasa. El tope es
+  // solo para no reventar lo que Apps Script puede mandar al navegador.
   lista.sort(function (a, b) { return b.total - a.total; });
-  var preciosTop = lista.slice(0, 150);
+  var preciosTop = lista.slice(0, 3000).map(function (p) { delete p.total; return p; });
 
   // Importaciones: los comprobantes de SUNAT unidos a una OC de importación.
   var impo = {};
@@ -356,7 +359,7 @@ function indicadoresNuevos_(docs, precios, clavesPeriodo) {
   });
 
   return { cobertura: cobertura, porMes: porMes, precios: preciosTop, importaciones: importaciones.slice(0, 40),
-    importacionesTotal: importaciones.length, proveedoresMes: proveedoresMes, centros: centros };
+    preciosTotal: lista.length, importacionesTotal: importaciones.length, proveedoresMes: proveedoresMes, centros: centros };
 }
 
 /** "mar 2026" a partir de un período "AAAAMM"; lo que no calce se muestra tal cual. */
