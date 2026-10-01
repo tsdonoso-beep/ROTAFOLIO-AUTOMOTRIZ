@@ -24,14 +24,21 @@ export const RUC_INROPRIN = "20512201611";
 export type CarpetaDeOC = {
   /** «OC» (orden de compra) u «OS» (orden de servicio). Comparten la numeración. */
   tipo: "OC" | "OS";
-  /** Siempre «0200-2026»: 4 dígitos, como las nacionales en el resto del sistema. */
+  /**
+   * Nacional con 4 dígitos («0200-2026»), importación con 3 («172-2026»):
+   * son numeraciones distintas que se cruzan, como en el resto del sistema.
+   */
   oc: string;
   proveedor: string;
   /** Lo que va después del último « - » («TALLERES ESPECIALIZADOS»); vacío si no hay. */
   proyecto: string;
 };
 
-const PREFIJO = String.raw`(?:O\.?\s*C\.?|O\.?\s*S\.?|ORDEN\s+DE\s+COMPRA|ORDEN\s+DE\s+SERVICIO)`;
+export type Procedencia = "Nacional" | "Importación";
+
+// «IMP», «IMPO», «IMPORTACIÓN» van delante (o detrás de «OC») en las carpetas de importaciones.
+const IMPO = String.raw`(?:IMP(?:O|ORTACI[OÓ]N)?\.?)`;
+const PREFIJO = String.raw`(?:(?:O\.?\s*C\.?|O\.?\s*S\.?|ORDEN\s+DE\s+COMPRA|ORDEN\s+DE\s+SERVICIO)(?:\s*${IMPO})?|${IMPO}(?:\s*O\.?\s*C\.?)?)`;
 const NUM = String.raw`(\d{1,5})(?:\.\d{1,2})?`;
 const ANIO = String.raw`(20[2-3]\d)`;
 const SEP = String.raw`\s*[-_]\s*`;
@@ -45,7 +52,7 @@ const SEP = String.raw`\s*[-_]\s*`;
  * `estricto` pide que el nombre EMPIECE con OC/OS: así se reconoce una OC
  * dentro de otra sin confundir una subcarpeta «Factura 0123-2026».
  */
-export function carpetaDeOC(nombre: string, estricto = false): CarpetaDeOC | null {
+export function carpetaDeOC(nombre: string, estricto = false, procedencia: Procedencia = "Nacional"): CarpetaDeOC | null {
   const t = String(nombre ?? "").normalize("NFC").trim().replace(/\s+/g, " ");
   // Sin «OC» delante solo vale si el nombre arranca con el número: «0200-2026 LUCY».
   const m = new RegExp(
@@ -63,7 +70,8 @@ export function carpetaDeOC(nombre: string, estricto = false): CarpetaDeOC | nul
   const corte = limpio.lastIndexOf(" - ");
   const proveedor = (corte > 0 ? limpio.slice(0, corte) : limpio).trim();
   const proyecto = corte > 0 ? limpio.slice(corte + 3).trim() : "";
-  return { tipo, oc: `${num.padStart(4, "0")}-${anio}`, proveedor, proyecto };
+  const ancho = procedencia === "Importación" ? 3 : 4;
+  return { tipo, oc: `${String(Number(num)).padStart(ancho, "0")}-${anio}`, proveedor, proyecto };
 }
 
 /** Los RUC (10… o 20…) que aparecen en un nombre de archivo, sin el de Inroprin. */

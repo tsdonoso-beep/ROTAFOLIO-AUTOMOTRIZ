@@ -9,6 +9,10 @@
 // XML…), con la serie del comprobante cuando el nombre la trae. Con eso la
 // base une cada factura de SUNAT con su OC sin depender de los enlaces de CG.
 //
+// Lo mismo sirve para la carpeta de importaciones (PROCEDENCIA=importacion):
+// ahí la OC va con 3 dígitos («172-2026»), como en el cuadro de aprobaciones,
+// y la comparación es contra el legajo del cuadro en vez de CG.
+//
 // Lee con la cuenta de servicio de Drive (la misma que publica las hojas):
 // la carpeta madre tiene que estar compartida con ella como Lector.
 //
@@ -27,23 +31,28 @@ import {
 } from "../lib/drive/servidor.ts";
 import type { TipoColumna } from "../lib/export/comprobantes-sunat.ts";
 import {
-  carpetaDeOC, clasificarArchivo, esComprobante, rucsEnNombre, type CarpetaDeOC,
+  carpetaDeOC, clasificarArchivo, esComprobante, rucsEnNombre, type CarpetaDeOC, type Procedencia,
 } from "../lib/drive/carpetas-oc.ts";
 
 // ── Configuración desde el entorno ────────────────────────────────
 
 const DEBUG = process.env.DEBUG !== "0";
-const CARPETA_MADRE = process.env.CARPETA_MADRE?.trim() || "1oGUtE0IhqwanRsmuuA7QlQRB_koZzOH3";
+// «nacional» (por omisión) o «importacion»: cambia la carpeta madre, la
+// hoja, y la OC (nacional con 4 dígitos, importación con 3).
+const PROCEDENCIA: Procedencia = /^imp/i.test(process.env.PROCEDENCIA?.trim() ?? "") ? "Importación" : "Nacional";
+const IMPO = PROCEDENCIA === "Importación";
+const CARPETA_MADRE = process.env.CARPETA_MADRE?.trim() ||
+  (IMPO ? "1oJjtLinBgWej-ofRisFyheC29UwdicKi" : "1oGUtE0IhqwanRsmuuA7QlQRB_koZzOH3");
 // Parte del nombre de una carpeta de proyecto («TALLERES»): recorre solo esa.
 const SUBCARPETA = process.env.SUBCARPETA?.trim() ?? "";
 const EMPRESA_RUC = process.env.EMPRESA_RUC?.trim() || "20512201611";
-const NOMBRE_HOJA = "OC - CARPETAS COMPRAS NACIONALES";
+const NOMBRE_HOJA = IMPO ? "OC - CARPETAS IMPORTACIONES" : "OC - CARPETAS COMPRAS NACIONALES";
 const CARPETAS_HOJA = ["SUNAT"];
 // Cuántas carpetas se preguntan en una sola consulta a Drive, y cuántas consultas a la vez.
 const CARPETAS_POR_CONSULTA = 25;
 const PARALELO = Number(process.env.PARALELO?.trim() || "4");
 
-const SALIDA = join(process.cwd(), "salida", "carpetas-oc");
+const SALIDA = join(process.cwd(), "salida", "carpetas-oc", IMPO ? "importaciones" : "nacionales");
 mkdirSync(SALIDA, { recursive: true });
 
 const MIME_CARPETA = "application/vnd.google-apps.folder";
@@ -112,7 +121,7 @@ function hijaDe(padre: Pendiente, id: string, nombre: string): Pendiente {
   const proyectoCarpeta = enLaRaiz ? nombre : padre.proyectoCarpeta;
   // Dentro de una OC solo cuenta como OTRA OC si el nombre empieza con OC/OS
   // y es otro número; si no, es una subcarpeta («Factura y Guía»).
-  const leida = padre.oc ? carpetaDeOC(nombre, true) : carpetaDeOC(nombre);
+  const leida = carpetaDeOC(nombre, !!padre.oc, PROCEDENCIA);
   if (leida && (!padre.oc || leida.oc !== padre.oc.oc)) {
     const oc: OC = { ...leida, carpetaId: id, carpetaNombre: nombre, proyectoCarpeta };
     ocs.set(id, oc);
@@ -297,66 +306,103 @@ const idDeCarpeta = (url: string) => /\/folders\/([\w-]{10,})/.exec(url ?? "")?.
 /** «115-2026» → «0115-2026», como en la base de CG; vacío si no es una OC. */
 const oc4 = (t: string) => { const m = /(\d{1,5})\s*-\s*(20\d\d)/.exec(t ?? ""); return m ? `${m[1].padStart(4, "0")}-${m[2]}` : ""; };
 
+/** Lo que otra fuente sabe de cada OC: si la tiene, a qué carpeta enlaza y cuántos comprobantes se vieron ahí. */
+type Fuente = {
+  nombre: string; corto: string; archivo: string;
+  listado: Set<string>; enlaces: Map<string, Set<string>>; comprobantes: Map<string, number>;
+};
+
+function anotar(f: Fuente, oc: string, url: string, parece?: string) {
+  const id = idDeCarpeta(url);
+  if (id) f.enlaces.set(oc, (f.enlaces.get(oc) ?? new Set()).add(id));
+  if (parece !== undefined && esComprobante(parece)) f.comprobantes.set(oc, (f.comprobantes.get(oc) ?? 0) + 1);
+}
+
 /**
- * ¿La carpeta madre trae más que Control de Gestión, o lo mismo? Compara
- * cada OC de la madre con la base de CG (oc_base_cg) y con lo que la captura
- * encontró siguiendo los enlaces de CG (oc_archivo, origen CAPTURA).
+ * Nacionales: Control de Gestión (oc_base_cg) y lo que la captura encontró
+ * siguiendo sus enlaces (oc_archivo, origen CAPTURA).
  */
-async function compararConCG(sb: Base, porCarpeta: Map<string, Archivo[]>, completo: boolean) {
-  const cg = new Set((await todas<{ oc: string }>(sb, "oc_base_cg", "oc")).map(r => r.oc));
+async function fuenteCG(sb: Base): Promise<Fuente> {
+  const f: Fuente = { nombre: "Frente a Control de Gestión", corto: "CG", archivo: "comparacion-cg.csv",
+    listado: new Set((await todas<{ oc: string }>(sb, "oc_base_cg", "oc")).map(r => r.oc)),
+    enlaces: new Map(), comprobantes: new Map() };
   const captura = await todas<{ oc: string; carpeta_url: string; parece: string }>(
     sb, "oc_archivo", "oc,carpeta_url,parece", q => q.eq("origen", "CAPTURA"));
-
-  // Por OC: las carpetas a las que apunta el enlace de CG y cuántos comprobantes encontró la captura.
-  const enlaces = new Map<string, Set<string>>(), compCaptura = new Map<string, number>();
   for (const r of captura) {
-    for (const o of String(r.oc ?? "").split(" / ").map(oc4).filter(Boolean)) {
-      const id = idDeCarpeta(r.carpeta_url);
-      if (id) enlaces.set(o, (enlaces.get(o) ?? new Set()).add(id));
-      if (esComprobante(r.parece ?? "")) compCaptura.set(o, (compCaptura.get(o) ?? 0) + 1);
+    for (const o of String(r.oc ?? "").split(" / ").map(oc4).filter(Boolean)) anotar(f, o, r.carpeta_url, r.parece ?? "");
+  }
+  return f;
+}
+
+/**
+ * Importaciones: el cuadro de aprobaciones, como lo dejó el legajo
+ * (oc_legajo y oc_archivo con origen LEGAJO). Ahí la OC ya viene con 3 dígitos.
+ */
+async function fuenteCuadro(sb: Base): Promise<Fuente> {
+  const f: Fuente = { nombre: "Frente al cuadro de aprobaciones (legajo)", corto: "cuadro", archivo: "comparacion-cuadro.csv",
+    listado: new Set(), enlaces: new Map(), comprobantes: new Map() };
+  const legajo = await todas<{ oc: string; carpeta_url: string }>(
+    sb, "oc_legajo", "oc,carpeta_url", q => q.eq("procedencia", "Importación"));
+  for (const r of legajo) { f.listado.add(r.oc); anotar(f, r.oc, r.carpeta_url); }
+  const archivos = await todas<{ oc: string; parece: string }>(
+    sb, "oc_archivo", "oc,parece", q => q.eq("origen", "LEGAJO"));
+  for (const r of archivos) {
+    for (const o of String(r.oc ?? "").split(" / ")) {
+      if (f.listado.has(o) && esComprobante(r.parece ?? "")) f.comprobantes.set(o, (f.comprobantes.get(o) ?? 0) + 1);
     }
   }
+  return f;
+}
 
+/**
+ * ¿La carpeta madre trae más que la otra fuente, o lo mismo? Por cada OC de
+ * la madre: si la fuente la tiene, si su enlace apunta a la misma carpeta, y
+ * dónde se vieron más comprobantes.
+ */
+function comparar(f: Fuente, porCarpeta: Map<string, Archivo[]>, completo: boolean): string {
   const porOc = new Map<string, OC[]>();
   for (const o of ocs.values()) porOc.set(o.oc, [...(porOc.get(o.oc) ?? []), o]);
 
-  const c = { enCg: 0, noEnCg: 0, misma: 0, otra: 0, fuera: 0, sinEnlace: 0, compSoloMadre: 0, compSoloCaptura: 0, compAmbas: 0, masEnMadre: 0 };
-  const filas: string[][] = [["OC", "Proveedor (carpeta)", "Carpeta del proyecto", "En la base de CG", "Enlace de CG",
-    "Comprobantes en la madre", "Comprobantes en la captura de CG", "Carpeta en la madre", "Carpeta del enlace de CG"]];
+  const c = { en: 0, noEn: 0, misma: 0, otra: 0, fuera: 0, sinEnlace: 0, soloMadre: 0, soloFuente: 0, ambas: 0, masEnMadre: 0 };
+  const filas: string[][] = [["OC", "Proveedor (carpeta)", "Carpeta del proyecto", `Está en ${f.corto}`, `Enlace de ${f.corto}`,
+    "Comprobantes en la madre", `Comprobantes vistos por ${f.corto}`, "Carpeta en la madre", `Carpeta del enlace de ${f.corto}`]];
   for (const [oc, carpetas] of [...porOc.entries()].sort()) {
     const ids = new Set(carpetas.map(o => o.carpetaId));
-    const enCg = cg.has(oc);
-    enCg ? c.enCg++ : c.noEnCg++;
-    const deCg = [...(enlaces.get(oc) ?? [])];
+    const esta = f.listado.has(oc);
+    esta ? c.en++ : c.noEn++;
+    const suyos = [...(f.enlaces.get(oc) ?? [])];
     let enlace: string;
-    if (!deCg.length) { enlace = "sin enlace (o la captura no lo pudo abrir)"; c.sinEnlace++; }
-    else if (deCg.some(id => ids.has(carpetaDeLaOC.get(id) ?? ""))) { enlace = "misma carpeta"; c.misma++; }
-    else if (deCg.some(id => carpetaDeLaOC.has(id) || vistas.has(id))) { enlace = "otra carpeta de la madre"; c.otra++; }
+    if (!suyos.length) { enlace = "sin enlace (o no se pudo abrir)"; c.sinEnlace++; }
+    else if (suyos.some(id => ids.has(carpetaDeLaOC.get(id) ?? ""))) { enlace = "misma carpeta"; c.misma++; }
+    else if (suyos.some(id => carpetaDeLaOC.has(id) || vistas.has(id))) { enlace = "otra carpeta de la madre"; c.otra++; }
     else { enlace = completo ? "fuera de la carpeta madre" : "fuera de lo leído"; c.fuera++; }
 
     const enMadre = carpetas.reduce((n, o) => n + (porCarpeta.get(o.carpetaId) ?? []).filter(a => esComprobante(a.parece)).length, 0);
-    const enCaptura = compCaptura.get(oc) ?? 0;
-    if (enMadre && !enCaptura) c.compSoloMadre++;
-    else if (!enMadre && enCaptura) c.compSoloCaptura++;
-    else if (enMadre && enCaptura) c.compAmbas++;
-    if (enMadre > enCaptura) c.masEnMadre++;
-    filas.push([oc, carpetas[0].proveedor, carpetas[0].proyectoCarpeta, enCg ? "Sí" : "No", enlace,
-      String(enMadre), String(enCaptura), carpetas.map(o => urlCarpeta(o.carpetaId)).join(" | "),
-      deCg.map(urlCarpeta).join(" | ")]);
+    const enFuente = f.comprobantes.get(oc) ?? 0;
+    if (enMadre && !enFuente) c.soloMadre++;
+    else if (!enMadre && enFuente) c.soloFuente++;
+    else if (enMadre && enFuente) c.ambas++;
+    if (enMadre > enFuente) c.masEnMadre++;
+    filas.push([oc, carpetas[0].proveedor, carpetas[0].proyectoCarpeta, esta ? "Sí" : "No", enlace,
+      String(enMadre), String(enFuente), carpetas.map(o => urlCarpeta(o.carpetaId)).join(" | "),
+      suyos.map(urlCarpeta).join(" | ")]);
   }
-  writeFileSync(join(SALIDA, "comparacion-cg.csv"), csv(filas));
+  writeFileSync(join(SALIDA, f.archivo), csv(filas));
 
-  const n = porOc.size;
+  // Solo con la madre completa tiene sentido contar lo que la fuente tiene y la madre no.
+  const anio = new Date().getFullYear();
+  const faltan = completo ? [...f.listado].filter(oc => oc.endsWith(`-${anio}`) && !porOc.has(oc)).length : null;
   return [
-    "### Frente a Control de Gestión",
+    `### ${f.nombre}`,
     "",
-    `De las **${n}** OC de la carpeta madre${completo ? "" : " leídas"}:`,
-    `- En la base de CG: **${c.enCg}**; **no** están en CG: **${c.noEnCg}**`,
-    `- El enlace de CG apunta a la misma carpeta (o a una subcarpeta): **${c.misma}**; a otra carpeta de la madre: ${c.otra}; ${completo ? "fuera de la madre" : "fuera de lo leído"}: ${c.fuera}; sin enlace capturado: ${c.sinEnlace}`,
-    `- Con comprobante solo en la madre: **${c.compSoloMadre}**; solo en la captura de CG: ${c.compSoloCaptura}; en las dos: ${c.compAmbas}`,
-    `- OC donde la madre tiene más comprobantes que la captura de CG: **${c.masEnMadre}**`,
+    `De las **${porOc.size}** OC de la carpeta madre${completo ? "" : " leídas"}:`,
+    `- Están en ${f.corto}: **${c.en}**; **no** están: **${c.noEn}**`,
+    `- El enlace de ${f.corto} apunta a la misma carpeta (o a una subcarpeta): **${c.misma}**; a otra carpeta de la madre: ${c.otra}; ${completo ? "fuera de la madre" : "fuera de lo leído"}: ${c.fuera}; sin enlace: ${c.sinEnlace}`,
+    `- Con comprobante solo en la madre: **${c.soloMadre}**; solo en ${f.corto}: ${c.soloFuente}; en las dos: ${c.ambas}`,
+    `- OC donde la madre tiene más comprobantes que ${f.corto}: **${c.masEnMadre}**`,
+    ...(faltan !== null ? [`- OC de ${anio} que ${f.corto} tiene y la madre no: ${faltan}`] : []),
     "",
-    "El detalle por OC está en `comparacion-cg.csv`. Lo que la madre no trae —centro de costo, monto, RUC— sigue saliendo de CG y de la base de nacionales.",
+    `El detalle por OC está en \`${f.archivo}\`.`,
   ].join("\n");
 }
 
@@ -376,7 +422,7 @@ async function subirALaBase(sb: Base, filasOcs: string[][], porCarpeta: Map<stri
     let total = 0;
     for (let i = 0; i < filas.length; i += 1000) {
       const { data, error: e } = await sb.rpc("cargar_carpetas_oc", {
-        p_empresa_ruc: EMPRESA_RUC, p_parte: parte, p_filas: filas.slice(i, i + 1000),
+        p_empresa_ruc: EMPRESA_RUC, p_parte: parte, p_filas: filas.slice(i, i + 1000).map(f => ({ ...f, procedencia: PROCEDENCIA })),
         p_desde_cero: completo && i === 0,
       });
       if (e) throw new Error(`cargar_carpetas_oc (${parte}): ${e.message}`);
@@ -443,7 +489,7 @@ async function main() {
   const gb = archivos.reduce((s, a) => s + a.kb, 0) / 1024 / 1024;
 
   let resumen = [
-    `## Carpeta madre de compras nacionales${SUBCARPETA ? ` (solo «${SUBCARPETA}»)` : ""}`,
+    `## Carpeta madre de ${IMPO ? "importaciones" : "compras nacionales"}${SUBCARPETA ? ` (solo «${SUBCARPETA}»)` : ""}`,
     "",
     `- Carpetas leídas: **${carpetasLeidas}** (${consultas} consultas a Drive, ${Math.round((Date.now() - inicio) / 1000)} s)`,
     `- OC distintas: **${ocsUnicas.size}** en ${ocs.size} carpetas de OC (${[...ocs.values()].filter(o => o.tipo === "OS").length} de servicio)`,
@@ -472,7 +518,7 @@ async function main() {
   let sb: Base | null = null, comparacion = "";
   try {
     sb = await entrarALaBase();
-    comparacion = await compararConCG(sb, porCarpeta, !SUBCARPETA);
+    comparacion = comparar(IMPO ? await fuenteCuadro(sb) : await fuenteCG(sb), porCarpeta, !SUBCARPETA);
   } catch (e) {
     if (!DEBUG) throw e;
     comparacion = `_No se pudo comparar con CG: ${e instanceof Error ? e.message : e}_`;
@@ -487,7 +533,7 @@ async function main() {
   writeFileSync(join(SALIDA, "fuera-de-oc.csv"), csv([["Ruta", "Archivo", "Parece", "Serie", "Enlace"],
     ...sueltos.map(a => [a.ruta, a.nombre, a.parece, a.serie, a.url])]));
   writeFileSync(join(SALIDA, "resumen.md"), resumen);
-  console.log(`✓ Resultado en ${SALIDA} (ocs.csv, archivos.csv, fuera-de-oc.csv, comparacion-cg.csv, resumen.md)`);
+  console.log(`✓ Resultado en ${SALIDA} (ocs.csv, archivos.csv, fuera-de-oc.csv, comparacion-*.csv, resumen.md)`);
 
   if (DEBUG) return;
 

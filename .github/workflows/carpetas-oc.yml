@@ -1,4 +1,5 @@
-# Leer la carpeta madre de compras nacionales («5. Ordenes de Compra»)
+# Leer las carpetas madre de compras nacionales («5. Ordenes de Compra») y
+# de importaciones
 #
 # Recorre las carpetas de OC con la cuenta de servicio de Drive —solo
 # nombres, no descarga nada— y anota de cada OC su carpeta y los
@@ -7,15 +8,16 @@
 # hojas COMPROBANTES SUNAT y DETALLE lo muestran en la publicación de la
 # mañana. Ver scripts/carpetas-oc.mts.
 #
-# La carpeta madre tiene que estar compartida como Lector con el correo de
-# la cuenta de servicio (GOOGLE_SA_EMAIL).
+# Las dos carpetas tienen que estar compartidas como Lector con el correo de
+# la cuenta de servicio (GOOGLE_SA_EMAIL). Cada noche corren las dos.
 #
-# Disparo manual: arranca en depuración (no toca la base ni la hoja) y se
-# puede limitar a un proyecto («TALLERES»). El resumen —cuántas OC, carpetas
+# Disparo manual: arranca en depuración (no toca la base ni la hoja); se
+# elige nacionales, importaciones o ambas, y nacionales se puede limitar a un
+# proyecto («TALLERES»). El resumen —cuántas OC, carpetas
 # y comprobantes encontró— queda en la página de la corrida, y los CSV como
 # artefacto.
 
-name: Carpetas de OC nacionales
+name: Carpetas de OC (nacionales e importaciones)
 
 on:
   schedule:
@@ -29,8 +31,13 @@ on:
         type: boolean
         required: false
         default: true
+      carpeta:
+        description: "Qué carpeta madre leer."
+        type: choice
+        options: [nacionales, importaciones, ambas]
+        default: nacionales
       subcarpeta:
-        description: "Solo los proyectos cuyo nombre contiene este texto (vacío = toda la carpeta madre)."
+        description: "Solo en nacionales: los proyectos cuyo nombre contiene este texto (vacío = toda la carpeta). Importaciones se lee siempre entera."
         required: false
         default: "TALLERES ESPECIALIZADOS"
 
@@ -56,7 +63,9 @@ jobs:
 
       - run: npm ci
 
-      - name: Leer la carpeta madre
+      - name: Leer la carpeta de compras nacionales
+        # La de cada noche no trae inputs: corre (vacío ≠ importaciones).
+        if: inputs.carpeta != 'importaciones'
         env:
           GOOGLE_SA_EMAIL: ${{ secrets.GOOGLE_SA_EMAIL }}
           GOOGLE_SA_PRIVATE_KEY: ${{ secrets.GOOGLE_SA_PRIVATE_KEY }}
@@ -69,7 +78,27 @@ jobs:
           ROBOT_CLAVE: ${{ secrets.ROBOT_CLAVE }}
           # La corrida de cada noche (sin inputs) va completa y de verdad.
           DEBUG: ${{ inputs.debug && '1' || '0' }}
+          PROCEDENCIA: nacional
           SUBCARPETA: ${{ inputs.subcarpeta }}
+        run: node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/local/comun/con-bitacora.mts scripts/carpetas-oc.mts
+
+      - name: Leer la carpeta de importaciones
+        if: always() && (github.event_name == 'schedule' || inputs.carpeta == 'importaciones' || inputs.carpeta == 'ambas')
+        env:
+          GOOGLE_SA_EMAIL: ${{ secrets.GOOGLE_SA_EMAIL }}
+          GOOGLE_SA_PRIVATE_KEY: ${{ secrets.GOOGLE_SA_PRIVATE_KEY }}
+          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          PROJECT_URL: ${{ secrets.PROJECT_URL }}
+          ANON_KEY: ${{ secrets.ANON_KEY }}
+          ROBOT_CORREO: ${{ secrets.ROBOT_CORREO }}
+          ROBOT_CLAVE: ${{ secrets.ROBOT_CLAVE }}
+          # La corrida de cada noche (sin inputs) va completa y de verdad.
+          DEBUG: ${{ inputs.debug && '1' || '0' }}
+          PROCEDENCIA: importacion
+          # Siempre entera: el filtro de subcarpeta es para los proyectos de nacionales.
+          SUBCARPETA: ""
         run: node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/local/comun/con-bitacora.mts scripts/carpetas-oc.mts
 
       - name: Subir el resultado

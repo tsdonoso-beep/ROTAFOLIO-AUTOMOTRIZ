@@ -23,6 +23,17 @@ test("otras formas de escribir la OC", () => {
   assert.equal(carpetaDeOC("OC 2026 - 0200")?.proveedor, "");
 });
 
+test("las carpetas de importaciones llevan la OC con 3 dígitos", () => {
+  const imp = "Importación" as const;
+  assert.equal(carpetaDeOC("OC 172-2026 NINGBO TOOLS - TALLERES", false, imp)?.oc, "172-2026");
+  assert.equal(carpetaDeOC("IMP 172-2026 NINGBO", false, imp)?.oc, "172-2026");
+  assert.equal(carpetaDeOC("IMPORTACIÓN 2026-0172 NINGBO", false, imp)?.oc, "172-2026");
+  assert.equal(carpetaDeOC("OC IMPO 095-2026 X", true, imp)?.oc, "095-2026");
+  assert.equal(carpetaDeOC("172-2026 NINGBO", false, imp)?.proveedor, "NINGBO");
+  // La misma carpeta leída como nacional sigue con 4 dígitos.
+  assert.equal(carpetaDeOC("OC 172-2026 NINGBO")?.oc, "0172-2026");
+});
+
 test("lo que no es la carpeta de una OC", () => {
   assert.equal(carpetaDeOC("01) TALLERES ESPECIALIZADOS"), null);
   assert.equal(carpetaDeOC("Factura y Guía"), null);

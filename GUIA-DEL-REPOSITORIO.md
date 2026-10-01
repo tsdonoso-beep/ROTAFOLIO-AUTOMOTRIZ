@@ -101,7 +101,7 @@ que es la evidencia para diagnosticar cuando algo falla.
 
 | Hora | Workflow | Qué hace |
 |---|---|---|
-| 02:00 | **Carpetas de OC nacionales** | Lee los nombres de la carpeta madre «5. Ordenes de Compra» (OC y comprobantes) |
+| 02:00 | **Carpetas de OC (nacionales e importaciones)** | Lee los nombres de las carpetas madre de compras nacionales e importaciones (OC y comprobantes) |
 | 08:00 | **SUNAT diario** | Pide al SIRE la lista de compras (mes actual y anterior) |
 | 08:00 | **SUNAT descargar XML** | Baja XML/PDF de serie **E001** de ayer y hoy |
 | 08:30 | **SUNAT CPE por API** | Baja XML y PDF de los **no-E001** directo de la API de SUNAT (mes anterior + actual, todos los pendientes) |
@@ -185,7 +185,7 @@ que es la evidencia para diagnosticar cuando algo falla.
   más de 30 días.
 - **Cuándo:** cron 09:00 + manual. Tope 30 min. No necesita Clave SOL.
 
-#### Carpetas de OC nacionales — `carpetas-oc.yml` → `scripts/carpetas-oc.mts`
+#### Carpetas de OC (nacionales e importaciones) — `carpetas-oc.yml` → `scripts/carpetas-oc.mts`
 - **Qué hace:** recorre la carpeta madre de compras nacionales
   («5. Ordenes de Compra», compartida como Lector con la cuenta de servicio)
   **solo por nombres**, sin descargar: de cada carpeta «OC 2026 - 0200
@@ -195,9 +195,14 @@ que es la evidencia para diagnosticar cuando algo falla.
   con origen `CARPETA` (migración 045), que `vinculos_oc()` usa para unir
   cada factura de SUNAT con su OC. Publica la hoja «OC - CARPETAS COMPRAS
   NACIONALES» (pestañas de OC y de ARCHIVOS) en la carpeta SUNAT.
+- **Importaciones:** el mismo script con `PROCEDENCIA=importacion` lee la
+  carpeta de importaciones; ahí la OC va con 3 dígitos («172-2026», como en
+  el cuadro de aprobaciones), se compara contra el legajo del cuadro en vez
+  de CG y publica «OC - CARPETAS IMPORTACIONES». Cada carpeta madre reemplaza
+  solo lo suyo (migración 046).
 - **Cuándo:** cron 02:00 (completa, de verdad) + manual. A mano arranca en
-  depuración (no toca la base ni la hoja) y se puede limitar a un proyecto
-  (`subcarpeta`). El resumen queda en la página de la corrida; los CSV, en el
+  depuración (no toca la base ni la hoja); se elige nacionales, importaciones
+  o ambas, y nacionales se puede limitar a un proyecto (`subcarpeta`). El resumen queda en la página de la corrida; los CSV, en el
   artefacto `carpetas-oc`. Solo una corrida completa y sin fallas reemplaza
   lo anterior; una parcial solo suma.
 
@@ -297,7 +302,7 @@ Apps Script entran como el usuario robot; la app, como la persona.
 | `guardar_cpe(p_empresa_ruc, p_docs)` | Guarda comprobante + ítems; idempotente (repetir actualiza, no duplica) | 032 a 036 |
 | `historico_comprobantes_sunat(p_periodo)` | Filas de la hoja **COMPROBANTES SUNAT** | 017, 039, 041, 042 |
 | `detalle_cpe(p_periodo)` | Filas de la hoja **COMPROBANTES SUNAT - DETALLE** | 032 a 036, 039, 041, 042 |
-| `vinculos_oc()` | Cruza comprobantes con archivos de las carpetas de OC | 039, 040, 042, 045 |
+| `vinculos_oc()` | Cruza comprobantes con archivos de las carpetas de OC | 039, 040, 042, 045, 046 |
 | `cargar_captura_oc(...)` | Recibe la captura de OC desde Apps Script | 039, 042 |
 
 La versión vigente de cada función es la de la **última** migración que la toca.
