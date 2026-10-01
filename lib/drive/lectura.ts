@@ -146,6 +146,14 @@ export function lecturaDeTexto(texto: string, metodo: Lectura["metodo"]): Lectur
   return { ...d, estado: d.tipo && d.serie ? "LEÍDO" : "SIN COMPROBANTE", metodo, detalle: "" };
 }
 
+/**
+ * Empresas del grupo a cuyo nombre también se compra: una factura emitida a
+ * ellas está bien, solo no aparece en el SIRE de Inroprin (va en el suyo).
+ */
+export const DEL_GRUPO: Record<string, string> = {
+  "20614950677": "consorcio de Inroprin",
+};
+
 const TIPO_XML: Record<string, string> = {
   "01": "FACTURA", "03": "BOLETA", "07": "NOTA DE CRÉDITO", "08": "NOTA DE DÉBITO",
 };
@@ -168,7 +176,9 @@ export function lecturaDeXml(xmls: string[], metodo: "XML" | "ZIP"): Lectura {
       estado: "LEÍDO", metodo, tipo,
       serie: `${c.serie.toUpperCase()}-${c.numero.replace(/^0+(?=\d)/, "")}`,
       ruc: c.proveedorRuc ?? "", claves: ["FACTURA"], ocReferencia: c.ordenCompra ?? "",
-      detalle: c.adquirienteRuc && c.adquirienteRuc !== RUC_INROPRIN ? `emitido a ${c.adquirienteRuc}, no a Inroprin` : "",
+      detalle: !c.adquirienteRuc || c.adquirienteRuc === RUC_INROPRIN ? ""
+        : DEL_GRUPO[c.adquirienteRuc] ? `emitido a ${DEL_GRUPO[c.adquirienteRuc]} (${c.adquirienteRuc})`
+        : `emitido a ${c.adquirienteRuc}, no a Inroprin`,
     };
   } catch (e) {
     return { ...vacia, estado: "ERROR", detalle: `XML ilegible: ${e instanceof Error ? e.message : e}`.slice(0, 150) };

@@ -23,7 +23,19 @@ const PAGINAS_OCR = 3;
 /** Por debajo de esto (letras y números), el PDF no tiene texto adentro: es un escaneo. */
 const MINIMO_DE_TEXTO = 80;
 
-function correr(programa: string, args: string[], tiempo = 120_000): Promise<string> {
+/**
+ * Dónde está cada programa. En GitHub y en Linux, en el PATH. En Windows
+ * suelen quedar fuera: LECTOR_POPPLER es la carpeta «bin» de Poppler y
+ * LECTOR_TESSERACT la ruta de tesseract.exe (ver docs/carpetas-oc-local.md).
+ */
+function ruta(programa: "pdftotext" | "pdftoppm" | "tesseract"): string {
+  if (programa === "tesseract") return process.env.LECTOR_TESSERACT?.trim() || "tesseract";
+  const carpeta = process.env.LECTOR_POPPLER?.trim();
+  return carpeta ? join(carpeta, programa) : programa;
+}
+
+function correr(nombre: "pdftotext" | "pdftoppm" | "tesseract", args: string[], tiempo = 120_000): Promise<string> {
+  const programa = ruta(nombre);
   return new Promise((resolver, rechazar) => {
     // OMP_THREAD_LIMIT=1: tesseract usa un hilo; el paralelo lo pone quien llama (varios archivos a la vez).
     execFile(programa, args, {
@@ -39,7 +51,7 @@ export type Herramientas = { pdf: boolean; ocr: boolean };
 
 /** Qué se puede leer en esta máquina. */
 export async function herramientasDeLectura(): Promise<Herramientas> {
-  const hay = async (p: string, a: string[]) => { try { await correr(p, a, 10_000); return true; } catch { return false; } };
+  const hay = async (p: "pdftotext" | "pdftoppm" | "tesseract", a: string[]) => { try { await correr(p, a, 10_000); return true; } catch { return false; } };
   const [pdf, ppm, tess] = await Promise.all([hay("pdftotext", ["-v"]), hay("pdftoppm", ["-v"]), hay("tesseract", ["--version"])]);
   let idiomas = "";
   if (tess) { try { idiomas = await correr("tesseract", ["--list-langs"], 10_000); } catch { /* sin idiomas */ } }

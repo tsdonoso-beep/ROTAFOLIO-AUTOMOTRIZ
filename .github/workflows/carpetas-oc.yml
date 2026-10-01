@@ -11,9 +11,13 @@
 # Las dos carpetas tienen que estar compartidas como Lector con el correo de
 # la cuenta de servicio (GOOGLE_SA_EMAIL). Cada noche corren las dos.
 #
+# Además arma el legajo de cada OC (qué le falta), su centro de costo, y en
+# las corridas completas anota qué cambió desde la anterior (pestaña CAMBIOS).
+#
 # Disparo manual: arranca en depuración (no toca la base ni la hoja); se
 # elige nacionales, importaciones o ambas, y nacionales se puede limitar a un
-# proyecto («TALLERES»). El resumen —cuántas OC, carpetas
+# proyecto («TALLERES»). La lectura pesada también corre en una computadora:
+# `pnpm carpetas:local` (docs/carpetas-oc-local.md); continúa donde quedó. El resumen —cuántas OC, carpetas
 # y comprobantes encontró— queda en la página de la corrida, y los CSV como
 # artefacto.
 
@@ -44,6 +48,10 @@ on:
         description: "Cuántos archivos abrir y leer por dentro (OCR) como mucho, por carpeta madre."
         required: false
         default: "200"
+      leer_minutos:
+        description: "Minutos de lectura por dentro, por carpeta madre (máximo ~150; vacío = 15 en depuración, 45/30 de verdad)."
+        required: false
+        default: ""
 
 concurrency:
   group: carpetas-oc
@@ -55,8 +63,9 @@ permissions:
 jobs:
   leer:
     runs-on: ubuntu-latest
-    # Recorrer las dos carpetas (~10 min) + leer por dentro (45 + 30 min) + subir.
-    timeout-minutes: 120
+    # Recorrer las dos carpetas (~10 min) + leer por dentro (hasta 150 + 150
+    # min a mano; 45 + 30 cada noche) + subir. GitHub corta a las 6 h.
+    timeout-minutes: 340
 
     steps:
       - uses: actions/checkout@v7
@@ -93,7 +102,7 @@ jobs:
           SUBCARPETA: ${{ inputs.subcarpeta }}
           # Cada noche: hasta 3000 archivos o 45 min de lectura; lo que no alcance, la noche siguiente.
           LEER_MAX: ${{ inputs.leer_max || '3000' }}
-          LEER_MINUTOS: ${{ inputs.debug && '15' || '45' }}
+          LEER_MINUTOS: ${{ inputs.leer_minutos || (inputs.debug && '15' || '45') }}
         run: node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/local/comun/con-bitacora.mts scripts/carpetas-oc.mts
 
       - name: Leer la carpeta de importaciones
@@ -114,7 +123,7 @@ jobs:
           # Siempre entera: el filtro de subcarpeta es para los proyectos de nacionales.
           SUBCARPETA: ""
           LEER_MAX: ${{ inputs.leer_max || '3000' }}
-          LEER_MINUTOS: ${{ inputs.debug && '15' || '30' }}
+          LEER_MINUTOS: ${{ inputs.leer_minutos || (inputs.debug && '15' || '30') }}
         run: node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/local/comun/con-bitacora.mts scripts/carpetas-oc.mts
 
       - name: Subir el resultado

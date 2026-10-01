@@ -207,6 +207,21 @@ que es la evidencia para diagnosticar cuando algo falla.
   alcance sigue la noche siguiente. En el cruce cuenta como «Lectura del
   documento», la fuente más segura. Detalle en `lecturas.csv` y en las
   columnas «Leído por dentro» de la pestaña ARCHIVOS.
+- **Legajo y centro de costo:** de cada OC dice qué documentos tiene y cuál
+  le falta (la regla de `LegajoPorOC.gs`: factura; guía si es bien; acta si
+  es servicio; DAM si es importación) y le pone centro de costo: el de la OC
+  en CG (o en el cuadro, si es importación) y, si no está, el de su carpeta
+  de proyecto (`lib/drive/legajo-carpeta.ts`; lo administrativo, por ahora,
+  al área administrativa general). La regla por carpeta queda en
+  `proyecto_centro_costo` y en la pestaña CENTRO DE COSTO; una fila con
+  fuente `MANUAL` (corregida por Contabilidad) no se pisa (migración 049).
+- **Cambios:** en cada corrida completa compara con la anterior y anota en
+  `carpeta_cambio` (pestaña CAMBIOS, 60 días) las OC nuevas o que ya no
+  están, los archivos nuevos, eliminados, modificados o renombrados, y las
+  OC que se completaron o a las que ahora les falta algo.
+- **En una computadora:** `pnpm carpetas:local` (ver
+  `docs/carpetas-oc-local.md`): la carga pesada sin gastar minutos de GitHub;
+  se corta y continúa donde quedó.
 - **Importaciones:** el mismo script con `PROCEDENCIA=importacion` lee la
   carpeta de importaciones; ahí la OC va con 3 dígitos («172-2026», como en
   el cuadro de aprobaciones), se compara contra el legajo del cuadro en vez
@@ -306,6 +321,8 @@ Apps Script entran como el usuario robot; la app, como la persona.
 | `oc_legajo` | 506 | Legajo por OC | Apps Script `SubirLegajo.gs` |
 | `oc_carpeta` | — | Cada carpeta de OC de la carpeta madre de compras nacionales | `carpetas-oc` (también sube a `oc_archivo` con origen `CARPETA`) |
 | `lectura_archivo` | — | Lo leído por dentro de cada archivo (XML, PDF, OCR), para no leerlo dos veces | `carpetas-oc` |
+| `proyecto_centro_costo` | — | Centro de costo de cada carpeta de proyecto (para OC que no están en CG); `MANUAL` no se pisa | `carpetas-oc`, Contabilidad |
+| `carpeta_cambio` | — | Qué cambió en las carpetas madre entre dos corridas completas | `carpetas-oc` |
 | `equivalencia_centro_costo` | 2 | Centro de costo → código CONCAR, **solo lo confirmado** | a mano |
 
 ### 6.2 Funciones clave (en las migraciones)
@@ -315,7 +332,7 @@ Apps Script entran como el usuario robot; la app, como la persona.
 | `guardar_cpe(p_empresa_ruc, p_docs)` | Guarda comprobante + ítems; idempotente (repetir actualiza, no duplica) | 032 a 036 |
 | `historico_comprobantes_sunat(p_periodo)` | Filas de la hoja **COMPROBANTES SUNAT** | 017, 039, 041, 042 |
 | `detalle_cpe(p_periodo)` | Filas de la hoja **COMPROBANTES SUNAT - DETALLE** | 032 a 036, 039, 041, 042 |
-| `vinculos_oc()` | Cruza comprobantes con archivos de las carpetas de OC | 039, 040, 042, 045, 046, 048 |
+| `vinculos_oc()` | Cruza comprobantes con archivos de las carpetas de OC | 039, 040, 042, 045, 046, 048, 049 |
 | `cargar_captura_oc(...)` | Recibe la captura de OC desde Apps Script | 039, 042 |
 
 La versión vigente de cada función es la de la **última** migración que la toca.

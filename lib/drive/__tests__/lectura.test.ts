@@ -115,6 +115,10 @@ test("el XML del comprobante dice todo exacto; la constancia (CDR) no es el comp
   assert.equal(l.serie, "F001-260");
   assert.equal(l.ruc, "20603268467");
   assert.equal(l.ocReferencia, "0200-2026");
+  // Emitida al consorcio de Inroprin: se dice así, no como «no a Inroprin».
+  const alConsorcio = lecturaDeXml([xml.replace(">20512201611<", ">20614950677<")], "XML");
+  assert.equal(alConsorcio.detalle, "emitido a consorcio de Inroprin (20614950677)");
+  assert.equal(lecturaDeXml([xml.replace(">20512201611<", ">20100000002<")], "XML").detalle, "emitido a 20100000002, no a Inroprin");
   const cdr = `<?xml version="1.0"?><ar:ApplicationResponse xmlns:ar="urn:x"><cbc:ID>123</cbc:ID></ar:ApplicationResponse>`;
   assert.equal(lecturaDeXml([cdr], "ZIP").estado, "SIN COMPROBANTE");
   // En un ZIP con la constancia y la factura, gana la factura.
