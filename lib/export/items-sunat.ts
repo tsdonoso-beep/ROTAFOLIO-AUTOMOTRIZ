@@ -63,6 +63,10 @@ export interface FilaDetalleCpe {
   areaOc?: string | null;
   legajoOc?: string | null;
   carpetaOcUrl?: string | null;
+  /** De la carpeta madre de compras: el proyecto, de dónde salió el centro de costo y qué documentos tiene. */
+  proyectoOc?: string | null;
+  centroCostoSegun?: string | null;
+  documentosOc?: string | null;
 }
 
 // El orden importa: lo que se busca primero —de qué comprobante es, qué se
@@ -81,6 +85,7 @@ export const CABECERAS_ITEMS = [
   "Archivo que confirma la OC", "Enlace del archivo (OC)",
   "Situación del pago (OC)", "Comprador (OC)", "Área que completa el legajo",
   "Legajo de la OC", "Carpeta de la OC",
+  "Proyecto de la OC", "Centro de costo según", "Documentos de la OC",
 ];
 
 export const TIPOS_ITEMS: TipoColumna[] = [
@@ -122,6 +127,9 @@ export const TIPOS_ITEMS: TipoColumna[] = [
   "texto",  // Área que completa el legajo
   "texto",  // Legajo de la OC
   "texto",  // Carpeta de la OC
+  "texto",  // Proyecto de la OC
+  "texto",  // Centro de costo según
+  "texto",  // Documentos de la OC
 ];
 
 /** Lo mínimo de un `SupabaseClient` que hace falta para paginar un RPC. */
@@ -134,7 +142,8 @@ interface ClienteConRpc {
 const TAMANO_PAGINA_DETALLE = 1000;
 
 /**
- * Trae TODO el detalle de `detalle_cpe`, paginando.
+ * Trae TODO el detalle, paginando. Sale de `detalle_cpe_carpeta`: el mismo
+ * `detalle_cpe` con lo que dice la carpeta madre de cada OC al final.
  *
  * Supabase corta cada respuesta de su API en 1000 filas por omisión si no se
  * pide un rango explícito — un solo `.rpc(...)` sin `.range()` se queda
@@ -149,7 +158,7 @@ export async function detalleCpeCompleto(
 ): Promise<Record<string, unknown>[]> {
   const filas: Record<string, unknown>[] = [];
   for (let desde = 0; ; desde += TAMANO_PAGINA_DETALLE) {
-    const { data, error } = await sb.rpc("detalle_cpe", { p_periodo: periodo })
+    const { data, error } = await sb.rpc("detalle_cpe_carpeta", { p_periodo: periodo })
       .range(desde, desde + TAMANO_PAGINA_DETALLE - 1);
     if (error) throw new Error(error.message);
     const pagina = Array.isArray(data) ? (data as Record<string, unknown>[]) : [];
@@ -208,6 +217,9 @@ export function filaDetalleDesdeRpc(d: Record<string, unknown>): FilaDetalleCpe 
     areaOc: (d.area_oc as string) ?? null,
     legajoOc: (d.legajo_oc as string) ?? null,
     carpetaOcUrl: (d.carpeta_oc_url as string) ?? null,
+    proyectoOc: (d.proyecto_oc as string) ?? null,
+    centroCostoSegun: (d.centro_costo_segun as string) ?? null,
+    documentosOc: (d.documentos_oc as string) ?? null,
   };
 }
 
@@ -261,6 +273,9 @@ export function filasItemsSunat(filas: FilaDetalleCpe[]): string[][] {
       f.areaOc ?? "",
       f.legajoOc ?? "",
       f.carpetaOcUrl ?? "",
+      (f.proyectoOc ?? "").trim(),
+      f.centroCostoSegun ?? "",
+      f.documentosOc ?? "",
     ]),
   ];
 }

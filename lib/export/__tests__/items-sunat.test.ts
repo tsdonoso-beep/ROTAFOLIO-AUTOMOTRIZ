@@ -70,8 +70,22 @@ describe("filasItemsSunat", () => {
     assert.equal(CABECERAS_ITEMS.length, TIPOS_ITEMS.length);
   });
 
-  test("sin OC vinculada, esas diez columnas quedan vacías", () => {
-    assert.deepEqual(filasItemsSunat([fila()])[1].slice(28), ["", "", "", "", "", "", "", "", "", ""]);
+  test("sin OC vinculada, esas trece columnas quedan vacías", () => {
+    assert.deepEqual(filasItemsSunat([fila()])[1].slice(28), ["", "", "", "", "", "", "", "", "", "", "", "", ""]);
+  });
+
+  test("lo de la carpeta madre (proyecto, de dónde sale el centro de costo, documentos) va al final", () => {
+    const f = filaDetalleDesdeRpc({
+      oc_carpeta: "0999-2026", proyecto_oc: "01) TALLERES ESPECIALIZADOS ",
+      centro_costo_segun: "Su carpeta de proyecto (las demás OC, según CG)", documentos_oc: "Factura 1 · OC 1",
+    });
+    const r = filasItemsSunat([fila(f)])[1];
+    assert.deepEqual(r.slice(38), [
+      "01) TALLERES ESPECIALIZADOS", "Su carpeta de proyecto (las demás OC, según CG)", "Factura 1 · OC 1",
+    ]);
+    assert.deepEqual(CABECERAS_ITEMS.slice(36), [
+      "Legajo de la OC", "Carpeta de la OC", "Proyecto de la OC", "Centro de costo según", "Documentos de la OC",
+    ]);
   });
 
   test("el legajo de la OC va al final, y llega de detalle_cpe en snake_case", () => {
@@ -80,7 +94,7 @@ describe("filasItemsSunat", () => {
       area_oc: "COMEX (importaciones)", legajo_oc: "Completo", carpeta_oc_url: "https://drive.google.com/drive/folders/abc",
     });
     const r = filasItemsSunat([fila(f)])[1];
-    assert.deepEqual(r.slice(33), [
+    assert.deepEqual(r.slice(33, 38), [
       "APROBADA, PAGO PENDIENTE", "Omar Luque", "COMEX (importaciones)", "Completo",
       "https://drive.google.com/drive/folders/abc",
     ]);

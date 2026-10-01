@@ -560,6 +560,35 @@ importación) y «Alertas» avisa si la OC está anulada en el cuadro.
 4. Desde ahí se sube solo cada noche, cuando los revisores terminan. Las
    columnas aparecen con la siguiente publicación diaria de las hojas.
 
+## La carpeta madre en GENERAL
+
+`CarpetaMadre.gs` va en el proyecto de Apps Script de la hoja **GENERAL**.
+Trae de la base (`legajo_de_carpetas()`, migración 051) lo que el robot de
+las 02:00 (`carpetas-oc`) leyó de las dos carpetas madre de compras, y deja
+dos pestañas que reemplaza cada vez:
+
+- **CARPETA MADRE**: una fila por carpeta de OC (nacionales e importaciones)
+  con su legajo (documentos, qué le falta, estado), centro de costo y de
+  dónde salió, las facturas de SUNAT ya unidas, si está en CG y el último
+  cambio que vio el robot. El nombre de la carpeta es un enlace.
+- **CARPETA MADRE - RESUMEN**: cuántas completas, incompletas, qué les falta,
+  cuántas con factura de SUNAT y de dónde sale el centro de costo.
+
+### Cómo se instala
+
+1. Hoja GENERAL → **Extensiones → Apps Script → + → Script** «CarpetaMadre» y
+   pega el archivo.
+2. Engranaje → **Propiedades del script**: `SUPABASE_URL`,
+   `SUPABASE_ANON_KEY`, `ROBOT_CORREO`, `ROBOT_CLAVE` (si ya están por
+   `SubirLegajo.gs`, no hay que hacer nada).
+3. En la lista de funciones elige **instalarCarpetaMadre → Ejecutar** y
+   acepta los permisos. Trae los datos en ese momento, agrega el menú
+   **Carpeta madre** y la deja programada cada mañana a las 7:00.
+
+El DETALLE de SUNAT suma, al final, «Proyecto de la OC», «Centro de costo
+según» y «Documentos de la OC», de la misma carpeta madre
+(`detalle_cpe_carpeta()`, migración 051).
+
 ## Si algo falla
 
 **«La hoja no trae estas columnas…»** — cambiaron los títulos en la fuente. El

@@ -319,7 +319,7 @@ Apps Script entran como el usuario robot; la app, como la persona.
 | `oc_archivo` | 10 530 | Cada archivo encontrado en las carpetas de OC de Drive | Apps Script `SubirCapturaOC.gs` |
 | `oc_base_cg` | 3 723 | Centro de costo de cada OC según Control de Gestión | ídem |
 | `oc_legajo` | 506 | Legajo por OC | Apps Script `SubirLegajo.gs` |
-| `oc_carpeta` | — | Cada carpeta de OC de la carpeta madre de compras nacionales | `carpetas-oc` (también sube a `oc_archivo` con origen `CARPETA`) |
+| `oc_carpeta` | 1 433 | Cada carpeta de OC de las carpetas madre (nacionales e importaciones) | `carpetas-oc` (también sube a `oc_archivo` con origen `CARPETA`) |
 | `lectura_archivo` | — | Lo leído por dentro de cada archivo (XML, PDF, OCR), para no leerlo dos veces | `carpetas-oc` |
 | `proyecto_centro_costo` | — | Centro de costo de cada carpeta de proyecto (para OC que no están en CG); `MANUAL` no se pisa | `carpetas-oc`, Contabilidad |
 | `carpeta_cambio` | — | Qué cambió en las carpetas madre entre dos corridas completas | `carpetas-oc` |
@@ -332,6 +332,8 @@ Apps Script entran como el usuario robot; la app, como la persona.
 | `guardar_cpe(p_empresa_ruc, p_docs)` | Guarda comprobante + ítems; idempotente (repetir actualiza, no duplica) | 032 a 036 |
 | `historico_comprobantes_sunat(p_periodo)` | Filas de la hoja **COMPROBANTES SUNAT** | 017, 039, 041, 042 |
 | `detalle_cpe(p_periodo)` | Filas de la hoja **COMPROBANTES SUNAT - DETALLE** | 032 a 036, 039, 041, 042 |
+| `detalle_cpe_carpeta(p_periodo)` | `detalle_cpe` + proyecto, de dónde sale el centro de costo y documentos de la carpeta madre (lo que publica el DETALLE) | 051 |
+| `legajo_de_carpetas(p_empresa_ruc)` | Una fila por carpeta de OC de las carpetas madre, para la pestaña CARPETA MADRE de GENERAL (`CarpetaMadre.gs`) | 051 |
 | `vinculos_oc()` | Cruza comprobantes con archivos de las carpetas de OC | 039, 040, 042, 045, 046, 048, 049, 050 |
 | `cargar_captura_oc(...)` | Recibe la captura de OC desde Apps Script | 039, 042 |
 
