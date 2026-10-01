@@ -80,7 +80,7 @@ function calcularResumenVista_() {
   // vieja no las trae, esas secciones salen vacías en vez de fallar.
   var opc = function (nombre) { return cab.indexOf(nombre); };
   var extra = {
-    origen: iOrigen, periodo: iPeriodo, proveedor: iProveedor, moneda: iMoneda,
+    origen: iOrigen, periodo: iPeriodo, proveedor: iProveedor, moneda: iMoneda, tipo: iTipo,
     descripcion: opc('Descripción'), unidad: opc('Unidad'), cantidad: opc('Cantidad'),
     precio: opc('Precio unitario'), importe: opc('Importe'),
     oc: opc('OC (carpeta)'), cc: opc('Centro de costo (CG)'), area: opc('Área que completa el legajo'),
@@ -112,6 +112,8 @@ function calcularResumenVista_() {
       tipo: String(fila[iTipo] || 'Otro'),
       moneda: String(fila[iMoneda] || 'PEN'),
       total: Number(fila[iTotal]) || 0,
+      // El XML trae la nota de crédito en positivo: aquí resta, como en el SIRE.
+      neto: (/cr[eé]dito/i.test(String(fila[iTipo])) ? -1 : 1) * Math.abs(Number(fila[iTotal]) || 0),
       detraccion: Number(fila[iDetraccion]) || 0
     };
   }
@@ -124,18 +126,22 @@ function calcularResumenVista_() {
     mapa[clave] = act;
   };
 
-  var porOrigen = {}, porTipo = {}, porPeriodo = {}, porMoneda = {}, porProveedorRecibido = {};
+  // Compras (recibidos) y ventas (emitidos) se suman APARTE: juntas no se
+  // comparan con nada. Las notas de crédito restan (d.neto). El período es el
+  // de emisión del comprobante; el SIRE lo anota en el mes en que se registra,
+  // así que un mes puede diferir un poco del SIRE aunque el año cuadre.
+  var porOrigen = {}, porTipo = {}, porPeriodo = {}, porMoneda = {}, porMonedaVentas = {}, porProveedorRecibido = {};
   var documentosConDetraccion = 0, montoDetraccion = 0;
 
   docs.forEach(function (d) {
-    sumarEn(porOrigen, d.origen, d.total);
-    sumarEn(porTipo, d.tipo, d.total);
-    sumarEn(porPeriodo, d.periodo, d.total);
-    sumarEn(porMoneda, d.moneda, d.total);
+    sumarEn(porOrigen, d.origen, d.neto);
+    sumarEn(porTipo, d.tipo, Math.abs(d.total));
+    if (d.origen === 'Recibido') { sumarEn(porPeriodo, d.periodo, d.neto); sumarEn(porMoneda, d.moneda, d.neto); }
+    else if (d.origen === 'Emitido') sumarEn(porMonedaVentas, d.moneda, d.neto);
     if (d.detraccion > 0) { documentosConDetraccion++; montoDetraccion += d.detraccion; }
     if (d.origen === 'Recibido') {
       var act = porProveedorRecibido[d.proveedorRuc] || { nombre: d.proveedor, cantidad: 0, monto: 0 };
-      act.cantidad++; act.monto += d.total;
+      act.cantidad++; act.monto += d.neto;
       porProveedorRecibido[d.proveedorRuc] = act;
     }
   });
@@ -180,6 +186,9 @@ function calcularResumenVista_() {
   var otrasMonedas = listaMoneda.slice(1).map(function (m) {
     return moneda_(m.monto, m.clave) + ' (' + m.cantidad + (m.cantidad === 1 ? ' doc.)' : ' docs.)');
   });
+  var ventas = aLista(porMonedaVentas).sort(porMonto);
+  var ventasTexto = ventas.length ? ventas.map(function (m) { return moneda_(m.monto, m.clave); }).join(' + ') : moneda_(0);
+  var ventasDocs = ventas.reduce(function (a, m) { return a + m.cantidad; }, 0);
 
   var proveedoresDistintos = {};
   docs.forEach(function (d) { proveedoresDistintos[d.proveedorRuc] = true; });
@@ -208,6 +217,8 @@ function calcularResumenVista_() {
     proveedoresDistintosTexto: miles_(cuantosProveedores),
     monedaPrincipal: monedaPrincipal.clave,
     montoPrincipalTexto: moneda_(monedaPrincipal.monto, monedaPrincipal.clave),
+    ventasTexto: ventasTexto,
+    ventasDocs: ventasDocs,
     otrasMonedas: otrasMonedas,
     documentosConDetraccion: documentosConDetraccion,
     montoDetraccionTexto: moneda_(montoDetraccion),
@@ -227,6 +238,7 @@ function calcularResumenVista_() {
 function anotarPrecio_(precios, fila, c) {
   if (c.descripcion < 0 || c.precio < 0) return;
   if (String(fila[c.origen]) !== 'Recibido') return;
+  if (/nota/i.test(String(fila[c.tipo]))) return; // una nota corrige un precio, no es una compra
   var desc = String(fila[c.descripcion] || '').replace(/\s+/g, ' ').trim();
   var precio = Number(fila[c.precio]) || 0;
   if (desc.length < 4 || precio <= 0) return;
@@ -249,7 +261,7 @@ function indicadoresNuevos_(docs, precios, clavesPeriodo) {
   var esImpo = function (d) {
     return /COMEX|IMPORTA/i.test(d.area) || d.oc.split(' / ').some(function (o) { return /^\d{3}-\d{4}$/.test(o.trim()); });
   };
-  var enSoles = function (d) { return d.moneda === 'PEN' ? d.total : 0; };
+  var enSoles = function (d) { return d.moneda === 'PEN' ? d.neto : 0; };
 
   // Cobertura: cuántos recibidos ya están unidos a su OC y a un centro de costo.
   var conOc = recibidos.filter(function (d) { return d.oc; }).length;
@@ -263,13 +275,16 @@ function indicadoresNuevos_(docs, precios, clavesPeriodo) {
   // Por mes: total, detracción y gastos de importación (en soles).
   var mes = {};
   docs.forEach(function (d) {
-    var m = mes[d.periodo] || (mes[d.periodo] = { docs: 0, total: 0, detraccion: 0, impo: 0 });
-    m.docs++; m.total += enSoles(d); m.detraccion += d.detraccion;
-    if (d.origen === 'Recibido' && esImpo(d)) m.impo += enSoles(d);
+    var m = mes[d.periodo] || (mes[d.periodo] = { docs: 0, compras: 0, ventas: 0, detraccion: 0, impo: 0 });
+    if (d.origen === 'Recibido') {
+      m.docs++; m.compras += enSoles(d); m.detraccion += d.detraccion;
+      if (esImpo(d)) m.impo += enSoles(d);
+    } else if (d.origen === 'Emitido') m.ventas += enSoles(d);
   });
   var porMes = clavesPeriodo.map(function (k) {
-    var m = mes[k] || { docs: 0, total: 0, detraccion: 0, impo: 0 };
-    return { etiqueta: etiquetaPeriodo_(k), docs: miles_(m.docs), total: moneda_(m.total), detraccion: moneda_(m.detraccion), impo: moneda_(m.impo) };
+    var m = mes[k] || { docs: 0, compras: 0, ventas: 0, detraccion: 0, impo: 0 };
+    return { etiqueta: etiquetaPeriodo_(k), docs: miles_(m.docs), total: moneda_(m.compras), ventas: moneda_(m.ventas),
+      detraccion: moneda_(m.detraccion), impo: moneda_(m.impo) };
   });
 
   // Precios en el tiempo: productos comprados en dos meses o más.
@@ -298,8 +313,8 @@ function indicadoresNuevos_(docs, precios, clavesPeriodo) {
     d.oc.split(' / ').forEach(function (o) {
       o = o.trim(); if (!o) return;
       var x = impo[o] || (impo[o] = { oc: o, docs: 0, montos: {}, proveedores: {}, legajo: d.legajo, situacion: d.situacion, soles: 0 });
-      x.docs++; x.montos[d.moneda] = (x.montos[d.moneda] || 0) + d.total; x.proveedores[d.proveedor] = true;
-      if (d.moneda === 'PEN') x.soles += d.total;
+      x.docs++; x.montos[d.moneda] = (x.montos[d.moneda] || 0) + d.neto; x.proveedores[d.proveedor] = true;
+      if (d.moneda === 'PEN') x.soles += d.neto;
     });
   });
   var importaciones = Object.keys(impo).map(function (o) {
@@ -315,7 +330,7 @@ function indicadoresNuevos_(docs, precios, clavesPeriodo) {
   recibidos.forEach(function (d) {
     if (ult.indexOf(d.periodo) === -1 || d.moneda !== 'PEN') return;
     var x = prov[d.proveedorRuc] || (prov[d.proveedorRuc] = { nombre: d.proveedor, ruc: d.proveedorRuc, total: 0, meses: {} });
-    x.total += d.total; x.meses[d.periodo] = (x.meses[d.periodo] || 0) + d.total;
+    x.total += d.neto; x.meses[d.periodo] = (x.meses[d.periodo] || 0) + d.neto;
   });
   var provLista = Object.keys(prov).map(function (r) { return prov[r]; }).sort(function (a, b) { return b.total - a.total; }).slice(0, 10);
   var proveedoresMes = {

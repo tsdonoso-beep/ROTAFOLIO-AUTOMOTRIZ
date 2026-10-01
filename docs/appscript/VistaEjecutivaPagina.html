@@ -138,7 +138,8 @@
   </section>
 
   <section class="tarjeta tarjeta-ancha">
-    <h2>Evolución mensual</h2>
+    <h2>Compras por mes (recibidos, notas de crédito restadas)</h2>
+    <p class="nota">Por mes de emisión del comprobante. El SIRE anota cada uno en el mes en que se registra: un mes puede diferir un poco del SIRE.</p>
     <div id="barrasPeriodo"></div>
   </section>
 
@@ -150,7 +151,7 @@
   <p class="seccion-titulo">Indicadores para Contabilidad</p>
 
   <section class="tarjeta tarjeta-ancha">
-    <h2>Por mes: total, detracción y gastos de importación (en soles)</h2>
+    <h2>Por mes: compras, ventas, detracción y gastos de importación (en soles)</h2>
     <div class="desplazable" id="tablaMes"></div>
   </section>
 
@@ -232,7 +233,8 @@
 
     document.getElementById('kpis').innerHTML =
       tarjetaKpi('Comprobantes con detalle', d.totalDocumentosTexto) +
-      tarjetaKpi('Monto total (' + esc(d.monedaPrincipal) + ')', esc(d.montoPrincipalTexto), otrasMonedasHtml) +
+      tarjetaKpi('Compras · recibidos (' + esc(d.monedaPrincipal) + ')', esc(d.montoPrincipalTexto), otrasMonedasHtml + '<div class="kpi-extra">notas de crédito restadas</div>') +
+      (d.ventasTexto ? tarjetaKpi('Ventas · emitidos', esc(d.ventasTexto), '<div class="kpi-extra">' + d.ventasDocs + ' comprobantes</div>') : '') +
       tarjetaKpi('Proveedores distintos', d.proveedoresDistintosTexto) +
       tarjetaKpi('Con detracción', esc(d.montoDetraccionTexto), '<div class="kpi-extra">' + d.documentosConDetraccion + ' comprobantes</div>') +
       tarjetaKpi('Período cubierto', esc(d.rangoPeriodo), null, true) +
@@ -284,11 +286,11 @@
 
   function pintarIndicadores(d) {
     if (!d.porMes) return; // un script viejo en el servidor: sin estas secciones
-    document.getElementById('tablaMes').innerHTML = d.porMes.length ? tabla(['Mes', 'Comprobantes', 'Total', 'Detracción', 'Gastos de importación'],
+    document.getElementById('tablaMes').innerHTML = d.porMes.length ? tabla(['Mes', 'Recibidos', 'Compras', 'Ventas', 'Detracción', 'Gastos de importación'],
       d.porMes.map(function (m) {
         return '<tr><td>' + esc(m.etiqueta) + '</td><td class="td-num">' + m.docs + '</td><td class="td-num td-monto">' + esc(m.total) +
-          '</td><td class="td-num">' + esc(m.detraccion) + '</td><td class="td-num">' + esc(m.impo) + '</td></tr>';
-      }), [1, 2, 3, 4]) : '<p class="vacio">Sin datos.</p>';
+          '</td><td class="td-num">' + esc(m.ventas || '') + '</td><td class="td-num">' + esc(m.detraccion) + '</td><td class="td-num">' + esc(m.impo) + '</td></tr>';
+      }), [1, 2, 3, 4, 5]) : '<p class="vacio">Sin datos.</p>';
 
     PRECIOS = d.precios || [];
     pintarPrecios('');
