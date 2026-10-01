@@ -13,7 +13,6 @@
     "cpe:hojas": "node --env-file-if-exists=.env.local --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/local/estado-hojas.mts",
     "db:consolidar": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/local/consolidar-db.mts",
     "cpe:estado": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/local/estado.mts",
-    "cpe:informe": "node --env-file-if-exists=.env.local --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/local/informe.mts",
     "sire:local": "node --env-file-if-exists=.env.local --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/local/comun/con-bitacora.mts scripts/sunat-diario.mts",
     "xml:local": "node --env-file-if-exists=.env.local --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/local/comun/con-bitacora.mts scripts/descargar-cpe.mts",
     "format": "prettier --write scripts/local",

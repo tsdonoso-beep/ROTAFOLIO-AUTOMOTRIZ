@@ -17,9 +17,17 @@
 name: SUNAT CPE por API
 
 on:
+  # Arranca apenas termina «SUNAT descargar XML». Los crons de GitHub llegan
+  # con 4-7 h de atraso y, si GitHub está cargado, a veces se DESCARTAN (el
+  # cron de las 13:30 de «consultar CPE individual» no corrió ni una vez).
+  # Encadenado no depende de eso, nunca usa la cuenta de SOL a la vez que
+  # «descargar XML», y para entonces «SUNAT diario» ya trajo la lista del SIRE.
+  workflow_run:
+    workflows: ["SUNAT descargar XML"]
+    types: [completed]
   schedule:
-    # 8:30am en Lima (UTC-5): media hora después de «SUNAT diario» (8:00), que
-    # es el que trae de SIRE los pendientes nuevos de cada día.
+    # Respaldo por si el encadenado no llegara a dispararse. Si corren los dos,
+    # el segundo espera (concurrency) y encuentra 0 pendientes en segundos.
     - cron: "30 13 * * *"
   workflow_dispatch:
     inputs:
