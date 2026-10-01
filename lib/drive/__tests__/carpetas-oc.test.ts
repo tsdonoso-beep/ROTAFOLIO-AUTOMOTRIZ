@@ -30,6 +30,9 @@ test("las carpetas de importaciones llevan la OC con 3 dígitos", () => {
   assert.equal(carpetaDeOC("IMPORTACIÓN 2026-0172 NINGBO", false, imp)?.oc, "172-2026");
   assert.equal(carpetaDeOC("OC IMPO 095-2026 X", true, imp)?.oc, "095-2026");
   assert.equal(carpetaDeOC("172-2026 NINGBO", false, imp)?.proveedor, "NINGBO");
+  // Con cero en vez de O, como vienen en la carpeta de importaciones.
+  assert.equal(carpetaDeOC("0C 101-2026 ( AMAZON - CUCHILLA DE VUELTA DE BASE CÓNCAVA (2 UND))", false, imp)?.oc, "101-2026");
+  assert.equal(carpetaDeOC("0C 142-2026 MANTA CALEFACTORA", true, imp)?.oc, "142-2026");
   // La misma carpeta leída como nacional sigue con 4 dígitos.
   assert.equal(carpetaDeOC("OC 172-2026 NINGBO")?.oc, "0172-2026");
 });

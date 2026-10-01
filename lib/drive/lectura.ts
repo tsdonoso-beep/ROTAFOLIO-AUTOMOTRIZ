@@ -109,7 +109,8 @@ export function comprobanteEnTexto(P: string): { tipo: string; serie: string } {
   else if (esBoleta && /^B/.test(serie)) tipo = "BOLETA";
   else if (/COMMERCIAL\s+INVOICE|\bINVOICE\s*(NO\b|N[°º]|#|NUMBER|DATE)/.test(P)) {
     tipo = "INVOICE";
-    const inv = /INVOICE\s*(?:NO\.?|N[°º]|#|NUMBER)\s*[:.]?\s*([A-Z0-9][A-Z0-9/-]{2,20})/.exec(P);
+    // El número lleva al menos un dígito: en «INVOICE # SHIP TO» no hay número.
+    const inv = /INVOICE\s*(?:NO\.?|N[°º]|#|NUMBER)\s*[:.]?\s*((?=[A-Z0-9/-]*\d)[A-Z0-9][A-Z0-9/-]{2,20})/.exec(P);
     serie = inv ? inv[1] : "";
   }
   return { tipo, serie: tipo ? serie : "" };

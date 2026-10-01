@@ -82,6 +82,8 @@ test("la invoice del proveedor del exterior, en inglés", () => {
   assert.equal(d.tipo, "INVOICE");
   assert.equal(d.serie, "NB2026-0172");
   assert.equal(d.ruc, "");
+  // «Invoice# SHIP TO …»: sin número, no se inventa uno.
+  assert.equal(comprobanteEnTexto(normalizarTexto("Invoice # SHIP TO INDUSTRIAS ROLAND PRINT Invoice Date 2026-03-01")).serie, "");
 });
 
 test("lo que no es un comprobante no se toma por uno", () => {

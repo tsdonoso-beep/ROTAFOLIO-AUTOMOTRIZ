@@ -38,7 +38,8 @@ export type Procedencia = "Nacional" | "Importación";
 
 // «IMP», «IMPO», «IMPORTACIÓN» van delante (o detrás de «OC») en las carpetas de importaciones.
 const IMPO = String.raw`(?:IMP(?:O|ORTACI[OÓ]N)?\.?)`;
-const PREFIJO = String.raw`(?:(?:O\.?\s*C\.?|O\.?\s*S\.?|ORDEN\s+DE\s+COMPRA|ORDEN\s+DE\s+SERVICIO)(?:\s*${IMPO})?|${IMPO}(?:\s*O\.?\s*C\.?)?)`;
+// «0C 101-2026» (con cero en vez de O) aparece en las carpetas de importaciones.
+const PREFIJO = String.raw`(?:(?:[O0]\.?\s*C\.?|[O0]\.?\s*S\.?|ORDEN\s+DE\s+COMPRA|ORDEN\s+DE\s+SERVICIO)(?:\s*${IMPO})?|${IMPO}(?:\s*O\.?\s*C\.?)?)`;
 const NUM = String.raw`(\d{1,5})(?:\.\d{1,2})?`;
 const ANIO = String.raw`(20[2-3]\d)`;
 const SEP = String.raw`\s*[-_]\s*`;
@@ -65,7 +66,7 @@ export function carpetaDeOC(nombre: string, estricto = false, procedencia: Proce
   // Sin prefijo, «2026-01 ENERO» no es la OC 1: se piden al menos 3 dígitos.
   if (!m[1] && num.length < 3) return null;
 
-  const tipo: "OC" | "OS" = /^(O\.?\s*S|ORDEN\s+DE\s+SERVICIO)/i.test(t) ? "OS" : "OC";
+  const tipo: "OC" | "OS" = /^([O0]\.?\s*S|ORDEN\s+DE\s+SERVICIO)/i.test(t) ? "OS" : "OC";
   const limpio = (resto ?? "").replace(/^[\s\-_–—:.]+/, "").trim();
   const corte = limpio.lastIndexOf(" - ");
   const proveedor = (corte > 0 ? limpio.slice(0, corte) : limpio).trim();

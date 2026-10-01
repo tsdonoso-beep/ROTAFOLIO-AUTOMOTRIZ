@@ -268,7 +268,7 @@ const lecturaConError = (detalle: string): Lectura =>
 
 /** Cómo fue la lectura de esta corrida, para el resumen. */
 const lectura = {
-  candidatos: 0, deAntes: 0, ahora: 0, quedan: 0, sinHerramientas: 0, guardadas: 0,
+  candidatos: 0, deAntes: 0, noHaceFalta: 0, ahora: 0, quedan: 0, sinHerramientas: 0, guardadas: 0,
   porMetodo: new Map<string, number>(), avisos: [] as string[],
 };
 
@@ -295,13 +295,23 @@ async function leerArchivo(drive: Drive, a: Archivo, h: Herramientas): Promise<L
       if (!xmls.length) return { ...lecturaConError(""), estado: "SIN COMPROBANTE", metodo: "ZIP", detalle: "el ZIP no trae XML" };
       return lecturaDeXml(xmls, "ZIP");
     }
-    if (como === "DOCUMENTO DE GOOGLE") return lecturaDeTexto(datos.toString("utf8"), "DOCUMENTO DE GOOGLE");
-    if (como === "PDF") {
-      const { texto, metodo } = await textoDePdf(datos, h);
-      return lecturaDeTexto(texto, metodo);
+    let texto: string, metodo: Lectura["metodo"];
+    if (como === "DOCUMENTO DE GOOGLE") { texto = datos.toString("utf8"); metodo = "DOCUMENTO DE GOOGLE"; }
+    else if (como === "PDF") ({ texto, metodo } = await textoDePdf(datos, h));
+    else {
+      const ext = /\.([a-z0-9]{2,5})$/i.exec(a.nombre)?.[1] ?? a.mime.split("/")[1] ?? "png";
+      texto = await textoDeImagen(datos, ext);
+      metodo = "OCR";
     }
-    const ext = /\.([a-z0-9]{2,5})$/i.exec(a.nombre)?.[1] ?? a.mime.split("/")[1] ?? "png";
-    return lecturaDeTexto(await textoDeImagen(datos, ext), "OCR");
+    const l = lecturaDeTexto(texto, metodo);
+    // En depuración, el texto de lo que no se reconoció queda en el artefacto
+    // (textos/), para ver por qué y mejorar la regla.
+    if (DEBUG && l.estado !== "LEÍDO") {
+      mkdirSync(join(SALIDA, "textos"), { recursive: true });
+      writeFileSync(join(SALIDA, "textos", `${a.oc?.oc ?? "sin-oc"} ${a.nombre.replace(/[\/\\:*?"<>|]/g, "_").slice(0, 80)}.txt`),
+        `${a.url}\n${metodo}\n\n${texto.slice(0, 4000)}`);
+    }
+    return l;
   } catch (e) {
     return lecturaConError(e instanceof Error ? e.message : String(e));
   }
@@ -331,8 +341,8 @@ async function leerPorDentro(drive: Drive, sb: Base | null): Promise<void> {
     }
   }
 
-  const ocConNumero = new Set(archivos.filter(a => a.oc && a.serie && esComprobante(a.parece)).map(a => a.oc!.carpetaId));
-  const pendientes: Array<{ a: Archivo; p: number; reintento: boolean }> = [];
+  // Primero lo ya leído en corridas anteriores (sin cambios desde entonces).
+  const candidatos: Array<{ a: Archivo; p: number }> = [];
   for (const a of archivos) {
     if (!a.oc) continue;
     const p = prioridadDeLectura(a);
@@ -344,6 +354,17 @@ async function leerPorDentro(drive: Drive, sb: Base | null): Promise<void> {
       lectura.deAntes++;
       continue;
     }
+    candidatos.push({ a, p });
+  }
+
+  // Las OC que ya tienen un comprobante con número (por el nombre o leído).
+  const ocConNumero = new Set(archivos.filter(a => a.oc && esComprobanteArch(a) && serieDe(a)).map(a => a.oc!.carpetaId));
+  const pendientes: Array<{ a: Archivo; p: number; reintento: boolean }> = [];
+  for (const { a, p } of candidatos) {
+    // Un archivo que solo dice «OC» casi siempre es la propia OC: se abre
+    // solo si la OC todavía no tiene ningún comprobante con número.
+    if (p === 1 && ocConNumero.has(a.oc!.carpetaId)) { lectura.noHaceFalta++; continue; }
+    const antes = anteriores.get(a.id);
     const como = tipoDeLectura(a.nombre, a.mime);
     if ((como === "PDF" && !h.pdf && !h.ocr) || (como === "IMAGEN" && !h.ocr)) { lectura.sinHerramientas++; continue; }
     pendientes.push({ a, p, reintento: antes?.estado === "ERROR" });
@@ -374,7 +395,13 @@ async function leerPorDentro(drive: Drive, sb: Base | null): Promise<void> {
 
   const trabajador = async () => {
     while (siguiente < cola.length && Date.now() < tope) {
-      const { a } = cola[siguiente++];
+      const { a, p } = cola[siguiente++];
+      // Los que solo dicen «OC» van al final: si para entonces la OC ya tiene
+      // su comprobante leído, no hace falta abrirlos.
+      if (p === 1 && archivos.some(x => x.oc?.carpetaId === a.oc!.carpetaId && x.lectura?.estado === "LEÍDO")) {
+        lectura.noHaceFalta++;
+        continue;
+      }
       const l = await leerArchivo(drive, a, h);
       a.lectura = l;
       lectura.ahora++;
@@ -391,7 +418,7 @@ async function leerPorDentro(drive: Drive, sb: Base | null): Promise<void> {
   if (cola.length) console.log(`▶ Lectura por dentro: ${cola.length} archivos (de ${pendientes.length} pendientes), ${LECTORES} a la vez`);
   await Promise.all(Array.from({ length: Math.max(1, LECTORES) }, trabajador));
   await guardar(true);
-  lectura.quedan = pendientes.length - lectura.ahora;
+  lectura.quedan = Math.max(0, pendientes.length - siguiente);
 }
 
 // ── Las tablas ─────────────────────────────────────────────────────
@@ -666,6 +693,7 @@ function resumenDeLectura(deOc: Archivo[]): string {
     "",
     `- Archivos que el nombre no explica: **${lectura.candidatos}** (XML/ZIP sin serie, «factura» o «invoice» sin número, nombres genéricos, «OTRO»)`,
     `- Leídos en esta corrida: **${lectura.ahora}**; ya leídos antes: ${lectura.deAntes}; quedan para la próxima: ${Math.max(0, lectura.quedan)}` +
+      (lectura.noHaceFalta ? `; no hace falta abrirlos (solo dicen «OC» y la OC ya tiene su comprobante): ${lectura.noHaceFalta}` : "") +
       (lectura.sinHerramientas ? `; sin herramienta para leerlos: ${lectura.sinHerramientas}` : ""),
     `- Cómo se leyeron (esta corrida): ${[...lectura.porMetodo.entries()].map(([m, n]) => `${m} ${n}`).join(", ") || "—"}`,
     `- Con comprobante y número: **${conComprobante.length}** (con RUC del emisor: ${cuenta(a => a.lectura!.estado === "LEÍDO" && !!a.lectura!.ruc)}); ` +
