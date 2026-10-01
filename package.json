@@ -18,7 +18,8 @@
     "format": "prettier --write scripts/local",
     "format:check": "prettier --check scripts/local",
     "padron:local": "node --env-file-if-exists=.env.local --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/local/comun/con-bitacora.mts scripts/consultar-padron-ruc.mts",
-    "carpetas:local": "node --env-file-if-exists=.env.local --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/local/comun/con-bitacora.mts scripts/carpetas-oc.mts"
+    "carpetas:local": "node --env-file-if-exists=.env.local --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/local/comun/con-bitacora.mts scripts/carpetas-oc.mts",
+    "hojas:detalle": "node --env-file-if-exists=.env.local --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/local/publicar-detalle.mts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.6",

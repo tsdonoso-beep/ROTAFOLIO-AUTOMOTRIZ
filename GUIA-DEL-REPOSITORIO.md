@@ -501,6 +501,11 @@ Comprobantes de compra tipo 01/07/08 (sin la basura "tipo 53" del SIRE):
 Actions → **SUNAT CPE por API** → Run workflow (vacío = mes anterior + actual),
 o en una laptop `pnpm cpe:local` — todo en `docs/pipeline-cpe-local.md`.
 
+### Rehacer la hoja DETALLE sin bajar nada de SUNAT
+`pnpm hojas:detalle` en la laptop (con `.env.local`). Para cuando cambian sus
+columnas o lo que se le cruza (legajo, carpeta madre): `cpe:local` solo
+republica si guardó comprobantes nuevos.
+
 ### Correr un lote manual de no-E001 por pantallas (respaldo)
 Actions → **SUNAT consultar CPE individual** → Run workflow →
 `debug` **desmarcado**, `periodo` 202609 (o el que toque), `orden` antiguo,
