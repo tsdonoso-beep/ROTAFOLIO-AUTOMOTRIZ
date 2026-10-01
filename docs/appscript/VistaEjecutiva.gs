@@ -70,7 +70,8 @@ var VISTA_MAX_PRODUCTOS = 7000; // lo que viaja al navegador para el buscador (l
 /**
  * Lee la pestaña de detalle una vez y devuelve:
  *   docs      una fila por COMPROBANTE (la hoja trae una por ítem):
- *             [período, origen, proveedor, tipo, moneda, neto, detracción, oc, centro de costo, ¿importación?]
+ *             [período, origen, proveedor, tipo, moneda, neto, detracción, oc, centro de costo, ¿importación?,
+ *              serie-número, fecha de emisión, id del PDF, id del XML]
  *             (origen 0 recibido / 1 emitido / 2 otro; tipo F B C D O; neto con la nota de crédito restando)
  *   productos una fila por producto comprado:
  *             [descripción, unidad, moneda, proveedor, veces, gasto, [[período, precio], …], id del PDF de la última compra]
@@ -92,7 +93,8 @@ function datosCompactosVista_() {
     tipo: col('Tipo'), serie: col('Serie'), numero: col('Número'), moneda: col('Moneda'),
     detraccion: col('Detracción'), total: col('Total del comprobante'),
     descripcion: opc('Descripción'), unidad: opc('Unidad'), cantidad: opc('Cantidad'),
-    precio: opc('Precio unitario'), importe: opc('Importe'), pdf: opc('PDF'),
+    precio: opc('Precio unitario'), importe: opc('Importe'), pdf: opc('PDF'), xml: opc('XML'),
+    fecha: opc('Fecha de emisión'), carpeta: opc('Carpeta de la OC'),
     oc: opc('OC (carpeta)'), cc: opc('Centro de costo (CG)'), area: opc('Área que completa el legajo'),
     legajo: opc('Legajo de la OC'), situacion: opc('Situación del pago (OC)')
   };
@@ -146,9 +148,14 @@ function datosCompactosVista_() {
       mon,
       redondear2_((esNota ? -1 : 1) * Math.abs(Number(f[c.total]) || 0)),
       redondear2_(Number(f[c.detraccion]) || 0),
-      cod('oc', oc, [oc, txt(f, c.legajo), txt(f, c.situacion)]),
+      cod('oc', oc, [oc, txt(f, c.legajo), txt(f, c.situacion), idDrive_(txt(f, c.carpeta))]),
       cod('cc', txt(f, c.cc) === '-' ? '' : txt(f, c.cc)),
-      impo ? 1 : 0
+      impo ? 1 : 0,
+      // Para el buscador de facturas:
+      txt(f, c.serie).toUpperCase() + '-' + (txt(f, c.numero).replace(/^0+(?=\d)/, '')),
+      fechaTexto_(c.fecha >= 0 ? f[c.fecha] : ''),
+      idDrive_(txt(f, c.pdf)),
+      idDrive_(txt(f, c.xml))
     ]);
   }
 
@@ -174,6 +181,52 @@ function datosCompactosVista_() {
     totalProductos: lista.length,
     lineas: valores.length - 1
   };
+}
+
+/**
+ * El detalle de UN comprobante (sus líneas), para cuando alguien lo abre en
+ * el buscador de facturas. Se busca con TextFinder en la columna «Número»:
+ * no hace falta volver a leer toda la hoja.
+ */
+function detalleDelComprobante(ruc, serie, numero) {
+  try {
+    var hoja = SpreadsheetApp.openById(HOJA_ID_VISTA).getSheetByName(NOMBRE_PESTANA_VISTA);
+    var cab = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues()[0];
+    var i = function (n) { return cab.indexOf(n); };
+    var iNum = i('Número'), iRuc = i('RUC proveedor'), iSerie = i('Serie');
+    if (iNum < 0) return { error: 'La hoja no trae la columna «Número».' };
+    var sinCeros = function (v) { return String(v == null ? '' : v).trim().replace(/^0+(?=\d)/, ''); };
+    var celdas = hoja.getRange(2, iNum + 1, hoja.getLastRow() - 1, 1)
+      // El número exacto, con o sin ceros a la izquierda («77725» o «00077725»).
+      .createTextFinder('^0*' + sinCeros(numero).replace(/\D/g, '') + '$').useRegularExpression(true).findAll();
+    var filas = [];
+    celdas.forEach(function (celda) {
+      if (sinCeros(celda.getValue()) !== sinCeros(numero)) return;
+      var f = hoja.getRange(celda.getRow(), 1, 1, cab.length).getValues()[0];
+      if (String(f[iRuc]).trim() !== String(ruc).trim() || String(f[iSerie]).trim().toUpperCase() !== String(serie).toUpperCase()) return;
+      filas.push(f);
+    });
+    if (!filas.length) return { error: 'No se encontró el comprobante en la hoja.' };
+    var v = function (f, n) { var k = i(n); return k >= 0 ? f[k] : ''; };
+    filas.sort(function (a, b) { return (Number(v(a, 'Línea')) || 0) - (Number(v(b, 'Línea')) || 0); });
+    var f0 = filas[0];
+    return {
+      lineas: filas.map(function (f) {
+        return [String(v(f, 'Descripción')), Number(v(f, 'Cantidad')) || 0, String(v(f, 'Unidad')), Number(v(f, 'Precio unitario')) || 0, Number(v(f, 'Importe')) || 0];
+      }),
+      formaPago: String(v(f0, 'Forma de pago')), guia: String(v(f0, 'Guía de remisión')),
+      ocProveedor: String(v(f0, 'Orden de compra')), cc: String(v(f0, 'Centro de costo (CG)')),
+      comprador: String(v(f0, 'Comprador (OC)')), detraccion: Number(v(f0, 'Detracción')) || 0
+    };
+  } catch (e) {
+    return { error: e.message };
+  }
+}
+
+/** «12/09/2026» venga como fecha o como texto. */
+function fechaTexto_(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone() || 'America/Lima', 'dd/MM/yyyy');
+  return String(v == null ? '' : v).trim();
 }
 
 /** El ID de un enlace de Drive (…/file/d/ID/…, …?id=ID), para no mandar la URL entera. */

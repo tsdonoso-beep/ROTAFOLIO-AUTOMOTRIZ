@@ -155,6 +155,24 @@
   .tabla td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .sub { font-size: 11.5px; color: var(--text3); margin-top: 2px; }
 
+  /* Buscador de facturas */
+  .buscar-factura { border-color: #BFE6E2; }
+  .facturas { display: flex; flex-direction: column; margin-top: 4px; }
+  .factura { display: grid; grid-template-columns: 92px minmax(0, 1.1fr) minmax(0, 1.6fr) 130px minmax(0, 1fr) 130px; gap: 12px; align-items: center;
+             padding: 11px 8px; border-top: 1px solid var(--border); cursor: pointer; border-radius: 8px; }
+  .factura:first-child { border-top: 0; }
+  .factura:hover, .factura.abierta { background: var(--surface2); }
+  .f-comp { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .f-total { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .f-acc { display: flex; gap: 8px; justify-content: flex-end; }
+  .f-acc a { font-size: 12.5px; font-weight: 600; text-decoration: none; padding: 5px 9px; border-radius: 7px; background: var(--azul-suave); color: var(--azul); white-space: nowrap; }
+  .f-acc a:hover { background: #D3E4F2; }
+  .f-det { padding: 14px 16px 16px; margin: 0 0 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; }
+  .f-meta { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 12.5px; color: var(--text2); margin-bottom: 12px; }
+  .f-meta b { color: var(--text); }
+  .ayuda { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+  .ayuda button { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 5px 10px; cursor: pointer; color: var(--text2); font-size: 12.5px; }
+  .ayuda button:hover { border-color: var(--accent); color: var(--accent-texto); }
   .pie { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; margin-top: 24px; font-size: 12px; color: var(--text3); }
 
   @media (max-width: 980px) {
@@ -165,6 +183,8 @@
     .producto > :first-child { grid-column: 1 / -1; }
     .producto > :nth-child(2), .producto > :nth-child(4) { display: none; }
     .p-cab { display: none; }
+    .factura { grid-template-columns: minmax(0, 1fr) auto; row-gap: 4px; }
+    .factura > :nth-child(1), .factura > :nth-child(5) { display: none; }
   }
   @media (max-width: 560px) { .kpis { grid-template-columns: 1fr; } .filtro-activo { margin-left: 0; } }
 </style>
@@ -229,6 +249,12 @@
       <div class="grande" id="estadoHora">—</div>
       <div class="linea">Recarga la página para ver lo último.</div>
     </div>
+  </section>
+
+  <section class="tarjeta tarjeta-ancha buscar-factura">
+    <div class="tarjeta-cab"><h2>Buscar una factura</h2><span class="nota">En todo el año, compras y ventas · funciona aunque SUNAT esté caída</span></div>
+    <input class="buscador" id="buscarFactura" type="search" placeholder="F001-123, número, RUC, proveedor o monto (ej.: 43.64)">
+    <div class="facturas" id="facturas"></div>
   </section>
 
   <div class="filtros">
@@ -363,6 +389,14 @@
     document.getElementById('fLimpiar').onclick = function () { F.mes = ''; F.origen = 0; sel.value = ''; marcar('fOrigen', 0); pintar(); };
     pintar();
     pintarBuscador();
+    var tf; var inF = document.getElementById('buscarFactura');
+    inF.oninput = function () { var v = this.value; clearTimeout(tf); tf = setTimeout(function () { buscarFacturas(v); }, 120); };
+    document.getElementById('facturas').onclick = function (e) {
+      if (e.target.closest('a')) return;
+      var ej = e.target.closest('button[data-q]'); if (ej) { inF.value = ej.getAttribute('data-q'); buscarFacturas(inF.value); return; }
+      var fila = e.target.closest('.factura'); if (fila) abrirFactura(fila);
+    };
+    buscarFacturas('');
   }
 
   function segmento(id, alCambiar) {
@@ -545,6 +579,85 @@
       return '<div class="fila-barra"><div class="fb-cab"><span class="fb-etq" title="' + esc(D.dic.cc[k]) + '">' + esc(D.dic.cc[k]) + '</span><span class="fb-cifras"><b>' + dinero(cc[k], null, true) + '</b></span></div>' +
         '<div class="fb-pista"><span style="width:' + Math.max(3, 100 * cc[k] / max) + '%;background:#006DB1"></span></div></div>';
     }).join('') : '<p class="vacio">Todavía sin centros de costo: llegan cuando la factura queda unida a su OC.</p>';
+  }
+
+
+  // ── Buscador de facturas ──
+  var TIPO_NOMBRE = { F: 'Factura', B: 'Boleta', C: 'Nota de crédito', D: 'Nota de débito', O: 'Comprobante' };
+  var DETALLES = {};
+  function claveFecha(x) { var m = /(\d{2})\/(\d{2})\/(\d{4})/.exec(x[11] || ''); return m ? m[3] + m[2] + m[1] : (x[0] || '') + '00'; }
+  function buscarFacturas(q) {
+    q = String(q || '').trim();
+    var caja = document.getElementById('facturas');
+    if (!q) {
+      caja.innerHTML = '<div class="ayuda"><span class="nota" style="align-self:center">Prueba:</span>' +
+        ['F216-777773', 'DHL', '20101128777', '43.64'].map(function (e) { return '<button data-q="' + e + '">' + e + '</button>'; }).join('') + '</div>';
+      return;
+    }
+    var Q = plano(q), lista;
+    var mSerie = /^([A-Z0-9]{3,4})[\s-]+0*(\d+)$/.exec(Q);
+    var mMonto = /^-?[\d,]*\.\d{1,2}$/.test(q.replace(/^S\/\s*|^US\$\s*/i, '')) ? Number(q.replace(/[^\d.\-]/g, '')) : null;
+    if (mSerie) {
+      var buscado = mSerie[1] + '-' + mSerie[2];
+      lista = D.docs.filter(function (x) { return x[10] === buscado; });
+    } else if (/^\d{11}$/.test(Q)) {
+      lista = D.docs.filter(function (x) { return (D.dic.prov[x[2]] || [''])[0] === Q; });
+    } else if (/^\d{1,8}$/.test(Q)) {
+      lista = D.docs.filter(function (x) { return x[10].split('-').pop() === String(Number(Q)); });
+    } else if (mMonto !== null) {
+      lista = D.docs.filter(function (x) { return Math.abs(Math.abs(x[5]) - Math.abs(mMonto)) < 0.01; });
+    } else {
+      var palabras = Q.split(/\s+/).filter(function (w) { return w.length > 1; });
+      lista = D.docs.filter(function (x) {
+        var t = x.texto || (x.texto = plano(x[10] + ' ' + (D.dic.prov[x[2]] || ['', '']).join(' ')));
+        return palabras.every(function (w) { return t.indexOf(w) !== -1; });
+      });
+    }
+    lista.sort(function (a, b) { var ka = claveFecha(a), kb = claveFecha(b); return ka < kb ? 1 : ka > kb ? -1 : 0; });
+    var total = lista.length; lista = lista.slice(0, 30);
+    caja.innerHTML = total ? '<p class="nota" style="margin:2px 0 6px">' + miles(total) + (total === 1 ? ' comprobante' : ' comprobantes') + (total > 30 ? ' · se muestran los 30 más recientes' : '') + '</p>' +
+      lista.map(function (x) {
+        var prov = D.dic.prov[x[2]] || ['', ''], oc = x[7] >= 0 ? D.dic.oc[x[7]] : null, i = D.docs.indexOf(x);
+        return '<div class="factura" data-i="' + i + '">' +
+          '<div class="p-dato">' + esc(x[11] || etqMes(x[0])) + '</div>' +
+          '<div><div class="f-comp">' + esc(x[10]) + '</div><div class="sub">' + TIPO_NOMBRE[x[3]] + ' · ' + (x[1] === 1 ? 'emitida' : 'recibida') + '</div></div>' +
+          '<div style="min-width:0"><div class="fb-etq">' + esc(prov[1] || prov[0]) + '</div><div class="sub">' + esc(prov[0]) + '</div></div>' +
+          '<div class="f-total' + (x[5] < 0 ? ' sube' : '') + '">' + dinero(x[5], x[4]) + '</div>' +
+          '<div>' + (oc ? '<span class="chip chip-azul">OC ' + esc(oc[0]) + '</span>' : '<span class="nota">sin OC</span>') + '</div>' +
+          '<div class="f-acc">' + (x[12] ? '<a href="https://drive.google.com/file/d/' + esc(x[12]) + '/view" target="_blank" rel="noopener">PDF ↗</a>' : '') +
+          (x[13] ? '<a href="https://drive.google.com/file/d/' + esc(x[13]) + '/view" target="_blank" rel="noopener">XML ↗</a>' : '') + '</div></div>';
+      }).join('') : '<p class="vacio" style="padding:10px 4px">No hay comprobantes con «' + esc(q) + '». Prueba solo con el número, o con el RUC.</p>';
+  }
+  function abrirFactura(fila) {
+    var sig = fila.nextElementSibling;
+    if (sig && sig.classList.contains('f-det')) { sig.remove(); fila.classList.remove('abierta'); return; }
+    var x = D.docs[Number(fila.getAttribute('data-i'))], prov = D.dic.prov[x[2]] || ['', ''];
+    var det = document.createElement('div'); det.className = 'f-det';
+    det.innerHTML = '<div class="linea"><span class="giro" style="display:inline-block;vertical-align:-4px;margin-right:8px"></span>Trayendo el detalle…</div>';
+    fila.classList.add('abierta'); fila.parentNode.insertBefore(det, fila.nextSibling);
+    var partes = x[10].split('-'), numero = partes.pop(), serie = partes.join('-'), clave = prov[0] + '|' + x[10];
+    var pintarDet = function (r) {
+      DETALLES[clave] = r;
+      if (r.error) { det.innerHTML = '<p class="vacio">' + esc(r.error) + '</p>'; return; }
+      var oc = x[7] >= 0 ? D.dic.oc[x[7]] : null;
+      det.innerHTML = '<div class="f-meta">' +
+        (r.formaPago ? '<span>Forma de pago: <b>' + esc(r.formaPago) + '</b></span>' : '') +
+        (r.guia ? '<span>Guía: <b>' + esc(r.guia) + '</b></span>' : '') +
+        (r.ocProveedor ? '<span>OC que cita el proveedor: <b>' + esc(r.ocProveedor) + '</b></span>' : '') +
+        (r.detraccion ? '<span>Detracción: <b>' + dinero(r.detraccion, x[4]) + '</b></span>' : '') +
+        (oc ? '<span>OC: <b>' + esc(oc[0]) + '</b>' + (oc[2] ? ' · ' + esc(oc[2]) : '') + '</span>' : '') +
+        (r.cc ? '<span>Centro de costo: <b>' + esc(r.cc) + '</b></span>' : '') +
+        (r.comprador ? '<span>Comprador: <b>' + esc(r.comprador) + '</b></span>' : '') +
+        (oc && oc[1] ? '<span class="chip ' + (/^Completo/.test(oc[1]) ? 'chip-ok' : 'chip-warn') + '">' + esc(oc[1]) + '</span>' : '') +
+        (oc && oc[3] ? '<a href="https://drive.google.com/drive/folders/' + esc(oc[3]) + '" target="_blank" rel="noopener"><b>Carpeta de la OC ↗</b></a>' : '') +
+        '</div><table class="tabla"><thead><tr><th>Producto o servicio</th><th class="num">Cantidad</th><th class="num">Precio unitario</th><th class="num">Importe</th></tr></thead><tbody>' +
+        r.lineas.map(function (l) {
+          return '<tr><td>' + esc(l[0]) + '</td><td class="num">' + l[1] + ' ' + esc(l[2]) + '</td><td class="num">' + dinero(l[3], x[4]) + '</td><td class="num"><b>' + dinero(l[4], x[4]) + '</b></td></tr>';
+        }).join('') + '</tbody></table>';
+    };
+    if (DETALLES[clave]) return pintarDet(DETALLES[clave]);
+    google.script.run.withSuccessHandler(pintarDet).withFailureHandler(function (e) { pintarDet({ error: e && e.message ? e.message : String(e) }); })
+      .detalleDelComprobante(prov[0], serie, numero);
   }
 
   // ── Buscador de compras ──
