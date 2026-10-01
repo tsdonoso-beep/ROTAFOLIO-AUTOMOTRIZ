@@ -195,6 +195,18 @@ que es la evidencia para diagnosticar cuando algo falla.
   con origen `CARPETA` (migración 045), que `vinculos_oc()` usa para unir
   cada factura de SUNAT con su OC. Publica la hoja «OC - CARPETAS COMPRAS
   NACIONALES» (pestañas de OC y de ARCHIVOS) en la carpeta SUNAT.
+- **Lectura por dentro:** lo que el nombre no explica («scan001.pdf»,
+  «WhatsApp Image…», «FACTURA LUCY.pdf» sin número, «INVOICE», XML o ZIP sin
+  serie) se baja y se lee: el XML/ZIP exacto, el texto del PDF (`pdftotext`)
+  o, si es escaneo o foto, OCR (`tesseract`, español e inglés). Saca tipo,
+  serie-número, RUC del emisor (validado con su dígito verificador) y la OC
+  que cita el XML (`lib/drive/lectura.ts`, la misma regla que el OCR de
+  `LegajoPorOC.gs`). Cada archivo se lee una vez: queda en `lectura_archivo`
+  (migración 048) y solo se relee si cambió o si dio error. Cada noche hasta
+  3000 archivos / 45 min (nacionales) y 30 min (importaciones); lo que no
+  alcance sigue la noche siguiente. En el cruce cuenta como «Lectura del
+  documento», la fuente más segura. Detalle en `lecturas.csv` y en las
+  columnas «Leído por dentro» de la pestaña ARCHIVOS.
 - **Importaciones:** el mismo script con `PROCEDENCIA=importacion` lee la
   carpeta de importaciones; ahí la OC va con 3 dígitos («172-2026», como en
   el cuadro de aprobaciones), se compara contra el legajo del cuadro en vez
@@ -293,6 +305,7 @@ Apps Script entran como el usuario robot; la app, como la persona.
 | `oc_base_cg` | 3 723 | Centro de costo de cada OC según Control de Gestión | ídem |
 | `oc_legajo` | 506 | Legajo por OC | Apps Script `SubirLegajo.gs` |
 | `oc_carpeta` | — | Cada carpeta de OC de la carpeta madre de compras nacionales | `carpetas-oc` (también sube a `oc_archivo` con origen `CARPETA`) |
+| `lectura_archivo` | — | Lo leído por dentro de cada archivo (XML, PDF, OCR), para no leerlo dos veces | `carpetas-oc` |
 | `equivalencia_centro_costo` | 2 | Centro de costo → código CONCAR, **solo lo confirmado** | a mano |
 
 ### 6.2 Funciones clave (en las migraciones)
@@ -302,7 +315,7 @@ Apps Script entran como el usuario robot; la app, como la persona.
 | `guardar_cpe(p_empresa_ruc, p_docs)` | Guarda comprobante + ítems; idempotente (repetir actualiza, no duplica) | 032 a 036 |
 | `historico_comprobantes_sunat(p_periodo)` | Filas de la hoja **COMPROBANTES SUNAT** | 017, 039, 041, 042 |
 | `detalle_cpe(p_periodo)` | Filas de la hoja **COMPROBANTES SUNAT - DETALLE** | 032 a 036, 039, 041, 042 |
-| `vinculos_oc()` | Cruza comprobantes con archivos de las carpetas de OC | 039, 040, 042, 045, 046 |
+| `vinculos_oc()` | Cruza comprobantes con archivos de las carpetas de OC | 039, 040, 042, 045, 046, 048 |
 | `cargar_captura_oc(...)` | Recibe la captura de OC desde Apps Script | 039, 042 |
 
 La versión vigente de cada función es la de la **última** migración que la toca.

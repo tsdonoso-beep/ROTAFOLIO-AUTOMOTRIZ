@@ -9,6 +9,13 @@
 // XML…), con la serie del comprobante cuando el nombre la trae. Con eso la
 // base une cada factura de SUNAT con su OC sin depender de los enlaces de CG.
 //
+// Cuando el nombre no alcanza («scan001.pdf», «WhatsApp Image…», «FACTURA
+// LUCY.pdf» sin número, una «INVOICE»), el archivo se abre y se lee POR
+// DENTRO: el XML o el ZIP del comprobante, el texto del PDF o, si es un
+// escaneo o una foto, OCR (lib/drive/lectura.ts y extraer-texto.ts). Cada
+// archivo se lee una sola vez: lo leído queda en la base (lectura_archivo) y
+// la noche siguiente solo se leen los nuevos o los que cambiaron.
+//
 // Lo mismo sirve para la carpeta de importaciones (PROCEDENCIA=importacion):
 // ahí la OC va con 3 dígitos («172-2026»), como en el cuadro de aprobaciones,
 // y la comparación es contra el legajo del cuadro en vez de CG.
@@ -33,6 +40,11 @@ import type { TipoColumna } from "../lib/export/comprobantes-sunat.ts";
 import {
   carpetaDeOC, clasificarArchivo, esComprobante, rucsEnNombre, type CarpetaDeOC, type Procedencia,
 } from "../lib/drive/carpetas-oc.ts";
+import {
+  lecturaDeTexto, lecturaDeXml, prioridadDeLectura, tipoDeLectura, type Lectura,
+} from "../lib/drive/lectura.ts";
+import { herramientasDeLectura, textoDePdf, textoDeImagen, type Herramientas } from "../lib/drive/extraer-texto.ts";
+import { leerZip } from "../lib/sunat/zip.ts";
 
 // ── Configuración desde el entorno ────────────────────────────────
 
@@ -57,6 +69,11 @@ let carpetasPorConsulta = 25;
 const PARALELO = Number(process.env.PARALELO?.trim() || "4");
 const PARALELO_DE_A_UNA = Number(process.env.PARALELO_DE_A_UNA?.trim() || "10");
 const SIN_MEMBRESIA = /shared drive membership/i;
+// La lectura por dentro: cuántos archivos como mucho, por cuántos minutos y
+// cuántos a la vez. Lo que no alcance queda para la noche siguiente.
+const LEER_MAX = Number(process.env.LEER_MAX?.trim() || (DEBUG ? "200" : "3000"));
+const LEER_MINUTOS = Number(process.env.LEER_MINUTOS?.trim() || (DEBUG ? "15" : "45"));
+const LECTORES = Number(process.env.LECTORES?.trim() || "4");
 
 const SALIDA = join(process.cwd(), "salida", "carpetas-oc", IMPO ? "importaciones" : "nacionales");
 mkdirSync(SALIDA, { recursive: true });
@@ -75,8 +92,16 @@ type Pendiente = { id: string; ruta: string[]; proyectoCarpeta: string; oc: OC |
 
 type Archivo = {
   oc: OC | null; ruta: string; sub: string; nombre: string; id: string; url: string; mime: string;
-  kb: number; modificado: string; parece: string; serie: string; rucs: string[];
+  kb: number; modificado: string; modificadoIso: string; parece: string; serie: string; rucs: string[];
+  pistas: string[];
+  /** Lo que se leyó por dentro, si se abrió (ahora o en una corrida anterior). */
+  lectura?: Lectura;
 };
+
+/** Si es un comprobante: por el nombre o por lo que se leyó adentro. */
+const esComprobanteArch = (a: Archivo) => esComprobante(a.parece) || a.lectura?.estado === "LEÍDO";
+/** La serie del comprobante: la del nombre o, si no, la leída por dentro. */
+const serieDe = (a: Archivo) => a.serie || (a.lectura?.estado === "LEÍDO" ? a.lectura.serie : "");
 
 // Si la carpeta madre está en una unidad compartida, las consultas se hacen
 // sobre esa unidad; si está en «Mi unidad» de alguien, sobre lo compartido.
@@ -174,8 +199,8 @@ async function leerGrupo(drive: Drive, grupo: Pendiente[]): Promise<Pendiente[]>
         oc: padre.oc, ruta: padre.ruta.join(" / "), sub: padre.sub,
         nombre: atajo ? nombre + " (acceso directo)" : nombre, id, mime,
         url: atajo ? `https://drive.google.com/file/d/${id}/view` : f.webViewLink ?? `https://drive.google.com/file/d/${id}/view`,
-        kb: Math.round(Number(f.size ?? 0) / 1024), modificado: fecha(f.modifiedTime),
-        parece: c.parece, serie: c.serie, rucs: rucsEnNombre(nombre),
+        kb: Math.round(Number(f.size ?? 0) / 1024), modificado: fecha(f.modifiedTime), modificadoIso: f.modifiedTime ?? "",
+        parece: c.parece, serie: c.serie, rucs: rucsEnNombre(nombre), pistas: c.pistas,
       });
     }
     pageToken = r.data.nextPageToken ?? undefined;
@@ -219,24 +244,179 @@ async function recorrer(drive: Drive): Promise<void> {
   }
 }
 
+// ── La lectura por dentro ─────────────────────────────────────────
+
+/** Una fila de lectura_archivo: lo leído de un archivo, para no volver a leerlo. */
+type FilaLectura = {
+  archivo_id: string; modificado: string; estado: string; metodo: string; tipo: string; serie: string;
+  ruc: string; claves: string; oc_referencia: string; detalle: string;
+};
+
+const deFila = (f: FilaLectura): Lectura => ({
+  estado: f.estado as Lectura["estado"], metodo: (f.metodo ?? "") as Lectura["metodo"], tipo: f.tipo ?? "",
+  serie: f.serie ?? "", ruc: f.ruc ?? "", claves: (f.claves ?? "").split(",").filter(Boolean),
+  ocReferencia: f.oc_referencia ?? "", detalle: f.detalle ?? "",
+});
+
+const aFila = (a: Archivo, l: Lectura): FilaLectura => ({
+  archivo_id: a.id, modificado: a.modificadoIso, estado: l.estado, metodo: l.metodo, tipo: l.tipo, serie: l.serie,
+  ruc: l.ruc, claves: l.claves.join(","), oc_referencia: l.ocReferencia, detalle: l.detalle,
+});
+
+const lecturaConError = (detalle: string): Lectura =>
+  ({ estado: "ERROR", metodo: "", tipo: "", serie: "", ruc: "", claves: [], ocReferencia: "", detalle: detalle.slice(0, 200) });
+
+/** Cómo fue la lectura de esta corrida, para el resumen. */
+const lectura = {
+  candidatos: 0, deAntes: 0, ahora: 0, quedan: 0, sinHerramientas: 0, guardadas: 0,
+  porMetodo: new Map<string, number>(), avisos: [] as string[],
+};
+
+async function bajar(drive: Drive, a: Archivo): Promise<Buffer> {
+  if (a.mime === "application/vnd.google-apps.document") {
+    const r = await conReintentos("exportar documento", () =>
+      drive.files.export({ fileId: a.id, mimeType: "text/plain" }, { responseType: "arraybuffer" }));
+    return Buffer.from(r.data as ArrayBuffer);
+  }
+  const r = await conReintentos("bajar archivo", () =>
+    drive.files.get({ fileId: a.id, alt: "media", supportsAllDrives: true }, { responseType: "arraybuffer" }));
+  return Buffer.from(r.data as ArrayBuffer);
+}
+
+/** Baja un archivo y lo lee según su tipo. Nunca lanza: un error queda como lectura con ERROR. */
+async function leerArchivo(drive: Drive, a: Archivo, h: Herramientas): Promise<Lectura> {
+  const como = tipoDeLectura(a.nombre, a.mime);
+  try {
+    const datos = await bajar(drive, a);
+    if (como === "XML") return lecturaDeXml([datos.toString("utf8")], "XML");
+    if (como === "ZIP") {
+      const xmls = leerZip(datos, 64 * 1024 * 1024)
+        .filter(x => /\.xml$/i.test(x.nombre)).map(x => x.contenido.toString("utf8"));
+      if (!xmls.length) return { ...lecturaConError(""), estado: "SIN COMPROBANTE", metodo: "ZIP", detalle: "el ZIP no trae XML" };
+      return lecturaDeXml(xmls, "ZIP");
+    }
+    if (como === "DOCUMENTO DE GOOGLE") return lecturaDeTexto(datos.toString("utf8"), "DOCUMENTO DE GOOGLE");
+    if (como === "PDF") {
+      const { texto, metodo } = await textoDePdf(datos, h);
+      return lecturaDeTexto(texto, metodo);
+    }
+    const ext = /\.([a-z0-9]{2,5})$/i.exec(a.nombre)?.[1] ?? a.mime.split("/")[1] ?? "png";
+    return lecturaDeTexto(await textoDeImagen(datos, ext), "OCR");
+  } catch (e) {
+    return lecturaConError(e instanceof Error ? e.message : String(e));
+  }
+}
+
+/**
+ * Abre los archivos que el nombre no explica (prioridadDeLectura) y lee qué
+ * comprobante traen. Lo leído en corridas anteriores no se vuelve a leer
+ * (salvo que el archivo haya cambiado, o que la vez anterior diera error).
+ * Primero los más prometedores, y entre ellos los de OC que todavía no
+ * tienen ningún comprobante con número.
+ */
+async function leerPorDentro(drive: Drive, sb: Base | null): Promise<void> {
+  const h = await herramientasDeLectura();
+  if (!h.pdf) lectura.avisos.push("falta pdftotext (poppler-utils): los PDF se leen solo por OCR");
+  if (!h.ocr) lectura.avisos.push("falta tesseract con español: los escaneos y fotos no se leen");
+
+  const anteriores = new Map<string, FilaLectura>();
+  if (sb) {
+    try {
+      for (const f of await todas<FilaLectura>(sb, "lectura_archivo",
+        "archivo_id,modificado,estado,metodo,tipo,serie,ruc,claves,oc_referencia,detalle", ["archivo_id"])) {
+        anteriores.set(f.archivo_id, f);
+      }
+    } catch (e) {
+      lectura.avisos.push(`no se pudo traer lo leído antes (${e instanceof Error ? e.message : e}): se lee todo de nuevo`);
+    }
+  }
+
+  const ocConNumero = new Set(archivos.filter(a => a.oc && a.serie && esComprobante(a.parece)).map(a => a.oc!.carpetaId));
+  const pendientes: Array<{ a: Archivo; p: number; reintento: boolean }> = [];
+  for (const a of archivos) {
+    if (!a.oc) continue;
+    const p = prioridadDeLectura(a);
+    if (p < 0) continue;
+    lectura.candidatos++;
+    const antes = anteriores.get(a.id);
+    if (antes && antes.modificado === a.modificadoIso && antes.estado !== "ERROR") {
+      a.lectura = deFila(antes);
+      lectura.deAntes++;
+      continue;
+    }
+    const como = tipoDeLectura(a.nombre, a.mime);
+    if ((como === "PDF" && !h.pdf && !h.ocr) || (como === "IMAGEN" && !h.ocr)) { lectura.sinHerramientas++; continue; }
+    pendientes.push({ a, p, reintento: antes?.estado === "ERROR" });
+  }
+  pendientes.sort((x, y) =>
+    Number(x.reintento) - Number(y.reintento) || y.p - x.p ||
+    Number(ocConNumero.has(x.a.oc!.carpetaId)) - Number(ocConNumero.has(y.a.oc!.carpetaId)) || x.a.kb - y.a.kb);
+
+  const cola = pendientes.slice(0, LEER_MAX);
+  const tope = Date.now() + LEER_MINUTOS * 60_000;
+  const nuevas: FilaLectura[] = [];
+  let siguiente = 0, guardando = false, ultimoAviso = Date.now();
+
+  // En la corrida real, lo leído se guarda de a poco: si algo corta la
+  // corrida, lo ya leído no se pierde.
+  const guardar = async (todo: boolean) => {
+    if (DEBUG || !sb || guardando) return;
+    guardando = true;
+    try {
+      while (nuevas.length - lectura.guardadas >= (todo ? 1 : 50)) {
+        const lote = nuevas.slice(lectura.guardadas, lectura.guardadas + 200);
+        const { error } = await sb.rpc("guardar_lecturas_archivo", { p_filas: lote });
+        if (error) { lectura.avisos.push(`no se pudo guardar lo leído: ${error.message}`); return; }
+        lectura.guardadas += lote.length;
+      }
+    } finally { guardando = false; }
+  };
+
+  const trabajador = async () => {
+    while (siguiente < cola.length && Date.now() < tope) {
+      const { a } = cola[siguiente++];
+      const l = await leerArchivo(drive, a, h);
+      a.lectura = l;
+      lectura.ahora++;
+      const clave = l.estado === "ERROR" ? "error" : l.metodo || "sin método";
+      lectura.porMetodo.set(clave, (lectura.porMetodo.get(clave) ?? 0) + 1);
+      nuevas.push(aFila(a, l));
+      if (Date.now() - ultimoAviso > 15000) {
+        ultimoAviso = Date.now();
+        console.log(`  … leídos por dentro ${lectura.ahora} de ${cola.length}`);
+      }
+      await guardar(false);
+    }
+  };
+  if (cola.length) console.log(`▶ Lectura por dentro: ${cola.length} archivos (de ${pendientes.length} pendientes), ${LECTORES} a la vez`);
+  await Promise.all(Array.from({ length: Math.max(1, LECTORES) }, trabajador));
+  await guardar(true);
+  lectura.quedan = pendientes.length - lectura.ahora;
+}
+
 // ── Las tablas ─────────────────────────────────────────────────────
 
 const CAB_OCS = [
   "OC", "Tipo", "Proveedor (nombre de la carpeta)", "Proyecto (nombre de la carpeta)", "Carpeta del proyecto",
-  "Archivos", "Comprobantes", "Series en los nombres", "RUC en los nombres", "XML",
-  "Última modificación", "Carpeta de la OC", "Nombre de la carpeta", "Misma OC en otra carpeta",
+  "Archivos", "Comprobantes", "Series (nombre o lectura)", "RUC (nombre o lectura)", "XML",
+  "Leídos por dentro", "Última modificación", "Carpeta de la OC", "Nombre de la carpeta", "Misma OC en otra carpeta",
 ];
 const TIPOS_OCS: TipoColumna[] = [
   "texto", "texto", "texto", "texto", "texto", "numero", "numero", "texto", "texto", "numero",
-  "fecha", "texto", "texto", "texto",
+  "numero", "fecha", "texto", "texto", "texto",
 ];
 const CAB_ARCHIVOS = [
   "OC", "Proveedor (nombre de la carpeta)", "Carpeta del proyecto", "Subcarpeta", "Archivo", "Parece",
-  "Serie en el nombre", "RUC en el nombre", "Tamaño (KB)", "Modificado", "Enlace", "Carpeta de la OC",
+  "Serie en el nombre", "RUC en el nombre", "Leído por dentro", "Tipo leído", "Serie leída", "RUC leído",
+  "OC que cita", "Tamaño (KB)", "Modificado", "Enlace", "Carpeta de la OC",
 ];
 const TIPOS_ARCHIVOS: TipoColumna[] = [
-  "texto", "texto", "texto", "texto", "texto", "texto", "texto", "texto", "numero", "fecha", "texto", "texto",
+  "texto", "texto", "texto", "texto", "texto", "texto", "texto", "texto", "texto", "texto", "texto", "texto",
+  "texto", "numero", "fecha", "texto", "texto",
 ];
+
+/** «LEÍDO · OCR», «SIN COMPROBANTE · TEXTO DEL PDF», o vacío si no se abrió. */
+const textoDeLectura = (l?: Lectura) => l ? [l.estado, l.metodo, l.detalle].filter(Boolean).join(" · ") : "";
 
 const urlCarpeta = (id: string) => `https://drive.google.com/drive/folders/${id}`;
 const aFecha = (s: string) => s ? s.split("/").reverse().join("") : "";
@@ -255,14 +435,15 @@ function tablas() {
     .sort((a, b) => a.oc.slice(5).localeCompare(b.oc.slice(5)) || a.oc.localeCompare(b.oc) || a.carpetaNombre.localeCompare(b.carpetaNombre))
     .map(o => {
       const l = porCarpeta.get(o.carpetaId) ?? [];
-      const series = [...new Set(l.map(a => a.serie).filter(Boolean))];
-      const rucs = [...new Set(l.flatMap(a => a.rucs))];
+      const series = [...new Set(l.map(serieDe).filter(Boolean))];
+      const rucs = [...new Set(l.flatMap(a => [...a.rucs, a.lectura?.estado === "LEÍDO" ? a.lectura.ruc : ""]).filter(Boolean))];
       const ultima = l.map(a => a.modificado).filter(Boolean).sort((x, y) => aFecha(y).localeCompare(aFecha(x)))[0] ?? "";
       const otras = (carpetasPorOc.get(o.oc) ?? []).filter(x => x.carpetaId !== o.carpetaId);
       return [
         o.oc, o.tipo, o.proveedor, o.proyecto, o.proyectoCarpeta,
-        String(l.length), String(l.filter(a => esComprobante(a.parece)).length),
+        String(l.length), String(l.filter(esComprobanteArch).length),
         series.join(" / "), rucs.join(" / "), String(l.filter(a => a.parece === "XML").length),
+        String(l.filter(a => a.lectura?.estado === "LEÍDO").length),
         ultima, urlCarpeta(o.carpetaId), o.carpetaNombre,
         otras.map(x => `${x.proyectoCarpeta} / ${x.carpetaNombre}`).join(" | "),
       ];
@@ -273,7 +454,8 @@ function tablas() {
     .sort((a, b) => a.oc!.oc.localeCompare(b.oc!.oc) || a.sub.localeCompare(b.sub) || a.nombre.localeCompare(b.nombre))
     .map(a => [
       a.oc!.oc, a.oc!.proveedor, a.oc!.proyectoCarpeta, a.sub, a.nombre, a.parece, a.serie, a.rucs.join(" / "),
-      String(a.kb), a.modificado, a.url, urlCarpeta(a.oc!.carpetaId),
+      textoDeLectura(a.lectura), a.lectura?.tipo ?? "", a.lectura?.serie ?? "", a.lectura?.ruc ?? "",
+      a.lectura?.ocReferencia ?? "", String(a.kb), a.modificado, a.url, urlCarpeta(a.oc!.carpetaId),
     ]);
 
   return { filasOcs, filasArchivos, porCarpeta };
@@ -395,7 +577,7 @@ function comparar(f: Fuente, porCarpeta: Map<string, Archivo[]>, completo: boole
     else if (suyos.some(id => carpetaDeLaOC.has(id) || vistas.has(id))) { enlace = "otra carpeta de la madre"; c.otra++; }
     else { enlace = completo ? "fuera de la carpeta madre" : "fuera de lo leído"; c.fuera++; }
 
-    const enMadre = carpetas.reduce((n, o) => n + (porCarpeta.get(o.carpetaId) ?? []).filter(a => esComprobante(a.parece)).length, 0);
+    const enMadre = carpetas.reduce((n, o) => n + (porCarpeta.get(o.carpetaId) ?? []).filter(esComprobanteArch).length, 0);
     const enFuente = f.comprobantes.get(oc) ?? 0;
     if (enMadre && !enFuente) c.soloMadre++;
     else if (!enMadre && enFuente) c.soloFuente++;
@@ -424,16 +606,27 @@ function comparar(f: Fuente, porCarpeta: Map<string, Archivo[]>, completo: boole
   ].join("\n");
 }
 
-async function subirALaBase(sb: Base, filasOcs: string[][], porCarpeta: Map<string, Archivo[]>, completo: boolean) {
-  const carpetas = filasOcs.map(f => ({
-    oc: f[0], tipo: f[1], proveedor: f[2], proyecto: f[3], proyectoCarpeta: f[4],
-    archivos: Number(f[5]), comprobantes: Number(f[6]), series: f[7], rucs: f[8],
-    carpetaUrl: f[11], carpetaNombre: f[12],
+async function subirALaBase(sb: Base, porCarpeta: Map<string, Archivo[]>, completo: boolean) {
+  const carpetas = [...ocs.values()].map(o => {
+    const l = porCarpeta.get(o.carpetaId) ?? [];
+    return {
+      oc: o.oc, tipo: o.tipo, proveedor: o.proveedor, proyecto: o.proyecto, proyectoCarpeta: o.proyectoCarpeta,
+      archivos: l.length, comprobantes: l.filter(esComprobanteArch).length,
+      series: [...new Set(l.map(serieDe).filter(Boolean))].join(" / "),
+      rucs: [...new Set(l.flatMap(a => a.rucs))].join(" / "),
+      carpetaUrl: urlCarpeta(o.carpetaId), carpetaNombre: o.carpetaNombre,
+    };
+  });
+  const deArchivos = [...ocs.values()].flatMap(o => (porCarpeta.get(o.carpetaId) ?? []).map(a => {
+    const l = a.lectura;
+    return {
+      oc: o.oc, proveedorRuc: a.rucs.join(" / "), proveedor: o.proveedor, carpetaUrl: urlCarpeta(o.carpetaId),
+      nombre: a.nombre, url: a.url, tipoArchivo: a.mime, serie: a.serie,
+      // Si el nombre no decía que era un comprobante y la lectura sí lo encontró, manda la lectura.
+      parece: l?.estado === "LEÍDO" && !esComprobante(a.parece) ? l.tipo : a.parece,
+      estadoLectura: l?.estado ?? "", rucLeido: l?.ruc ?? "", serieLeida: l?.estado === "LEÍDO" ? l.serie : "",
+    };
   }));
-  const deArchivos = [...ocs.values()].flatMap(o => (porCarpeta.get(o.carpetaId) ?? []).map(a => ({
-    oc: o.oc, proveedorRuc: a.rucs.join(" / "), proveedor: o.proveedor, carpetaUrl: urlCarpeta(o.carpetaId),
-    nombre: a.nombre, url: a.url, tipoArchivo: a.mime, parece: a.parece, serie: a.serie,
-  })));
 
   // Solo una corrida completa y sin fallas reemplaza lo anterior; si no, se suma.
   for (const [parte, filas] of [["CARPETAS", carpetas], ["ARCHIVOS", deArchivos]] as const) {
@@ -460,6 +653,33 @@ async function asegurarPestana(hojas: Hojas, id: string, nombre: string) {
   });
 }
 
+/** La parte del resumen sobre la lectura por dentro. */
+function resumenDeLectura(deOc: Archivo[]): string {
+  const leidos = deOc.filter(a => a.lectura);
+  const conComprobante = leidos.filter(a => a.lectura!.estado === "LEÍDO");
+  const nuevosPorLectura = conComprobante.filter(a => !esComprobante(a.parece));
+  const cuenta = (f: (a: Archivo) => boolean) => leidos.filter(f).length;
+  const ejemplos = conComprobante.slice(0, 15).map(a =>
+    `| ${a.oc!.oc} | ${a.nombre.replace(/\|/g, "/")} | ${a.lectura!.tipo} | ${a.lectura!.serie} | ${a.lectura!.ruc} | ${a.lectura!.metodo} |`);
+  return [
+    "### Lectura por dentro",
+    "",
+    `- Archivos que el nombre no explica: **${lectura.candidatos}** (XML/ZIP sin serie, «factura» o «invoice» sin número, nombres genéricos, «OTRO»)`,
+    `- Leídos en esta corrida: **${lectura.ahora}**; ya leídos antes: ${lectura.deAntes}; quedan para la próxima: ${Math.max(0, lectura.quedan)}` +
+      (lectura.sinHerramientas ? `; sin herramienta para leerlos: ${lectura.sinHerramientas}` : ""),
+    `- Cómo se leyeron (esta corrida): ${[...lectura.porMetodo.entries()].map(([m, n]) => `${m} ${n}`).join(", ") || "—"}`,
+    `- Con comprobante y número: **${conComprobante.length}** (con RUC del emisor: ${cuenta(a => a.lectura!.estado === "LEÍDO" && !!a.lectura!.ruc)}); ` +
+      `de ellos, **${nuevosPorLectura.length}** que por el nombre no parecían comprobante`,
+    `- Sin comprobante: ${cuenta(a => a.lectura!.estado === "SIN COMPROBANTE")}; sin texto: ${cuenta(a => a.lectura!.estado === "SIN TEXTO")}; con error: ${cuenta(a => a.lectura!.estado === "ERROR")}`,
+    ...(DEBUG ? ["- Depuración: lo leído **no** se guarda; la corrida real lo vuelve a leer y lo guarda."] :
+      [`- Guardado en la base: ${lectura.guardadas}`]),
+    ...lectura.avisos.map(a => `- ⚠ ${a}`),
+    ...(ejemplos.length ? ["", "| OC | Archivo | Tipo | Serie | RUC | Cómo |", "|---|---|---|---|---|---|", ...ejemplos] : []),
+    "",
+    "El detalle de cada archivo leído está en `lecturas.csv`.",
+  ].join("\n");
+}
+
 // ── Principal ───────────────────────────────────────────────────────
 
 async function main() {
@@ -478,6 +698,18 @@ async function main() {
   console.log(`▶ Carpeta madre: «${madre}»${SUBCARPETA ? ` — solo los proyectos que dicen «${SUBCARPETA}»` : ""}${DEBUG ? " (depuración: no toca la base ni la hoja)" : ""}`);
 
   await recorrer(drive);
+  const finRecorrido = Date.now();
+
+  // La base: para no releer lo ya leído, para comparar con CG y para subir.
+  // En depuración es opcional (si no hay acceso, se lee todo y no se compara).
+  let sb: Base | null = null, sinBase = "";
+  try { sb = await entrarALaBase(); }
+  catch (e) {
+    if (!DEBUG) throw e;
+    sinBase = e instanceof Error ? e.message : String(e);
+  }
+
+  await leerPorDentro(drive, sb);
   const { filasOcs, filasArchivos, porCarpeta } = tablas();
 
   // Lo que quedó fuera de una carpeta de OC: para ver si hay nombres que no se entienden.
@@ -486,8 +718,8 @@ async function main() {
   for (const a of sueltos) carpetasSinOc.set(a.ruta, (carpetasSinOc.get(a.ruta) ?? 0) + 1);
 
   const deOc = archivos.filter(a => a.oc);
-  const comprobantes = deOc.filter(a => esComprobante(a.parece));
-  const conSerie = deOc.filter(a => a.serie);
+  const comprobantes = deOc.filter(esComprobanteArch);
+  const conSerie = deOc.filter(a => serieDe(a));
   const ocsUnicas = new Set([...ocs.values()].map(o => o.oc));
   const ocsConComprobante = new Set(comprobantes.map(a => a.oc!.oc));
   const ocsConSerie = new Set(conSerie.map(a => a.oc!.oc));
@@ -500,7 +732,7 @@ async function main() {
   for (const a of deOc) {
     const p = porProyecto.get(a.oc!.proyectoCarpeta)!;
     p.archivos++;
-    if (esComprobante(a.parece)) p.comprobantes++;
+    if (esComprobanteArch(a)) p.comprobantes++;
   }
   const parece = new Map<string, number>();
   for (const a of deOc) parece.set(a.parece, (parece.get(a.parece) ?? 0) + 1);
@@ -509,10 +741,10 @@ async function main() {
   let resumen = [
     `## Carpeta madre de ${IMPO ? "importaciones" : "compras nacionales"}${SUBCARPETA ? ` (solo «${SUBCARPETA}»)` : ""}`,
     "",
-    `- Carpetas leídas: **${carpetasLeidas}** (${consultas} consultas a Drive, ${Math.round((Date.now() - inicio) / 1000)} s)`,
+    `- Carpetas leídas: **${carpetasLeidas}** (${consultas} consultas a Drive, ${Math.round((finRecorrido - inicio) / 1000)} s)`,
     `- OC distintas: **${ocsUnicas.size}** en ${ocs.size} carpetas de OC (${[...ocs.values()].filter(o => o.tipo === "OS").length} de servicio)`,
-    `- Archivos dentro de una OC: **${deOc.length}** (${gb.toFixed(1)} GB en total, sin descargar nada)`,
-    `- Comprobantes (factura, boleta, RH, nota, XML): **${comprobantes.length}**, con serie en el nombre: **${conSerie.length}**`,
+    `- Archivos dentro de una OC: **${deOc.length}** (${gb.toFixed(1)} GB en total)`,
+    `- Comprobantes (factura, boleta, RH, nota, XML; por nombre o leídos por dentro): **${comprobantes.length}**, con serie: **${conSerie.length}** (${deOc.filter(a => a.serie).length} por el nombre, ${deOc.filter(a => !a.serie && serieDe(a)).length} leídas por dentro)`,
     `- OC con al menos un comprobante: **${ocsConComprobante.size}**; con serie legible: **${ocsConSerie.size}**`,
     `- Archivos fuera de una carpeta de OC: ${sueltos.length} (en ${carpetasSinOc.size} carpetas)`,
     fallos.length ? `- ⚠ Carpetas que no se pudieron leer: ${fallos.length}` : "- Sin fallas de lectura",
@@ -530,16 +762,17 @@ async function main() {
     ...[...carpetasSinOc.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15).map(([r, n]) => `- ${r || "(carpeta madre)"} — ${n}`),
     "",
     ...(fallos.length ? ["**No se pudieron leer:**", ...fallos.slice(0, 20).map(f => `- ${f}`)] : []),
+    "",
+    resumenDeLectura(deOc),
   ].join("\n");
 
-  // La base hace falta para comparar con CG; en depuración, si no hay acceso, solo se omite la comparación.
-  let sb: Base | null = null, comparacion = "";
+  let comparacion = "";
   try {
-    sb = await entrarALaBase();
+    if (!sb) throw new Error(sinBase);
     comparacion = comparar(IMPO ? await fuenteCuadro(sb) : await fuenteCG(sb), porCarpeta, !SUBCARPETA);
   } catch (e) {
     if (!DEBUG) throw e;
-    comparacion = `_No se pudo comparar con CG: ${e instanceof Error ? e.message : e}_`;
+    comparacion = `_No se pudo comparar con ${IMPO ? "el cuadro" : "CG"}: ${e instanceof Error ? e.message : e}_`;
   }
   resumen += "\n" + comparacion + "\n";
 
@@ -550,8 +783,12 @@ async function main() {
   writeFileSync(join(SALIDA, "archivos.csv"), csv([CAB_ARCHIVOS, ...filasArchivos]));
   writeFileSync(join(SALIDA, "fuera-de-oc.csv"), csv([["Ruta", "Archivo", "Parece", "Serie", "Enlace"],
     ...sueltos.map(a => [a.ruta, a.nombre, a.parece, a.serie, a.url])]));
+  writeFileSync(join(SALIDA, "lecturas.csv"), csv([
+    ["OC", "Archivo", "Parece (nombre)", "Leído por dentro", "Tipo leído", "Serie leída", "RUC leído", "OC que cita", "Documentos adentro", "Enlace"],
+    ...deOc.filter(a => a.lectura).map(a => [a.oc!.oc, a.nombre, a.parece, textoDeLectura(a.lectura), a.lectura!.tipo,
+      a.lectura!.serie, a.lectura!.ruc, a.lectura!.ocReferencia, a.lectura!.claves.join(", "), a.url])]));
   writeFileSync(join(SALIDA, "resumen.md"), resumen);
-  console.log(`✓ Resultado en ${SALIDA} (ocs.csv, archivos.csv, fuera-de-oc.csv, comparacion-*.csv, resumen.md)`);
+  console.log(`✓ Resultado en ${SALIDA} (ocs.csv, archivos.csv, lecturas.csv, fuera-de-oc.csv, comparacion-*.csv, resumen.md)`);
 
   if (DEBUG) return;
 
@@ -559,7 +796,7 @@ async function main() {
     console.error("✗ No se encontró ninguna carpeta de OC: no se toca la base ni la hoja.");
     process.exit(1);
   }
-  await subirALaBase(sb!, filasOcs, porCarpeta, !SUBCARPETA && fallos.length === 0);
+  await subirALaBase(sb!, porCarpeta, !SUBCARPETA && fallos.length === 0);
 
   const hoja = await publicarHoja({ filas: [CAB_OCS, ...filasOcs], nombre: NOMBRE_HOJA, carpetas: CARPETAS_HOJA, tipos: TIPOS_OCS });
   await asegurarPestana(hojas, hoja.id, "ARCHIVOS");

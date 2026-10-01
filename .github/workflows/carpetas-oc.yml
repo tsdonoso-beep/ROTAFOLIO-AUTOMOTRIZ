@@ -1,10 +1,10 @@
 # Leer las carpetas madre de compras nacionales («5. Ordenes de Compra») y
 # de importaciones
 #
-# Recorre las carpetas de OC con la cuenta de servicio de Drive —solo
-# nombres, no descarga nada— y anota de cada OC su carpeta y los
-# comprobantes que tiene (factura, XML, RH…, con la serie si el nombre la
-# trae). Con eso la base une cada factura de SUNAT con su OC nacional, y las
+# Recorre las carpetas de OC con la cuenta de servicio de Drive y anota de
+# cada OC su carpeta y los comprobantes que tiene (factura, XML, RH…, con la
+# serie si el nombre la trae). Lo que el nombre no explica se abre y se lee
+# por dentro (XML, ZIP, texto del PDF u OCR), una sola vez por archivo. Con eso la base une cada factura de SUNAT con su OC nacional, y las
 # hojas COMPROBANTES SUNAT y DETALLE lo muestran en la publicación de la
 # mañana. Ver scripts/carpetas-oc.mts.
 #
@@ -40,6 +40,10 @@ on:
         description: "Solo en nacionales: los proyectos cuyo nombre contiene este texto (vacío = toda la carpeta). Importaciones se lee siempre entera."
         required: false
         default: "TALLERES ESPECIALIZADOS"
+      leer_max:
+        description: "Cuántos archivos abrir y leer por dentro (OCR) como mucho, por carpeta madre."
+        required: false
+        default: "200"
 
 concurrency:
   group: carpetas-oc
@@ -51,7 +55,8 @@ permissions:
 jobs:
   leer:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # Recorrer las dos carpetas (~10 min) + leer por dentro (45 + 30 min) + subir.
+    timeout-minutes: 120
 
     steps:
       - uses: actions/checkout@v7
@@ -62,6 +67,12 @@ jobs:
           cache: npm
 
       - run: npm ci
+
+      # Para leer por dentro: pdftotext/pdftoppm (PDF) y tesseract (OCR, español e inglés).
+      - name: Instalar lectores de PDF y OCR
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils tesseract-ocr tesseract-ocr-spa tesseract-ocr-eng
 
       - name: Leer la carpeta de compras nacionales
         # La de cada noche no trae inputs: corre (vacío ≠ importaciones).
@@ -80,6 +91,9 @@ jobs:
           DEBUG: ${{ inputs.debug && '1' || '0' }}
           PROCEDENCIA: nacional
           SUBCARPETA: ${{ inputs.subcarpeta }}
+          # Cada noche: hasta 3000 archivos o 45 min de lectura; lo que no alcance, la noche siguiente.
+          LEER_MAX: ${{ inputs.leer_max || '3000' }}
+          LEER_MINUTOS: ${{ inputs.debug && '15' || '45' }}
         run: node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/local/comun/con-bitacora.mts scripts/carpetas-oc.mts
 
       - name: Leer la carpeta de importaciones
@@ -99,6 +113,8 @@ jobs:
           PROCEDENCIA: importacion
           # Siempre entera: el filtro de subcarpeta es para los proyectos de nacionales.
           SUBCARPETA: ""
+          LEER_MAX: ${{ inputs.leer_max || '3000' }}
+          LEER_MINUTOS: ${{ inputs.debug && '15' || '30' }}
         run: node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/local/comun/con-bitacora.mts scripts/carpetas-oc.mts
 
       - name: Subir el resultado
