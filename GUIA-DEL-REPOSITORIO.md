@@ -502,7 +502,7 @@ Actions → **SUNAT CPE por API** → Run workflow (vacío = mes anterior + actu
 o en una laptop `pnpm cpe:local` — todo en `docs/pipeline-cpe-local.md`.
 
 ### Rehacer la hoja DETALLE sin bajar nada de SUNAT
-`pnpm hojas:detalle` en la laptop (con `.env.local`). Para cuando cambian sus
+`npm run hojas:detalle` en la laptop (con `.env.local`). Para cuando cambian sus
 columnas o lo que se le cruza (legajo, carpeta madre): `cpe:local` solo
 republica si guardó comprobantes nuevos.
 

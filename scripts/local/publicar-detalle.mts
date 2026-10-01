@@ -3,7 +3,7 @@
 // lo que se le cruza, como la carpeta madre) y no hay comprobantes nuevos:
 // `cpe:local` solo publica si guardó algo.
 //
-//   pnpm hojas:detalle
+//   npm run hojas:detalle
 
 import { crearBitacora } from "./comun/bitacora.mts";
 import { publicarDetalle } from "./comun/guardar.mts";
