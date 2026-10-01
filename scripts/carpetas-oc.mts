@@ -482,7 +482,8 @@ const TIPOS_CAMBIOS: TipoColumna[] = ["fecha", "texto", "texto", "texto", "texto
 
 /** Cómo se lee la fuente del centro de costo en la hoja. */
 const SEGUN: Record<string, string> = {
-  CG: "Control de Gestión (la OC)", CUADRO: "Cuadro de aprobaciones (la OC)", MANUAL: "Corregido a mano",
+  CG: IMPO ? "Cuadro de aprobaciones" : "Control de Gestión", CUADRO: "Cuadro de aprobaciones", MANUAL: "Corregido a mano",
+  PROYECTO: `Su carpeta de proyecto (las demás OC, según ${IMPO ? "el cuadro" : "CG"})`,
   NOMBRE: "Nombre de la carpeta del proyecto", ADMINISTRATIVO: "Carpeta administrativa (área general)", "SIN ASIGNAR": "Sin asignar",
 };
 

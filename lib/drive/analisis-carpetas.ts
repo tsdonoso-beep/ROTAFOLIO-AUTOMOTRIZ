@@ -9,7 +9,13 @@ import {
   type Asignacion, type CentroDeCosto, type DocumentosDeOC,
 } from "./legajo-carpeta.ts";
 
-export type FuenteCC = "CG" | "CUADRO" | "MANUAL" | Asignacion["fuente"];
+/**
+ * De dónde sale el centro de costo de una OC: CG o CUADRO (la propia OC está
+ * ahí); PROYECTO (la OC no está, pero las demás de su carpeta sí, y van a
+ * ese centro de costo); NOMBRE, ADMINISTRATIVO o MANUAL (la regla de su
+ * carpeta); SIN ASIGNAR.
+ */
+export type FuenteCC = "CG" | "CUADRO" | "PROYECTO" | "MANUAL" | Asignacion["fuente"];
 
 export type OCParaAnalizar = {
   /** Identifica la carpeta de la OC (una OC puede tener dos carpetas). */
@@ -78,7 +84,7 @@ export function analizarOCs(p: {
     const cc: AnalisisOC["cc"] = propio?.nombre
       ? { ...propio, fuente: fuenteDeLaOC }
       : r.nombre
-        ? { codigo: r.codigo, nombre: r.nombre, fuente: r.manual ? "MANUAL" : r.fuente }
+        ? { codigo: r.codigo, nombre: r.nombre, fuente: r.manual ? "MANUAL" : r.fuente === "CG" ? "PROYECTO" : r.fuente }
         : { codigo: "", nombre: "", fuente: "SIN ASIGNAR" };
     porOc.set(o.clave, { docs, documentos: textoDeDocumentos(docs.cuenta), cc });
   }

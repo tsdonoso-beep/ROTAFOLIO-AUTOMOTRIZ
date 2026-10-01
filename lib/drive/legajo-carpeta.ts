@@ -16,7 +16,7 @@ export const DOCUMENTOS: Array<{ clave: string; nombre: string }> = [
   { clave: "FACTURA", nombre: "Factura" },
   { clave: "OC", nombre: "OC" },
   { clave: "SWIFT", nombre: "SWIFT" },
-  { clave: "GUIA", nombre: "Guía" },
+  { clave: "GUIA", nombre: "Guía de remisión" },
   { clave: "DAM", nombre: "DAM" },
   { clave: "REQ", nombre: "Requerimiento" },
   { clave: "CONTRATO", nombre: "Contrato" },
@@ -125,7 +125,7 @@ export function asignarCentroDeCosto(
   enCG: Array<CentroDeCosto & { ocs: number }>,
   catalogo: Array<CentroDeCosto & { ocs: number }>,
 ): Asignacion {
-  // 1. Lo que dice CG de sus OC.
+  // Lo que dice CG de sus OC (con lo administrativo agrupado).
   const votos = new Map<string, { cc: CentroDeCosto; n: number }>();
   for (const c of enCG) {
     if (!c.nombre) continue;
@@ -136,8 +136,21 @@ export function asignarCentroDeCosto(
   }
   const total = [...votos.values()].reduce((s, v) => s + v.n, 0);
   const mejor = [...votos.values()].sort((a, b) => b.n - a.n)[0];
-  if (mejor && total >= 3 && mejor.n / total >= 0.6) {
-    return { ...mejor.cc, fuente: "CG", revisar: mejor.n / total < 0.8,
+  const enCGTexto = () => [...votos.values()].sort((a, b) => b.n - a.n).map(v => `${v.cc.nombre} ${v.n}`).join(", ");
+  const porNombre = coincidenciaPorNombre(proyecto, catalogo);
+
+  // 1. CG: 3 o más OC con el 60% o más al mismo centro de costo, o 1-2 OC que coinciden todas.
+  if (mejor && ((total >= 3 && mejor.n / total >= 0.6) || (total <= 2 && mejor.n === total))) {
+    const parte = mejor.n / total;
+    // Si la mayoría no es clara y el nombre de la carpeta señala otro centro
+    // de costo que CG también usa en sus OC, manda el nombre («MATERIAL
+    // CONCRETO PARA MATEMATICA»: 3 INTERCOMPANIES y 2 DES - MATERIAL CONCRETO).
+    const delNombre = porNombre && votos.get(porNombre.c.nombre);
+    if (parte < 0.8 && porNombre && delNombre && porNombre.c.nombre !== mejor.cc.nombre) {
+      return { codigo: porNombre.c.codigo, nombre: porNombre.c.nombre, fuente: "NOMBRE", revisar: true,
+        detalle: `por el nombre (${porNombre.comunes.join(", ")}), que CG también usa; en CG: ${enCGTexto()}` };
+    }
+    return { ...mejor.cc, fuente: "CG", revisar: parte < 0.8 || total < 3,
       detalle: `${mejor.n} de ${total} OC de la carpeta están en CG con este centro de costo` };
   }
 
@@ -147,7 +160,24 @@ export function asignarCentroDeCosto(
       detalle: "carpeta administrativa: por ahora al área administrativa general" };
   }
 
-  // 3. Por el nombre, pesando cada palabra por lo rara que es en el catálogo.
+  // 3. Por el nombre.
+  if (porNombre) {
+    return { codigo: porNombre.c.codigo, nombre: porNombre.c.nombre, fuente: "NOMBRE", revisar: porNombre.empatados > 0 || total > 0,
+      detalle: `por el nombre (${porNombre.comunes.join(", ")})` +
+        (porNombre.empatados ? `; empata con ${porNombre.empatados} más, se eligió el más usado` : "") +
+        (total > 0 ? `; en CG: ${enCGTexto()}` : "") };
+  }
+  return { codigo: "", nombre: "", fuente: "SIN ASIGNAR", revisar: true,
+    detalle: total > 0 ? `el nombre no coincide con ningún centro de costo y en CG están repartidas (${enCGTexto()})`
+      : "sin OC en CG y el nombre no coincide con ningún centro de costo" };
+}
+
+/**
+ * El centro de costo del catálogo cuyo nombre comparte las palabras más
+ * distintivas con el de la carpeta (cada palabra pesa según lo rara que es
+ * en el catálogo). Si empatan varios, el más usado.
+ */
+function coincidenciaPorNombre(proyecto: string, catalogo: Array<CentroDeCosto & { ocs: number }>) {
   const deCatalogo = catalogo.filter(c => c.nombre && !/^AREA ADMINISTRATIVA\b/.test(textoPlano(c.nombre)));
   const frecuencia = new Map<string, number>();
   for (const c of deCatalogo) for (const p of new Set(palabras(c.nombre))) frecuencia.set(p, (frecuencia.get(p) ?? 0) + 1);
@@ -160,15 +190,7 @@ export function asignarCentroDeCosto(
     const distintiva = comunes.some(p => !/^\d+$/.test(p));
     return { c, puntaje: distintiva ? comunes.reduce((s, p) => s + peso(p), 0) : 0, comunes };
   }).filter(x => x.puntaje > 0).sort((a, b) => b.puntaje - a.puntaje || b.c.ocs - a.c.ocs);
-
-  if (puntajes.length) {
-    const top = puntajes[0];
-    const empatados = puntajes.filter(x => Math.abs(x.puntaje - top.puntaje) < 1e-9);
-    return { codigo: top.c.codigo, nombre: top.c.nombre, fuente: "NOMBRE", revisar: empatados.length > 1 || total > 0,
-      detalle: `por el nombre (${top.comunes.join(", ")})` +
-        (empatados.length > 1 ? `; empata con ${empatados.length - 1} más, se eligió el más usado` : "") +
-        (total > 0 ? `; en CG sus OC están repartidas` : "") };
-  }
-  return { codigo: "", nombre: "", fuente: "SIN ASIGNAR", revisar: true,
-    detalle: total > 0 ? "en CG sus OC están repartidas y el nombre no coincide con ningún centro de costo" : "sin OC en CG y el nombre no coincide con ningún centro de costo" };
+  if (!puntajes.length) return null;
+  const top = puntajes[0];
+  return { c: top.c, comunes: top.comunes, empatados: puntajes.filter(x => Math.abs(x.puntaje - top.puntaje) < 1e-9).length - 1 };
 }

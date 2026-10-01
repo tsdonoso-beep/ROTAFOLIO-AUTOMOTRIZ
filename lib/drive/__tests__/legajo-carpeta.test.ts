@@ -20,7 +20,7 @@ test("lo que le falta a una OC, como en el legajo", () => {
   const a = (...claves: string[]) => ({ claves });
   // Un bien nacional: factura y guía.
   const bien = documentosDeOC([a("OC"), a("FACTURA"), a("COTIZACION")], { servicio: false, importacion: false });
-  assert.deepEqual(bien.leFalta, ["Guía"]);
+  assert.deepEqual(bien.leFalta, ["Guía de remisión"]);
   assert.equal(bien.estado, "INCOMPLETA");
   assert.equal(textoDeDocumentos(bien.cuenta), "Factura 1 · OC 1 · Cotización 1");
   // Un servicio: factura y acta, no guía.
@@ -29,6 +29,7 @@ test("lo que le falta a una OC, como en el legajo", () => {
   assert.equal(servicio.estado, "OK");
   // Una importación: además la DAM.
   assert.deepEqual(documentosDeOC([a("FACTURA"), a("GUIA")], { servicio: false, importacion: true }).leFalta, ["DAM"]);
+  assert.equal(textoDeDocumentos(documentosDeOC([a("GUIA")], { servicio: false, importacion: false }).cuenta), "Guía de remisión 1");
   assert.equal(documentosDeOC([], { servicio: false, importacion: false }).estado, "VACÍA");
 });
 
@@ -63,6 +64,25 @@ test("centro de costo por lo que dice CG de las OC de la carpeta", () => {
   const m = asignarCentroDeCosto("PROYECTO MATERIALES DE MATEMÁTICA", [cc("ÁREA ADMINISTRATIVA", 6), cc("ÁREA ADMINISTRATIVA PEDAGOGÍA", 1)], CATALOGO);
   assert.equal(m.fuente, "CG");
   assert.deepEqual({ codigo: m.codigo, nombre: m.nombre }, AREA_ADMINISTRATIVA);
+});
+
+test("si la mayoría de CG no es clara, manda el nombre cuando CG también lo usa", () => {
+  // 15) MATERIAL CONCRETO PARA MATEMATICA: 3 OC a INTERCOMPANIES y 2 a DES - MATERIAL CONCRETO.
+  const m = asignarCentroDeCosto("15)  MATERIAL CONCRETO PARA MATEMATICA",
+    [cc("INTERCOMPANIES", 3), cc("DES - MATERIAL CONCRETO PARA MATEMATICA - LIMA", 2, "PROY-2026-023")], CATALOGO);
+  assert.equal(m.codigo, "PROY-2026-023");
+  assert.equal(m.fuente, "NOMBRE");
+  assert.equal(m.revisar, true);
+  // Con mayoría clara (80% o más), manda CG aunque el nombre diga otra cosa.
+  assert.equal(asignarCentroDeCosto("MATERIAL CONCRETO", [cc("INTERCOMPANIES", 4), cc("DES - MATERIAL CONCRETO PARA MATEMATICA - LIMA", 1, "PROY-2026-023")], CATALOGO).nombre, "INTERCOMPANIES");
+});
+
+test("con 1 o 2 OC en CG que coinciden, también manda CG", () => {
+  const p = asignarCentroDeCosto("PRONTE", [cc("PROYECTO DE INVERSIÓN VAKIMU - INROPLAS", 1, "PROY-2026-025")], CATALOGO);
+  assert.equal(p.fuente, "CG");
+  assert.equal(p.revisar, true);
+  // 1 y 1 a distintos centros: no hay acuerdo, se sigue por el nombre.
+  assert.equal(asignarCentroDeCosto("MEDRANO", [cc("STOCK", 1), cc("INTERCOMPANIES", 1)], CATALOGO).codigo, "PROY-2025-196");
 });
 
 test("las carpetas administrativas van al área administrativa general", () => {

@@ -27,9 +27,9 @@ test("cada OC: su centro de costo de CG; si no está, el de su carpeta de proyec
   });
   assert.deepEqual(porOc.get("a")!.cc, { ...TALLERES, fuente: "CG" });
   assert.equal(porOc.get("a")!.docs.estado, "OK");
-  assert.deepEqual(porOc.get("b")!.docs.leFalta, ["Factura", "Guía"]);
+  assert.deepEqual(porOc.get("b")!.docs.leFalta, ["Factura", "Guía de remisión"]);
   assert.deepEqual(porOc.get("c")!.docs.leFalta, ["Acta de conformidad"]);   // servicio: acta, no guía
-  assert.deepEqual(porOc.get("d")!.cc, { ...TALLERES, fuente: "CG" });       // regla de la carpeta, que viene de CG
+  assert.deepEqual(porOc.get("d")!.cc, { ...TALLERES, fuente: "PROYECTO" }); // regla de la carpeta, que viene de CG
   assert.equal(porOc.get("d")!.docs.estado, "VACÍA");
   assert.equal(porOc.get("e")!.cc.nombre, "ÁREA ADMINISTRATIVA");
   assert.equal(porOc.get("e")!.cc.fuente, "ADMINISTRATIVO");
