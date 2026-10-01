@@ -13,6 +13,17 @@ en cada corrida: tarda unos minutos.
 **No lo corras al mismo tiempo que la corrida de GitHub** (02:00 a. m.): las
 dos reemplazan las mismas tablas.
 
+## 0. Con Claude en tu computadora (opcional)
+
+Claude Code también corre en tu computadora y ahí sí ve tus carpetas: en la
+app de escritorio de Claude, pestaña **Code** → elegir la carpeta del
+repositorio (`ROTAFOLIO-AUTOMOTRIZ`), o en una terminal dentro de esa
+carpeta, `claude`. Lee esta guía y la de `GUIA-DEL-REPOSITORIO.md`; le puedes
+pedir «corre la carga de carpetas de OC según docs/carpetas-oc-local.md y
+avísame el resumen». Puede correr el comando, seguir la bitácora y
+explicarte el resultado; lo que no puede es tocar nada fuera de esa carpeta
+sin pedirte permiso.
+
 ## 1. Lo que ya tienes (de `pnpm cpe:local`)
 
 El repositorio clonado, `pnpm install` hecho y el `.env.local` con
@@ -54,14 +65,26 @@ LECTOR_POPPLER=C:\poppler\Library\bin
 PROCEDENCIA=nacional LEER_MAX=200 pnpm carpetas:local
 
 # La carga de verdad, compras nacionales: hasta 2 h de lectura por corrida
-DEBUG=0 PROCEDENCIA=nacional LEER_MAX=20000 LEER_MINUTOS=120 LECTORES=6 pnpm carpetas:local
+DEBUG=0 PROCEDENCIA=nacional LEER_MAX=20000 LEER_MINUTOS=120 pnpm carpetas:local
 
 # Importaciones
-DEBUG=0 PROCEDENCIA=importacion LEER_MAX=20000 LEER_MINUTOS=120 LECTORES=6 pnpm carpetas:local
+DEBUG=0 PROCEDENCIA=importacion LEER_MAX=20000 LEER_MINUTOS=120 pnpm carpetas:local
 ```
 
-- `LECTORES`: cuántos archivos a la vez. 6 va bien en una laptop de 4
-  núcleos o más; si la computadora se pone lenta, baja a 3.
+Cómo reparte el trabajo (no hace falta tocar nada; los valores por omisión
+se ajustan solos a la computadora):
+
+- **Recorrido**: una cola continua de carpetas con 16 consultas a Drive a la
+  vez (`PARALELO_DE_A_UNA`); apenas se lee una carpeta, sus subcarpetas
+  entran a la cola.
+- **Lectura**: dos topes separados. `DESCARGAS` (8): archivos bajando a la
+  vez —es espera de red—. `PROCESADORES` (uno por núcleo de la
+  computadora): OCR a la vez, cada uno en su propio proceso. Mientras unos
+  archivos se bajan, otros ya se están leyendo.
+- **OCR**: página por página, y para apenas encuentra el comprobante (casi
+  siempre en la primera).
+- Si la computadora se pone lenta mientras la usas, baja los procesadores:
+  `PROCESADORES=2`.
 - `LEER_MINUTOS`: cuánto lee antes de guardar todo y terminar. Si se acaba
   el tiempo, vuelve a correr el mismo comando.
 - `SUBCARPETA=TALLERES`: solo ese proyecto (la corrida no reemplaza lo de

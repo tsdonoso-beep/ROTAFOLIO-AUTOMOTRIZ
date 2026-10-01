@@ -75,7 +75,20 @@ async function ocrDeImagenes(dir: string, imagenes: string[]): Promise<string> {
  * El texto de un PDF: el que trae adentro o, si es un escaneo, el del OCR.
  * Devuelve también cómo se obtuvo.
  */
-export async function textoDePdf(datos: Buffer, h: Herramientas): Promise<{ texto: string; metodo: "TEXTO DEL PDF" | "OCR" }> {
+export type OpcionesPdf = {
+  /** Envuelve cada OCR (para limitar cuántos corren a la vez: son CPU). */
+  limitarOcr?: <T>(fn: () => Promise<T>) => Promise<T>;
+  /** Si con lo leído hasta ahora ya basta, no se pasan más páginas por OCR. */
+  basta?: (texto: string) => boolean;
+};
+
+/**
+ * El texto de un PDF: el que trae adentro o, si es un escaneo, el del OCR.
+ * El OCR va página por página (hasta PAGINAS_OCR) y para apenas `basta`:
+ * la factura suele estar en la primera.
+ */
+export async function textoDePdf(datos: Buffer, h: Herramientas, o: OpcionesPdf = {}): Promise<{ texto: string; metodo: "TEXTO DEL PDF" | "OCR" }> {
+  const limitar = o.limitarOcr ?? (<T,>(fn: () => Promise<T>) => fn());
   return enCarpetaTemporal(async dir => {
     const pdf = join(dir, "a.pdf");
     await writeFile(pdf, datos);
@@ -85,9 +98,19 @@ export async function textoDePdf(datos: Buffer, h: Herramientas): Promise<{ text
       catch { texto = ""; } // PDF protegido o dañado: se intenta por OCR
     }
     if (letras(texto) >= MINIMO_DE_TEXTO || !h.ocr) return { texto, metodo: "TEXTO DEL PDF" };
-    await correr("pdftoppm", ["-r", "300", "-l", String(PAGINAS_OCR), "-gray", "-png", pdf, join(dir, "p")], 180_000);
-    const imagenes = (await readdir(dir)).filter(f => /^p.*\.png$/.test(f)).sort();
-    return { texto: await ocrDeImagenes(dir, imagenes), metodo: "OCR" };
+    const partes: string[] = [];
+    for (let pagina = 1; pagina <= PAGINAS_OCR; pagina++) {
+      const leida = await limitar(async () => {
+        const prefijo = join(dir, `p${pagina}`);
+        await correr("pdftoppm", ["-r", "300", "-f", String(pagina), "-l", String(pagina), "-gray", "-png", pdf, prefijo], 180_000);
+        const imagen = (await readdir(dir)).find(f => f.startsWith(`p${pagina}`) && f.endsWith(".png"));
+        return imagen ? ocrDeImagenes(dir, [imagen]) : null;
+      }).catch(() => null);
+      if (leida === null) break;   // el PDF no tiene más páginas
+      partes.push(leida);
+      if (o.basta?.(partes.join("\n"))) break;
+    }
+    return { texto: partes.join("\n"), metodo: "OCR" };
   });
 }
 

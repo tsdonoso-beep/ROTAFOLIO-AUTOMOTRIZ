@@ -37,6 +37,7 @@
 //     publica la hoja «OC - CARPETAS COMPRAS NACIONALES».
 
 import { mkdirSync, writeFileSync, appendFileSync } from "node:fs";
+import { availableParallelism } from "node:os";
 import { join } from "node:path";
 import { createClient } from "@supabase/supabase-js";
 import {
@@ -51,6 +52,7 @@ import {
 } from "../lib/drive/lectura.ts";
 import { herramientasDeLectura, textoDePdf, textoDeImagen, type Herramientas } from "../lib/drive/extraer-texto.ts";
 import { leerZip } from "../lib/sunat/zip.ts";
+import { Semaforo, procesarCola } from "../lib/drive/cola.ts";
 // En la computadora (pnpm carpetas:local) la clave de la cuenta de servicio
 // viene de un archivo (GOOGLE_SA_KEY_FILE en .env.local), como en cpe:local.
 import { cargarClaveDeArchivo } from "./local/comun/config.mts";
@@ -83,13 +85,17 @@ const CARPETAS_HOJA = ["SUNAT"];
 // consulta, con más consultas a la vez (1 de octubre de 2026, primera corrida).
 let carpetasPorConsulta = 25;
 const PARALELO = Number(process.env.PARALELO?.trim() || "4");
-const PARALELO_DE_A_UNA = Number(process.env.PARALELO_DE_A_UNA?.trim() || "10");
+const PARALELO_DE_A_UNA = Number(process.env.PARALELO_DE_A_UNA?.trim() || "16");
 const SIN_MEMBRESIA = /shared drive membership/i;
 // La lectura por dentro: cuántos archivos como mucho, por cuántos minutos y
 // cuántos a la vez. Lo que no alcance queda para la noche siguiente.
 const LEER_MAX = Number(process.env.LEER_MAX?.trim() || (DEBUG ? "200" : "3000"));
 const LEER_MINUTOS = Number(process.env.LEER_MINUTOS?.trim() || (DEBUG ? "15" : "45"));
-const LECTORES = Number(process.env.LECTORES?.trim() || "4");
+// Dos topes distintos: descargas a la vez (espera de red, pueden ser muchas)
+// y OCR a la vez (CPU: uno por núcleo; cada OCR es un proceso aparte).
+// Mientras unos archivos se bajan, otros ya se están leyendo.
+const DESCARGAS = Number(process.env.DESCARGAS?.trim() || "8");
+const PROCESADORES = Number(process.env.PROCESADORES?.trim() || process.env.LECTORES?.trim() || String(Math.max(2, availableParallelism())));
 
 const SALIDA = join(process.cwd(), "salida", "carpetas-oc", IMPO ? "importaciones" : "nacionales");
 mkdirSync(SALIDA, { recursive: true });
@@ -228,36 +234,33 @@ async function leerGrupo(drive: Drive, grupo: Pendiente[]): Promise<Pendiente[]>
 async function recorrer(drive: Drive): Promise<void> {
   const raiz: Pendiente = { id: CARPETA_MADRE, ruta: [], proyectoCarpeta: "", oc: null, sub: "" };
   vistas.add(CARPETA_MADRE);
-  let cola: Pendiente[] = [raiz];
   let ultimoAviso = Date.now();
-  while (cola.length) {
-    const grupos: Pendiente[][] = [];
-    for (let i = 0; i < cola.length; i += carpetasPorConsulta) grupos.push(cola.slice(i, i + carpetasPorConsulta));
-    cola = [];
-    // De a varios grupos a la vez: rápido, sin pasar el cupo de Drive.
-    for (let i = 0; i < grupos.length;) {
-      const paralelo = carpetasPorConsulta === 1 ? PARALELO_DE_A_UNA : PARALELO;
-      const tanda = grupos.slice(i, i + paralelo);
-      i += paralelo;
-      const res = await Promise.allSettled(tanda.map(g => leerGrupo(drive, g)));
-      res.forEach((x, k) => {
-        if (x.status === "fulfilled") { cola.push(...x.value); return; }
-        const motivo = x.reason instanceof Error ? x.reason.message : String(x.reason);
-        if (SIN_MEMBRESIA.test(motivo) && tanda[k].length > 1) {
-          // Se vuelven a leer de a una en la vuelta siguiente.
-          if (carpetasPorConsulta > 1) console.log("⚠ Unidad compartida sin membresía: se lee una carpeta por consulta.");
-          carpetasPorConsulta = 1;
-          cola.push(...tanda[k]);
-          return;
-        }
-        for (const p of tanda[k]) fallos.push(`${p.ruta.join(" / ") || "(carpeta madre)"}: ${motivo}`);
-      });
+  // Una cola continua: apenas se lee una carpeta, sus subcarpetas entran a
+  // la cola y cualquier trabajador libre las toma (no se espera a terminar
+  // un «nivel» del árbol para empezar el siguiente).
+  await procesarCola<Pendiente>({
+    inicial: [raiz],
+    trabajadores: () => carpetasPorConsulta === 1 ? PARALELO_DE_A_UNA : PARALELO,
+    tomar: () => carpetasPorConsulta,
+    fn: async lote => {
+      const nuevas = await leerGrupo(drive, lote);
       if (Date.now() - ultimoAviso > 15000) {
         ultimoAviso = Date.now();
         console.log(`  … ${carpetasLeidas} carpetas leídas, ${ocs.size} OC, ${archivos.length} archivos`);
       }
-    }
-  }
+      return nuevas;
+    },
+    alFallar: (lote, e) => {
+      const motivo = e instanceof Error ? e.message : String(e);
+      if (SIN_MEMBRESIA.test(motivo) && lote.length > 1) {
+        // Se vuelven a leer de a una.
+        if (carpetasPorConsulta > 1) console.log("⚠ Unidad compartida sin membresía: se lee una carpeta por consulta.");
+        carpetasPorConsulta = 1;
+        return lote;
+      }
+      for (const p of lote) fallos.push(`${p.ruta.join(" / ") || "(carpeta madre)"}: ${motivo}`);
+    },
+  });
 }
 
 // ── La lectura por dentro ─────────────────────────────────────────
@@ -300,10 +303,16 @@ async function bajar(drive: Drive, a: Archivo): Promise<Buffer> {
 }
 
 /** Baja un archivo y lo lee según su tipo. Nunca lanza: un error queda como lectura con ERROR. */
+const red = new Semaforo(DESCARGAS);
+const cpu = new Semaforo(PROCESADORES);
+const conCpu = <T,>(fn: () => Promise<T>) => cpu.usar(fn);
+/** Para el OCR página por página: basta con que aparezca un comprobante con número. */
+const yaBasta = (texto: string) => lecturaDeTexto(texto, "OCR").estado === "LEÍDO";
+
 async function leerArchivo(drive: Drive, a: Archivo, h: Herramientas): Promise<Lectura> {
   const como = tipoDeLectura(a.nombre, a.mime);
   try {
-    const datos = await bajar(drive, a);
+    const datos = await red.usar(() => bajar(drive, a));
     if (como === "XML") return lecturaDeXml([datos.toString("utf8")], "XML");
     if (como === "ZIP") {
       const xmls = leerZip(datos, 64 * 1024 * 1024)
@@ -313,10 +322,10 @@ async function leerArchivo(drive: Drive, a: Archivo, h: Herramientas): Promise<L
     }
     let texto: string, metodo: Lectura["metodo"];
     if (como === "DOCUMENTO DE GOOGLE") { texto = datos.toString("utf8"); metodo = "DOCUMENTO DE GOOGLE"; }
-    else if (como === "PDF") ({ texto, metodo } = await textoDePdf(datos, h));
+    else if (como === "PDF") ({ texto, metodo } = await textoDePdf(datos, h, { limitarOcr: conCpu, basta: yaBasta }));
     else {
       const ext = /\.([a-z0-9]{2,5})$/i.exec(a.nombre)?.[1] ?? a.mime.split("/")[1] ?? "png";
-      texto = await textoDeImagen(datos, ext);
+      texto = await conCpu(() => textoDeImagen(datos, ext));
       metodo = "OCR";
     }
     const l = lecturaDeTexto(texto, metodo);
@@ -431,8 +440,9 @@ async function leerPorDentro(drive: Drive, sb: Base | null): Promise<void> {
       await guardar(false);
     }
   };
-  if (cola.length) console.log(`▶ Lectura por dentro: ${cola.length} archivos (de ${pendientes.length} pendientes), ${LECTORES} a la vez`);
-  await Promise.all(Array.from({ length: Math.max(1, LECTORES) }, trabajador));
+  if (cola.length) console.log(`▶ Lectura por dentro: ${cola.length} archivos (de ${pendientes.length} pendientes), hasta ${DESCARGAS} descargas y ${PROCESADORES} OCR a la vez`);
+  // Tantos trabajadores como descargas + OCR: siempre hay archivos bajando mientras otros se leen.
+  await Promise.all(Array.from({ length: Math.max(1, DESCARGAS + PROCESADORES) }, trabajador));
   await guardar(true);
   lectura.quedan = Math.max(0, pendientes.length - siguiente);
 }
