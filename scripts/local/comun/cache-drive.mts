@@ -55,3 +55,66 @@ export class CacheCarpetas {
     }
   }
 }
+
+/** Lo mínimo del cliente de Drive (googleapis) que necesita el subidor. */
+interface DriveMin {
+  files: {
+    list(
+      p: Record<string, unknown>,
+    ): Promise<{ data: { files?: Array<{ name?: string | null; webViewLink?: string | null }>; nextPageToken?: string | null } }>;
+    create(p: Record<string, unknown>): Promise<{ data: { webViewLink?: string | null } }>;
+  };
+}
+export interface ArchivoASubir {
+  nombre: string;
+  datos: Buffer;
+  tipo: string;
+}
+
+/**
+ * subir(carpetaId, archivo) con la carpeta listada una sola vez. Para los
+ * scripts que ya tienen su propio cliente de Drive (descargar-cpe,
+ * consultar-cpe-individual): reemplaza su «list por archivo + create».
+ */
+export function crearSubidor(drive: DriveMin) {
+  const DRIVES = { supportsAllDrives: true, includeItemsFromAllDrives: true };
+  const porSubir = new Map<string, ArchivoASubir>();
+  const cache = new CacheCarpetas(
+    async carpetaId => {
+      const m = new Map<string, string | null>();
+      let pageToken: string | undefined;
+      do {
+        const r = await drive.files.list({
+          q: `'${carpetaId}' in parents and trashed = false`,
+          fields: "nextPageToken, files(name,webViewLink)",
+          pageSize: 1000,
+          pageToken,
+          ...DRIVES,
+        });
+        for (const a of r.data.files ?? []) if (a.name) m.set(a.name, a.webViewLink ?? null);
+        pageToken = r.data.nextPageToken ?? undefined;
+      } while (pageToken);
+      return m;
+    },
+    async (carpetaId, nombre) => {
+      const f = porSubir.get(`${carpetaId}/${nombre}`)!;
+      const { Readable } = await import("node:stream");
+      const creado = await drive.files.create({
+        requestBody: { name: f.nombre, parents: [carpetaId] },
+        media: { mimeType: f.tipo, body: Readable.from(f.datos) },
+        fields: "id,webViewLink",
+        supportsAllDrives: true,
+      });
+      return creado.data.webViewLink ?? null;
+    },
+  );
+  return async (carpetaId: string, f: ArchivoASubir) => {
+    const k = `${carpetaId}/${f.nombre}`;
+    porSubir.set(k, f);
+    try {
+      return await cache.subir(carpetaId, f.nombre);
+    } finally {
+      porSubir.delete(k);
+    }
+  };
+}
