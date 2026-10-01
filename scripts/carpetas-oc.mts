@@ -32,12 +32,6 @@ import {
 
 // ── Configuración desde el entorno ────────────────────────────────
 
-function pedir(...nombres: string[]): string {
-  for (const n of nombres) { const v = (process.env[n] ?? "").trim(); if (v) return v; }
-  console.error(`✗ Falta ${nombres.join(" o ")} en el entorno.`);
-  process.exit(1);
-}
-
 const DEBUG = process.env.DEBUG !== "0";
 const CARPETA_MADRE = process.env.CARPETA_MADRE?.trim() || "1oGUtE0IhqwanRsmuuA7QlQRB_koZzOH3";
 // Parte del nombre de una carpeta de proyecto («TALLERES»): recorre solo esa.
@@ -76,6 +70,8 @@ let donde: { corpora: string; driveId?: string } = { corpora: "user" };
 const ocs = new Map<string, OC>();         // por id de carpeta
 const archivos: Archivo[] = [];
 const vistas = new Set<string>();
+// Cada carpeta leída que está dentro de una OC → la carpeta de esa OC.
+const carpetaDeLaOC = new Map<string, string>();
 const fallos: string[] = [];
 let carpetasLeidas = 0, consultas = 0;
 
@@ -120,8 +116,10 @@ function hijaDe(padre: Pendiente, id: string, nombre: string): Pendiente {
   if (leida && (!padre.oc || leida.oc !== padre.oc.oc)) {
     const oc: OC = { ...leida, carpetaId: id, carpetaNombre: nombre, proyectoCarpeta };
     ocs.set(id, oc);
+    carpetaDeLaOC.set(id, id);
     return { id, ruta, proyectoCarpeta, oc, sub: "" };
   }
+  if (padre.oc) carpetaDeLaOC.set(id, padre.oc.carpetaId);
   return { id, ruta, proyectoCarpeta, oc: padre.oc, sub: padre.oc ? (padre.sub ? padre.sub + " / " : "") + nombre : "" };
 }
 
@@ -263,15 +261,106 @@ function csv(filas: string[][]): string {
   return "﻿" + filas.map(f => f.map(c => /[",;\n]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c).join(",")).join("\n");
 }
 
-// ── Subir a la base ─────────────────────────────────────────────────
+// ── La base ─────────────────────────────────────────────────────────
 
-async function subirALaBase(filasOcs: string[][], porCarpeta: Map<string, Archivo[]>, completo: boolean) {
-  const url = pedir("SUPABASE_URL", "PROJECT_URL");
-  const sb = createClient(url, pedir("SUPABASE_ANON_KEY", "ANON_KEY"),
+/** Una variable del entorno; si falta, un error (en depuración la base es opcional). */
+function leer(...nombres: string[]): string {
+  for (const n of nombres) { const v = (process.env[n] ?? "").trim(); if (v) return v; }
+  throw new Error(`falta ${nombres.join(" o ")} en el entorno`);
+}
+
+function clienteSupabase() {
+  return createClient(leer("SUPABASE_URL", "PROJECT_URL"), leer("SUPABASE_ANON_KEY", "ANON_KEY"),
     { auth: { autoRefreshToken: false, persistSession: false } });
-  const { error } = await sb.auth.signInWithPassword({ email: pedir("ROBOT_CORREO"), password: pedir("ROBOT_CLAVE") });
-  if (error) throw new Error(`No se pudo entrar como el robot: ${error.message}`);
+}
+type Base = ReturnType<typeof clienteSupabase>;
 
+async function entrarALaBase(): Promise<Base> {
+  const sb = clienteSupabase();
+  const { error } = await sb.auth.signInWithPassword({ email: leer("ROBOT_CORREO"), password: leer("ROBOT_CLAVE") });
+  if (error) throw new Error(`No se pudo entrar como el robot: ${error.message}`);
+  return sb;
+}
+
+/** Todas las filas de una tabla, de a 1000 (el tope de cada consulta). */
+async function todas<T>(sb: Base, tabla: string, columnas: string, filtro: (q: any) => any = q => q): Promise<T[]> {
+  const salida: T[] = [];
+  for (let desde = 0; ; desde += 1000) {
+    const { data, error } = await filtro(sb.from(tabla).select(columnas)).range(desde, desde + 999);
+    if (error) throw new Error(`${tabla}: ${error.message}`);
+    salida.push(...(data as T[]));
+    if (!data || data.length < 1000) return salida;
+  }
+}
+
+const idDeCarpeta = (url: string) => /\/folders\/([\w-]{10,})/.exec(url ?? "")?.[1] ?? "";
+/** «115-2026» → «0115-2026», como en la base de CG; vacío si no es una OC. */
+const oc4 = (t: string) => { const m = /(\d{1,5})\s*-\s*(20\d\d)/.exec(t ?? ""); return m ? `${m[1].padStart(4, "0")}-${m[2]}` : ""; };
+
+/**
+ * ¿La carpeta madre trae más que Control de Gestión, o lo mismo? Compara
+ * cada OC de la madre con la base de CG (oc_base_cg) y con lo que la captura
+ * encontró siguiendo los enlaces de CG (oc_archivo, origen CAPTURA).
+ */
+async function compararConCG(sb: Base, porCarpeta: Map<string, Archivo[]>, completo: boolean) {
+  const cg = new Set((await todas<{ oc: string }>(sb, "oc_base_cg", "oc")).map(r => r.oc));
+  const captura = await todas<{ oc: string; carpeta_url: string; parece: string }>(
+    sb, "oc_archivo", "oc,carpeta_url,parece", q => q.eq("origen", "CAPTURA"));
+
+  // Por OC: las carpetas a las que apunta el enlace de CG y cuántos comprobantes encontró la captura.
+  const enlaces = new Map<string, Set<string>>(), compCaptura = new Map<string, number>();
+  for (const r of captura) {
+    for (const o of String(r.oc ?? "").split(" / ").map(oc4).filter(Boolean)) {
+      const id = idDeCarpeta(r.carpeta_url);
+      if (id) enlaces.set(o, (enlaces.get(o) ?? new Set()).add(id));
+      if (esComprobante(r.parece ?? "")) compCaptura.set(o, (compCaptura.get(o) ?? 0) + 1);
+    }
+  }
+
+  const porOc = new Map<string, OC[]>();
+  for (const o of ocs.values()) porOc.set(o.oc, [...(porOc.get(o.oc) ?? []), o]);
+
+  const c = { enCg: 0, noEnCg: 0, misma: 0, otra: 0, fuera: 0, sinEnlace: 0, compSoloMadre: 0, compSoloCaptura: 0, compAmbas: 0, masEnMadre: 0 };
+  const filas: string[][] = [["OC", "Proveedor (carpeta)", "Carpeta del proyecto", "En la base de CG", "Enlace de CG",
+    "Comprobantes en la madre", "Comprobantes en la captura de CG", "Carpeta en la madre", "Carpeta del enlace de CG"]];
+  for (const [oc, carpetas] of [...porOc.entries()].sort()) {
+    const ids = new Set(carpetas.map(o => o.carpetaId));
+    const enCg = cg.has(oc);
+    enCg ? c.enCg++ : c.noEnCg++;
+    const deCg = [...(enlaces.get(oc) ?? [])];
+    let enlace: string;
+    if (!deCg.length) { enlace = "sin enlace (o la captura no lo pudo abrir)"; c.sinEnlace++; }
+    else if (deCg.some(id => ids.has(carpetaDeLaOC.get(id) ?? ""))) { enlace = "misma carpeta"; c.misma++; }
+    else if (deCg.some(id => carpetaDeLaOC.has(id) || vistas.has(id))) { enlace = "otra carpeta de la madre"; c.otra++; }
+    else { enlace = completo ? "fuera de la carpeta madre" : "fuera de lo leído"; c.fuera++; }
+
+    const enMadre = carpetas.reduce((n, o) => n + (porCarpeta.get(o.carpetaId) ?? []).filter(a => esComprobante(a.parece)).length, 0);
+    const enCaptura = compCaptura.get(oc) ?? 0;
+    if (enMadre && !enCaptura) c.compSoloMadre++;
+    else if (!enMadre && enCaptura) c.compSoloCaptura++;
+    else if (enMadre && enCaptura) c.compAmbas++;
+    if (enMadre > enCaptura) c.masEnMadre++;
+    filas.push([oc, carpetas[0].proveedor, carpetas[0].proyectoCarpeta, enCg ? "Sí" : "No", enlace,
+      String(enMadre), String(enCaptura), carpetas.map(o => urlCarpeta(o.carpetaId)).join(" | "),
+      deCg.map(urlCarpeta).join(" | ")]);
+  }
+  writeFileSync(join(SALIDA, "comparacion-cg.csv"), csv(filas));
+
+  const n = porOc.size;
+  return [
+    "### Frente a Control de Gestión",
+    "",
+    `De las **${n}** OC de la carpeta madre${completo ? "" : " leídas"}:`,
+    `- En la base de CG: **${c.enCg}**; **no** están en CG: **${c.noEnCg}**`,
+    `- El enlace de CG apunta a la misma carpeta (o a una subcarpeta): **${c.misma}**; a otra carpeta de la madre: ${c.otra}; ${completo ? "fuera de la madre" : "fuera de lo leído"}: ${c.fuera}; sin enlace capturado: ${c.sinEnlace}`,
+    `- Con comprobante solo en la madre: **${c.compSoloMadre}**; solo en la captura de CG: ${c.compSoloCaptura}; en las dos: ${c.compAmbas}`,
+    `- OC donde la madre tiene más comprobantes que la captura de CG: **${c.masEnMadre}**`,
+    "",
+    "El detalle por OC está en `comparacion-cg.csv`. Lo que la madre no trae —centro de costo, monto, RUC— sigue saliendo de CG y de la base de nacionales.",
+  ].join("\n");
+}
+
+async function subirALaBase(sb: Base, filasOcs: string[][], porCarpeta: Map<string, Archivo[]>, completo: boolean) {
   const carpetas = filasOcs.map(f => ({
     oc: f[0], tipo: f[1], proveedor: f[2], proyecto: f[3], proyectoCarpeta: f[4],
     archivos: Number(f[5]), comprobantes: Number(f[6]), series: f[7], rucs: f[8],
@@ -353,7 +442,7 @@ async function main() {
   for (const a of deOc) parece.set(a.parece, (parece.get(a.parece) ?? 0) + 1);
   const gb = archivos.reduce((s, a) => s + a.kb, 0) / 1024 / 1024;
 
-  const resumen = [
+  let resumen = [
     `## Carpeta madre de compras nacionales${SUBCARPETA ? ` (solo «${SUBCARPETA}»)` : ""}`,
     "",
     `- Carpetas leídas: **${carpetasLeidas}** (${consultas} consultas a Drive, ${Math.round((Date.now() - inicio) / 1000)} s)`,
@@ -379,6 +468,17 @@ async function main() {
     ...(fallos.length ? ["**No se pudieron leer:**", ...fallos.slice(0, 20).map(f => `- ${f}`)] : []),
   ].join("\n");
 
+  // La base hace falta para comparar con CG; en depuración, si no hay acceso, solo se omite la comparación.
+  let sb: Base | null = null, comparacion = "";
+  try {
+    sb = await entrarALaBase();
+    comparacion = await compararConCG(sb, porCarpeta, !SUBCARPETA);
+  } catch (e) {
+    if (!DEBUG) throw e;
+    comparacion = `_No se pudo comparar con CG: ${e instanceof Error ? e.message : e}_`;
+  }
+  resumen += "\n" + comparacion + "\n";
+
   console.log("\n" + resumen + "\n");
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, resumen + "\n");
 
@@ -387,7 +487,7 @@ async function main() {
   writeFileSync(join(SALIDA, "fuera-de-oc.csv"), csv([["Ruta", "Archivo", "Parece", "Serie", "Enlace"],
     ...sueltos.map(a => [a.ruta, a.nombre, a.parece, a.serie, a.url])]));
   writeFileSync(join(SALIDA, "resumen.md"), resumen);
-  console.log(`✓ Resultado en ${SALIDA} (ocs.csv, archivos.csv, fuera-de-oc.csv, resumen.md)`);
+  console.log(`✓ Resultado en ${SALIDA} (ocs.csv, archivos.csv, fuera-de-oc.csv, comparacion-cg.csv, resumen.md)`);
 
   if (DEBUG) return;
 
@@ -395,7 +495,7 @@ async function main() {
     console.error("✗ No se encontró ninguna carpeta de OC: no se toca la base ni la hoja.");
     process.exit(1);
   }
-  await subirALaBase(filasOcs, porCarpeta, !SUBCARPETA && fallos.length === 0);
+  await subirALaBase(sb!, filasOcs, porCarpeta, !SUBCARPETA && fallos.length === 0);
 
   const hoja = await publicarHoja({ filas: [CAB_OCS, ...filasOcs], nombre: NOMBRE_HOJA, carpetas: CARPETAS_HOJA, tipos: TIPOS_OCS });
   await asegurarPestana(hojas, hoja.id, "ARCHIVOS");
