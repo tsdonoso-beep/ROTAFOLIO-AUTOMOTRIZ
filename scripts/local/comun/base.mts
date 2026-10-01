@@ -14,8 +14,15 @@ export async function base(forzar = false): Promise<SupabaseClient> {
   const c = createClient(pedir("SUPABASE_URL", "PROJECT_URL"), pedir("SUPABASE_ANON_KEY", "ANON_KEY"), {
     auth: { autoRefreshToken: true, persistSession: false },
   });
-  const { error } = await c.auth.signInWithPassword({ email: pedir("ROBOT_CORREO"), password: pedir("ROBOT_CLAVE") });
-  if (error) throw new Error(`No se pudo entrar a la base: ${error.message}`);
+  // Ante un corte de red («fetch failed») se reintenta: la ruta a Supabase cortaba de a ratos (30/09/2026).
+  for (let intento = 1; ; intento++) {
+    const { error } = await c.auth.signInWithPassword({ email: pedir("ROBOT_CORREO"), password: pedir("ROBOT_CLAVE") });
+    if (!error) break;
+    if (intento >= 5 || !/fetch failed|network|timeout|ECONN|ETIMEDOUT/i.test(error.message))
+      throw new Error(`No se pudo entrar a la base: ${error.message}`);
+    console.log(`⚠ no se pudo entrar a la base (${error.message}); reintento ${intento}/4 en ${5 * intento} s`);
+    await dormir(5000 * intento);
+  }
   sb = c;
   return c;
 }

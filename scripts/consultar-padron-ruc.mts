@@ -103,11 +103,18 @@ function clienteSupabase() {
     { auth: { autoRefreshToken: false, persistSession: false } });
 }
 
+/** Entra como el robot; ante un corte de red («fetch failed») reintenta 5 veces con espera creciente (30/09/2026: la ruta a Supabase cortaba de a ratos). */
 async function autenticarRobot(sb: ReturnType<typeof clienteSupabase>) {
-  const { error } = await sb.auth.signInWithPassword({
-    email: pedir("ROBOT_CORREO"), password: pedir("ROBOT_CLAVE"),
-  });
-  if (error) { console.error("✗ No se pudo entrar como el robot:", error.message); process.exit(1); }
+  for (let intento = 1; intento <= 5; intento++) {
+    const { error } = await sb.auth.signInWithPassword({
+      email: pedir("ROBOT_CORREO"), password: pedir("ROBOT_CLAVE"),
+    });
+    if (!error) return;
+    const deRed = /fetch failed|network|timeout|ECONN|ETIMEDOUT/i.test(error.message);
+    if (!deRed || intento === 5) { console.error("✗ No se pudo entrar como el robot:", error.message); process.exit(1); }
+    console.log(`⚠ no se pudo entrar como el robot (${error.message}); reintento ${intento}/4 en ${5 * intento} s`);
+    await pausaAlAzar(5000 * intento, 5000 * intento);
+  }
 }
 
 /**
@@ -164,17 +171,22 @@ async function guardarResultado(sb: ReturnType<typeof clienteSupabase>, r: Condi
 
 // ── Principal ─────────────────────────────────────────────────────
 
+// PARALELO pestañas a la vez (cada una con su propia sesión, así el reCAPTCHA
+// las ve como visitas separadas), todas tomando de la misma cola. Por omisión
+// 1, como siempre. Freno automático: si de los últimos 10 resultados 3 o más
+// no se pudieron leer —la señal de que SUNAT empieza a rechazar—, todas paran
+// 60 s y la pausa entre consultas se duplica (hasta 16 s).
+const PARALELO = Math.max(1, Number(process.env.PARALELO?.trim() || "1"));
+const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
+
 const navegador = await chromium.launch({
   headless: true,
   args: ["--disable-blink-features=AutomationControlled"],
 });
-const contexto = await navegador.newContext({
-  locale: "es-PE",
-  // Un User-Agent de navegador real: sin esto el WAF de SUNAT trata distinto
-  // la petición — se vio lo mismo con el portal SOL en descargar-cpe.mts.
-  userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
-});
-const page = await contexto.newPage();
+// Un User-Agent de navegador real: sin esto el WAF de SUNAT trata distinto
+// la petición — se vio lo mismo con el portal SOL en descargar-cpe.mts.
+const nuevaPagina = async () => (await navegador.newContext({ locale: "es-PE", userAgent: USER_AGENT })).newPage();
+const page = await nuevaPagina();
 
 try {
   const sb = DEBUG ? null : clienteSupabase();
@@ -185,40 +197,71 @@ try {
 
   console.log(DEBUG
     ? `Modo depuración: consultando ${enEstaCorrida.length} RUC de prueba (${enEstaCorrida.join(", ")}). No se guarda nada.`
-    : `${rucs.length} RUC pendientes; consultando ${enEstaCorrida.length} en esta corrida.`);
+    : `${rucs.length} RUC pendientes; consultando ${enEstaCorrida.length} en esta corrida, ${PARALELO} a la vez.`);
 
   let ok = 0;
   const fallidos: string[] = [];
+  const cola = [...enEstaCorrida];
+  const recientes: boolean[] = [];
+  let pausaMin = 2000;
+  let frenoHasta = 0;
+  const inicio = Date.now();
 
-  for (const [i, ruc] of enEstaCorrida.entries()) {
-    console.log(`\n· ${ruc}`);
-    try {
-      const r = await consultarRuc(page, ruc);
-      if (DEBUG) await evidencia(page, `resultado-${ruc}`);
-
-      if (!r.encontrado) {
-        console.log(`  ⚠ no se pudo leer el resultado (¿RUC inexistente, o cambió la página?)`);
-        fallidos.push(ruc);
-      } else {
-        console.log(
-          `  Estado=${r.estado} Condición=${r.condicion} ` +
-          `BuenContribuyente=${r.buenContribuyente} AgenteRetención=${r.agenteRetencion} AgentePercepción=${r.agentePercepcion}`
-        );
-        ok++;
-        if (sb) await guardarResultado(sb, r);
-      }
-    } catch (e) {
-      console.error(`  ✗ ${e instanceof Error ? e.message : e}`);
-      await evidencia(page, `error-${ruc}`);
-      fallidos.push(ruc);
+  const anotar = (bien: boolean) => {
+    recientes.push(bien);
+    if (recientes.length > 10) recientes.shift();
+    const malos = recientes.filter(x => !x).length;
+    if (recientes.length >= 5 && malos >= 3 && Date.now() > frenoHasta) {
+      frenoHasta = Date.now() + 60000;
+      pausaMin = Math.min(pausaMin * 2, 16000);
+      recientes.length = 0;
+      console.log(`⚠ ${malos} de los últimos resultados no se pudieron leer: todas paran 60 s y la pausa sube a ${pausaMin / 1000}-${(pausaMin * 2) / 1000} s`);
     }
+  };
 
-    // Una pausa entre RUC: encadenar consultas sin respiro es justo el
-    // patrón que hace que un reCAPTCHA v3 puntúe distinto una sesión.
-    if (i < enEstaCorrida.length - 1) await pausaAlAzar(2000, 4000);
-  }
+  const trabajador = async (n: number, pagina: Page) => {
+    for (let ruc = cola.shift(); ruc; ruc = cola.shift()) {
+      while (Date.now() < frenoHasta) await pausaAlAzar(1000, 1000);
+      console.log(`\n· [p${n}] ${ruc}`);
+      try {
+        const r = await consultarRuc(pagina, ruc);
+        if (DEBUG) await evidencia(pagina, `resultado-${ruc}`);
+        if (!r.encontrado) {
+          console.log(`  ⚠ no se pudo leer el resultado (¿RUC inexistente, o cambió la página?)`);
+          fallidos.push(ruc);
+          anotar(false);
+        } else {
+          console.log(
+            `  Estado=${r.estado} Condición=${r.condicion} ` +
+            `BuenContribuyente=${r.buenContribuyente} AgenteRetención=${r.agenteRetencion} AgentePercepción=${r.agentePercepcion}`
+          );
+          ok++;
+          anotar(true);
+          if (sb) await guardarResultado(sb, r);
+        }
+      } catch (e) {
+        console.error(`  ✗ ${e instanceof Error ? e.message : e}`);
+        await evidencia(pagina, `error-${ruc}`);
+        fallidos.push(ruc);
+        anotar(false);
+      }
+      const hechos = ok + fallidos.length;
+      if (hechos % 25 === 0) {
+        const porMin = hechos / ((Date.now() - inicio) / 60000);
+        console.log(`  … ${hechos}/${enEstaCorrida.length} · ${porMin.toFixed(1)}/min · faltan ~${Math.round(cola.length / Math.max(porMin, 0.1))} min`);
+      }
+      // Una pausa entre RUC: encadenar consultas sin respiro es justo el
+      // patrón que hace que un reCAPTCHA v3 puntúe distinto una sesión.
+      if (cola.length) await pausaAlAzar(pausaMin, pausaMin * 2);
+    }
+  };
 
-  console.log(`\n${ok} de ${enEstaCorrida.length} consultados.`);
+  const paginas = [page];
+  for (let i = 1; i < Math.min(PARALELO, enEstaCorrida.length); i++) paginas.push(await nuevaPagina());
+  // Arranque escalonado: no las N consultas en el mismo segundo.
+  await Promise.all(paginas.map(async (p, i) => { await pausaAlAzar(i * 1500, i * 1500 + 500); await trabajador(i + 1, p); }));
+
+  console.log(`\n${ok} de ${enEstaCorrida.length} consultados en ${((Date.now() - inicio) / 60000).toFixed(1)} min.`);
   if (fallidos.length) console.log(`No se pudieron leer: ${fallidos.join(", ")}`);
   if (!DEBUG && rucs.length > enEstaCorrida.length) {
     console.log(`Quedan ${rucs.length - enEstaCorrida.length} RUC pendientes para la próxima corrida.`);
