@@ -11,6 +11,7 @@ import { origenDe, periodoDe } from "../../../lib/sunat/cpe-importacion.ts";
 import { RUC, CARPETA_DRIVE } from "./config.mts";
 import { dormir, type Bitacora } from "./bitacora.mts";
 import type { Confirmado } from "./guardar.mts";
+import { CacheCarpetas } from "./cache-drive.mts";
 
 export interface Archivo {
   nombre: string;
@@ -77,18 +78,47 @@ async function reintentable<T>(b: Bitacora, que: string, fn: () => Promise<T>, i
   }
 }
 
-async function subir(carpetaId: string, f: Archivo): Promise<{ estado: "nuevo" | "existe"; url: string | null }> {
-  const d = drive();
-  const q = `name = '${f.nombre.replace(/'/g, "\\'")}' and '${carpetaId}' in parents and trashed = false`;
-  const ya = await d.files.list({ q, fields: "files(id,webViewLink)", supportsAllDrives: true, includeItemsFromAllDrives: true });
-  if (ya.data.files?.length) return { estado: "existe", url: ya.data.files[0].webViewLink ?? null };
-  const creado = await d.files.create({
+const DRIVES = { supportsAllDrives: true, includeItemsFromAllDrives: true } as const;
+/** Lo que hay en una carpeta: nombre → enlace (de a 1000 por página). */
+async function listarCarpeta(carpetaId: string): Promise<Map<string, string | null>> {
+  const m = new Map<string, string | null>();
+  let pageToken: string | undefined;
+  do {
+    const r = await drive().files.list({
+      q: `'${carpetaId}' in parents and trashed = false`,
+      fields: "nextPageToken, files(name,webViewLink)",
+      pageSize: 1000,
+      pageToken,
+      ...DRIVES,
+    });
+    for (const a of r.data.files ?? []) if (a.name) m.set(a.name, a.webViewLink ?? null);
+    pageToken = r.data.nextPageToken ?? undefined;
+  } while (pageToken);
+  return m;
+}
+
+// El archivo que se está subiendo, por nombre de carpeta+archivo: crear() solo recibe nombres.
+const porSubir = new Map<string, Archivo>();
+const cache = new CacheCarpetas(listarCarpeta, async (carpetaId, nombre) => {
+  const f = porSubir.get(`${carpetaId}/${nombre}`)!;
+  const creado = await drive().files.create({
     requestBody: { name: f.nombre, parents: [carpetaId] },
     media: { mimeType: f.tipo, body: Readable.from(f.datos) },
     fields: "id,webViewLink",
     supportsAllDrives: true,
   });
-  return { estado: "nuevo", url: creado.data.webViewLink ?? null };
+  return creado.data.webViewLink ?? null;
+});
+
+/** Sube sin repetir: la carpeta se lista una vez (cache-drive.mts) y cada archivo cuesta una llamada. */
+async function subir(carpetaId: string, f: Archivo): Promise<{ estado: "nuevo" | "existe"; url: string | null }> {
+  const k = `${carpetaId}/${f.nombre}`;
+  porSubir.set(k, f);
+  try {
+    return await cache.subir(carpetaId, f.nombre);
+  } finally {
+    porSubir.delete(k);
+  }
 }
 
 const carpetas = new Map<string, Promise<string>>();

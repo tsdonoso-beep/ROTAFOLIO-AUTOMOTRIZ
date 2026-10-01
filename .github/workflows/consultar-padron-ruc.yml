@@ -43,7 +43,7 @@ on:
       max_consultas:
         description: "Tope de RUC a consultar en esta corrida."
         required: false
-        default: "80"
+        default: "150"
 
 # Nunca dos corridas a la vez —una manual mientras corre la del cron, por
 # ejemplo—: encadenarían consultas al mismo RUC en simultáneo sin necesidad.
@@ -83,7 +83,10 @@ jobs:
           DEBUG: ${{ inputs.debug && '1' || '0' }}
           RUCS: ${{ inputs.rucs }}
           DIAS_VIGENCIA: ${{ inputs.dias_vigencia }}
-          MAX_CONSULTAS: ${{ inputs.max_consultas }}
+          # 3 pestañas en paralelo y hasta 150 por corrida (local: 4 pestañas, 48/min y 0 rechazos el 30/09/2026).
+          # Si SUNAT empieza a rechazar, el script frena solo (para 60 s y alarga la pausa).
+          MAX_CONSULTAS: ${{ inputs.max_consultas || '150' }}
+          PARALELO: "3"
         # con-bitacora: hora y nivel en cada línea y logs/<script>-<fecha>/ (eventos, HTTP con error, resumen).
         run: node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/local/comun/con-bitacora.mts scripts/consultar-padron-ruc.mts
 

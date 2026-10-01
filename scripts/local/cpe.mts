@@ -8,7 +8,7 @@
 //       VIA=ui WORKERS=2 LIMITE=10 HEADLESS=0 pnpm cpe:local
 //
 // Variables: PERIODO (202608,202609) · VIA · WORKERS (8) · LIMITE (0 = todos) · ORDEN (antiguo|reciente)
-//   HEADLESS (1) · RAMPA_S (UI 8 / API 1) · MAX_INTENTOS (6) · ESPERA_CAIDO_S (API 30 / UI 300) · SUBIDAS (6)
+//   HEADLESS (1) · RAMPA_S (UI 8 / API 1) · MAX_INTENTOS (6) · ESPERA_CAIDO_S (API 30 / UI 300) · SUBIDAS (10)
 //   LOTE_GUARDADO (20) · PUBLICAR (fin|nunca) · CON_PDF (1) · PDF_EN_PARALELO (6) · BARRA (1)
 //   MODO_SESION (compartida|separada, solo UI)
 // Nunca correrlo a la vez que un workflow que use la misma cuenta de SOL.
@@ -58,7 +58,7 @@ const tuberia = new Tuberia(b, aProcesar, {
     esperaReintentoMs: num("ESPERA_REINTENTO_S", 20) * 1000,
     esperaLimiteMs: num("ESPERA_LIMITE_S", 60) * 1000,
   },
-  subidasEnParalelo: Math.max(1, num("SUBIDAS", 6)),
+  subidasEnParalelo: Math.max(1, num("SUBIDAS", 10)),
   pdfEnParalelo: Math.max(1, num("PDF_EN_PARALELO", 6)),
   loteGuardado: Math.max(1, num("LOTE_GUARDADO", 20)),
   umbralCaido: num("UMBRAL_CAIDO_PCT", 80) / 100,
