@@ -101,6 +101,7 @@ que es la evidencia para diagnosticar cuando algo falla.
 
 | Hora | Workflow | Qué hace |
 |---|---|---|
+| 02:00 | **Carpetas de OC nacionales** | Lee los nombres de la carpeta madre «5. Ordenes de Compra» (OC y comprobantes) |
 | 08:00 | **SUNAT diario** | Pide al SIRE la lista de compras (mes actual y anterior) |
 | 08:00 | **SUNAT descargar XML** | Baja XML/PDF de serie **E001** de ayer y hoy |
 | 08:30 | **SUNAT CPE por API** | Baja XML y PDF de los **no-E001** directo de la API de SUNAT (mes anterior + actual, todos los pendientes) |
@@ -183,6 +184,22 @@ que es la evidencia para diagnosticar cuando algo falla.
   Retención/Percepción. Guarda en `padron_ruc`. Solo consulta RUC nuevos o con
   más de 30 días.
 - **Cuándo:** cron 09:00 + manual. Tope 30 min. No necesita Clave SOL.
+
+#### Carpetas de OC nacionales — `carpetas-oc.yml` → `scripts/carpetas-oc.mts`
+- **Qué hace:** recorre la carpeta madre de compras nacionales
+  («5. Ordenes de Compra», compartida como Lector con la cuenta de servicio)
+  **solo por nombres**, sin descargar: de cada carpeta «OC 2026 - 0200
+  PROVEEDOR - PROYECTO» saca la OC, y de cada archivo qué parece (factura,
+  XML, guía…) y la serie del comprobante (`lib/drive/carpetas-oc.ts`, la
+  misma regla que `LegajoPorOC.gs`). Sube a `oc_carpeta` y a `oc_archivo`
+  con origen `CARPETA` (migración 045), que `vinculos_oc()` usa para unir
+  cada factura de SUNAT con su OC. Publica la hoja «OC - CARPETAS COMPRAS
+  NACIONALES» (pestañas de OC y de ARCHIVOS) en la carpeta SUNAT.
+- **Cuándo:** cron 02:00 (completa, de verdad) + manual. A mano arranca en
+  depuración (no toca la base ni la hoja) y se puede limitar a un proyecto
+  (`subcarpeta`). El resumen queda en la página de la corrida; los CSV, en el
+  artefacto `carpetas-oc`. Solo una corrida completa y sin fallas reemplaza
+  lo anterior; una parcial solo suma.
 
 #### Otros scripts
 - `scripts/sire.mts`: prueba la cadena del SIRE **desde una máquina local**
@@ -270,6 +287,7 @@ Apps Script entran como el usuario robot; la app, como la persona.
 | `oc_archivo` | 10 530 | Cada archivo encontrado en las carpetas de OC de Drive | Apps Script `SubirCapturaOC.gs` |
 | `oc_base_cg` | 3 723 | Centro de costo de cada OC según Control de Gestión | ídem |
 | `oc_legajo` | 506 | Legajo por OC | Apps Script `SubirLegajo.gs` |
+| `oc_carpeta` | — | Cada carpeta de OC de la carpeta madre de compras nacionales | `carpetas-oc` (también sube a `oc_archivo` con origen `CARPETA`) |
 | `equivalencia_centro_costo` | 2 | Centro de costo → código CONCAR, **solo lo confirmado** | a mano |
 
 ### 6.2 Funciones clave (en las migraciones)
@@ -279,7 +297,7 @@ Apps Script entran como el usuario robot; la app, como la persona.
 | `guardar_cpe(p_empresa_ruc, p_docs)` | Guarda comprobante + ítems; idempotente (repetir actualiza, no duplica) | 032 a 036 |
 | `historico_comprobantes_sunat(p_periodo)` | Filas de la hoja **COMPROBANTES SUNAT** | 017, 039, 041, 042 |
 | `detalle_cpe(p_periodo)` | Filas de la hoja **COMPROBANTES SUNAT - DETALLE** | 032 a 036, 039, 041, 042 |
-| `vinculos_oc()` | Cruza comprobantes con archivos de las carpetas de OC | 039, 040, 042 |
+| `vinculos_oc()` | Cruza comprobantes con archivos de las carpetas de OC | 039, 040, 042, 045 |
 | `cargar_captura_oc(...)` | Recibe la captura de OC desde Apps Script | 039, 042 |
 
 La versión vigente de cada función es la de la **última** migración que la toca.
