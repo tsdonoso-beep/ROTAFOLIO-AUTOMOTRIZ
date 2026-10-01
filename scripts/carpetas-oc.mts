@@ -49,8 +49,14 @@ const EMPRESA_RUC = process.env.EMPRESA_RUC?.trim() || "20512201611";
 const NOMBRE_HOJA = IMPO ? "OC - CARPETAS IMPORTACIONES" : "OC - CARPETAS COMPRAS NACIONALES";
 const CARPETAS_HOJA = ["SUNAT"];
 // Cuántas carpetas se preguntan en una sola consulta a Drive, y cuántas consultas a la vez.
-const CARPETAS_POR_CONSULTA = 25;
+// En una unidad compartida de la que la cuenta de servicio no es miembro
+// (solo le compartieron la carpeta), Drive no acepta «A o B o C in parents»:
+// responde «requires shared drive membership». Ahí se pasa a una carpeta por
+// consulta, con más consultas a la vez (1 de octubre de 2026, primera corrida).
+let carpetasPorConsulta = 25;
 const PARALELO = Number(process.env.PARALELO?.trim() || "4");
+const PARALELO_DE_A_UNA = Number(process.env.PARALELO_DE_A_UNA?.trim() || "10");
+const SIN_MEMBRESIA = /shared drive membership/i;
 
 const SALIDA = join(process.cwd(), "salida", "carpetas-oc", IMPO ? "importaciones" : "nacionales");
 mkdirSync(SALIDA, { recursive: true });
@@ -185,18 +191,25 @@ async function recorrer(drive: Drive): Promise<void> {
   let ultimoAviso = Date.now();
   while (cola.length) {
     const grupos: Pendiente[][] = [];
-    for (let i = 0; i < cola.length; i += CARPETAS_POR_CONSULTA) grupos.push(cola.slice(i, i + CARPETAS_POR_CONSULTA));
+    for (let i = 0; i < cola.length; i += carpetasPorConsulta) grupos.push(cola.slice(i, i + carpetasPorConsulta));
     cola = [];
-    // De a PARALELO grupos a la vez: rápido, sin pasar el cupo de Drive.
-    for (let i = 0; i < grupos.length; i += PARALELO) {
-      const tanda = grupos.slice(i, i + PARALELO);
+    // De a varios grupos a la vez: rápido, sin pasar el cupo de Drive.
+    for (let i = 0; i < grupos.length;) {
+      const paralelo = carpetasPorConsulta === 1 ? PARALELO_DE_A_UNA : PARALELO;
+      const tanda = grupos.slice(i, i + paralelo);
+      i += paralelo;
       const res = await Promise.allSettled(tanda.map(g => leerGrupo(drive, g)));
       res.forEach((x, k) => {
-        if (x.status === "fulfilled") cola.push(...x.value);
-        else {
-          const motivo = x.reason instanceof Error ? x.reason.message : String(x.reason);
-          for (const p of tanda[k]) fallos.push(`${p.ruta.join(" / ") || "(carpeta madre)"}: ${motivo}`);
+        if (x.status === "fulfilled") { cola.push(...x.value); return; }
+        const motivo = x.reason instanceof Error ? x.reason.message : String(x.reason);
+        if (SIN_MEMBRESIA.test(motivo) && tanda[k].length > 1) {
+          // Se vuelven a leer de a una en la vuelta siguiente.
+          if (carpetasPorConsulta > 1) console.log("⚠ Unidad compartida sin membresía: se lee una carpeta por consulta.");
+          carpetasPorConsulta = 1;
+          cola.push(...tanda[k]);
+          return;
         }
+        for (const p of tanda[k]) fallos.push(`${p.ruta.join(" / ") || "(carpeta madre)"}: ${motivo}`);
       });
       if (Date.now() - ultimoAviso > 15000) {
         ultimoAviso = Date.now();
@@ -291,11 +304,16 @@ async function entrarALaBase(): Promise<Base> {
   return sb;
 }
 
-/** Todas las filas de una tabla, de a 1000 (el tope de cada consulta). */
-async function todas<T>(sb: Base, tabla: string, columnas: string, filtro: (q: any) => any = q => q): Promise<T[]> {
+/**
+ * Todas las filas de una tabla, de a 1000 (el tope de cada consulta). Con un
+ * orden fijo: sin él, dos páginas pueden repetir o saltarse filas.
+ */
+async function todas<T>(sb: Base, tabla: string, columnas: string, orden: string[], filtro: (q: any) => any = q => q): Promise<T[]> {
   const salida: T[] = [];
   for (let desde = 0; ; desde += 1000) {
-    const { data, error } = await filtro(sb.from(tabla).select(columnas)).range(desde, desde + 999);
+    let q = filtro(sb.from(tabla).select(columnas));
+    for (const c of orden) q = q.order(c);
+    const { data, error } = await q.range(desde, desde + 999);
     if (error) throw new Error(`${tabla}: ${error.message}`);
     salida.push(...(data as T[]));
     if (!data || data.length < 1000) return salida;
@@ -324,10 +342,10 @@ function anotar(f: Fuente, oc: string, url: string, parece?: string) {
  */
 async function fuenteCG(sb: Base): Promise<Fuente> {
   const f: Fuente = { nombre: "Frente a Control de Gestión", corto: "CG", archivo: "comparacion-cg.csv",
-    listado: new Set((await todas<{ oc: string }>(sb, "oc_base_cg", "oc")).map(r => r.oc)),
+    listado: new Set((await todas<{ oc: string }>(sb, "oc_base_cg", "oc", ["oc", "cc_codigo", "cc_nombre"])).map(r => r.oc)),
     enlaces: new Map(), comprobantes: new Map() };
   const captura = await todas<{ oc: string; carpeta_url: string; parece: string }>(
-    sb, "oc_archivo", "oc,carpeta_url,parece", q => q.eq("origen", "CAPTURA"));
+    sb, "oc_archivo", "oc,carpeta_url,parece", ["oc", "url"], q => q.eq("origen", "CAPTURA"));
   for (const r of captura) {
     for (const o of String(r.oc ?? "").split(" / ").map(oc4).filter(Boolean)) anotar(f, o, r.carpeta_url, r.parece ?? "");
   }
@@ -342,10 +360,10 @@ async function fuenteCuadro(sb: Base): Promise<Fuente> {
   const f: Fuente = { nombre: "Frente al cuadro de aprobaciones (legajo)", corto: "cuadro", archivo: "comparacion-cuadro.csv",
     listado: new Set(), enlaces: new Map(), comprobantes: new Map() };
   const legajo = await todas<{ oc: string; carpeta_url: string }>(
-    sb, "oc_legajo", "oc,carpeta_url", q => q.eq("procedencia", "Importación"));
+    sb, "oc_legajo", "oc,carpeta_url", ["oc", "carpeta_url"], q => q.eq("procedencia", "Importación"));
   for (const r of legajo) { f.listado.add(r.oc); anotar(f, r.oc, r.carpeta_url); }
   const archivos = await todas<{ oc: string; parece: string }>(
-    sb, "oc_archivo", "oc,parece", q => q.eq("origen", "LEGAJO"));
+    sb, "oc_archivo", "oc,parece", ["oc", "url"], q => q.eq("origen", "LEGAJO"));
   for (const r of archivos) {
     for (const o of String(r.oc ?? "").split(" / ")) {
       if (f.listado.has(o) && esComprobante(r.parece ?? "")) f.comprobantes.set(o, (f.comprobantes.get(o) ?? 0) + 1);
