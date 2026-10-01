@@ -626,7 +626,7 @@
           '<div>' + (oc ? '<span class="chip chip-azul">OC ' + esc(oc[0]) + '</span>' : '<span class="nota">sin OC</span>') + '</div>' +
           '<div class="f-acc">' + (x[12] ? '<a href="https://drive.google.com/file/d/' + esc(x[12]) + '/view" target="_blank" rel="noopener">PDF ↗</a>' : '') +
           (x[13] ? '<a href="https://drive.google.com/file/d/' + esc(x[13]) + '/view" target="_blank" rel="noopener">XML ↗</a>' : '') + '</div></div>';
-      }).join('') : '<p class="vacio" style="padding:10px 4px">No hay comprobantes con «' + esc(q) + '». Prueba solo con el número, o con el RUC.</p>';
+      }).join('') : '<p class="vacio" style="padding:10px 4px">No hay comprobantes con «' + esc(q) + '». Prueba solo con el número o con el RUC. Para buscar por producto (lo que dice dentro de la factura), usa el buscador de compras de más abajo.</p>';
   }
   function abrirFactura(fila) {
     var sig = fila.nextElementSibling;

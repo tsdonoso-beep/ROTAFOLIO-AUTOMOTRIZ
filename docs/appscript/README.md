@@ -269,6 +269,12 @@ instante según el filtro.
   restadas), detracción, % unido a su OC, % con centro de costo,
   importaciones y productos distintos.
 - **Compras por mes** (clic en un mes = filtro) y **dona por tipo**.
+- **Buscar una factura** (arriba, sin filtros): por serie-número (F001-123,
+  «F001 123» o solo el número), RUC, proveedor o monto. Cada resultado trae
+  el PDF y el XML, y al abrirlo muestra sus líneas, la OC, su legajo y la
+  carpeta (el detalle se trae en el momento con `detalleDelComprobante`, que
+  busca con TextFinder y no vuelve a leer toda la hoja). Sirve aunque SUNAT
+  esté caída.
 - **Buscador de compras** («¿Cuánto pagamos por…?»): todo lo comprado, no
   solo lo que se repite, por palabras sueltas y sin tildes («pollo brasa»,
   «impresora»), con veces, último precio, su línea en el tiempo, la
