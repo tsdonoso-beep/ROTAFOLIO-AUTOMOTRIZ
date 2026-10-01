@@ -2,7 +2,6 @@
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { Readable } from "node:stream";
 import { google } from "googleapis";
 import { normalizarClavePrivada, correoDeServicio, carpeta } from "../../../lib/drive/servidor.ts";
 import { leerZip } from "../../../lib/sunat/zip.ts";
@@ -11,6 +10,7 @@ import { origenDe, periodoDe } from "../../../lib/sunat/cpe-importacion.ts";
 import { RUC, CARPETA_DRIVE } from "./config.mts";
 import { dormir, type Bitacora } from "./bitacora.mts";
 import type { Confirmado } from "./guardar.mts";
+import { crearSubidor } from "./cache-drive.mts";
 
 export interface Archivo {
   nombre: string;
@@ -77,18 +77,11 @@ async function reintentable<T>(b: Bitacora, que: string, fn: () => Promise<T>, i
   }
 }
 
-async function subir(carpetaId: string, f: Archivo): Promise<{ estado: "nuevo" | "existe"; url: string | null }> {
-  const d = drive();
-  const q = `name = '${f.nombre.replace(/'/g, "\\'")}' and '${carpetaId}' in parents and trashed = false`;
-  const ya = await d.files.list({ q, fields: "files(id,webViewLink)", supportsAllDrives: true, includeItemsFromAllDrives: true });
-  if (ya.data.files?.length) return { estado: "existe", url: ya.data.files[0].webViewLink ?? null };
-  const creado = await d.files.create({
-    requestBody: { name: f.nombre, parents: [carpetaId] },
-    media: { mimeType: f.tipo, body: Readable.from(f.datos) },
-    fields: "id,webViewLink",
-    supportsAllDrives: true,
-  });
-  return { estado: "nuevo", url: creado.data.webViewLink ?? null };
+/** Sube sin repetir: la carpeta se lista una vez (cache-drive.mts) y cada archivo cuesta una llamada. */
+let subidor: ReturnType<typeof crearSubidor> | null = null;
+function subir(carpetaId: string, f: Archivo) {
+  subidor ??= crearSubidor(drive() as unknown as Parameters<typeof crearSubidor>[0]);
+  return subidor(carpetaId, f);
 }
 
 const carpetas = new Map<string, Promise<string>>();

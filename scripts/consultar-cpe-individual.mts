@@ -36,11 +36,11 @@
 import { chromium, type Page, type Frame, type Download } from "playwright";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { Readable } from "node:stream";
 import { google } from "googleapis";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { normalizarClavePrivada, correoDeServicio, carpeta, publicarHoja, publicarHojaPorAnio } from "../lib/drive/servidor.ts";
+import { normalizarClavePrivada, correoDeServicio, carpeta, publicarHojaPorAnio } from "../lib/drive/servidor.ts";
 import { leerZip } from "../lib/sunat/zip.ts";
+import { crearSubidor } from "./local/comun/cache-drive.mts";
 import { documentoPrincipal, leerComprobanteXml, type ComprobanteCpe } from "../lib/sunat/cpe-xml.ts";
 import { prepararLote, origenDe, periodoDe, identidad } from "../lib/sunat/cpe-importacion.ts";
 import { filasItemsSunat, filaDetalleDesdeRpc, detalleCpeCompleto, TIPOS_ITEMS } from "../lib/export/items-sunat.ts";
@@ -733,23 +733,15 @@ function clienteDrive() {
 }
 
 /** Sube un archivo sin repetir el que ya está. Igual que en descargar-cpe.mts. */
+// La carpeta se lista UNA vez y la existencia de cada archivo se consulta en
+// memoria (scripts/local/comun/cache-drive.mts): antes, una consulta «¿existe?»
+// por archivo más la subida. Mismo resultado, la mitad de llamadas a Drive.
+let subidor: ReturnType<typeof crearSubidor> | null = null;
 async function subirADrive(
   drive: ReturnType<typeof clienteDrive>, carpetaId: string, f: ArchivoBajado
 ): Promise<{ estado: "nuevo" | "existe"; url: string | null }> {
-  const q = `name = '${f.nombre.replace(/'/g, "\\'")}' and '${carpetaId}' in parents and trashed = false`;
-  const ya = await drive.files.list({
-    q, fields: "files(id,webViewLink)", supportsAllDrives: true, includeItemsFromAllDrives: true,
-  });
-  if (ya.data.files && ya.data.files.length > 0) {
-    return { estado: "existe", url: ya.data.files[0].webViewLink ?? null };
-  }
-  const creado = await drive.files.create({
-    requestBody: { name: f.nombre, parents: [carpetaId] },
-    media: { mimeType: f.tipo, body: Readable.from(f.datos) },
-    fields: "id,webViewLink",
-    supportsAllDrives: true,
-  });
-  return { estado: "nuevo", url: creado.data.webViewLink ?? null };
+  subidor ??= crearSubidor(drive as unknown as Parameters<typeof crearSubidor>[0]);
+  return subidor(carpetaId, f);
 }
 
 /**
