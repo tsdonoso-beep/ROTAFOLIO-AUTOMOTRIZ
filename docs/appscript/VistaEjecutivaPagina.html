@@ -4,95 +4,178 @@
 <meta charset="utf-8">
 <base target="_top">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  /* Paleta e identidad de INRO VIATICOS (app/globals.css), para que este
-     enlace se vea como parte de la misma familia visual que la aplicación. */
+  /* Paleta e identidad de INRO (app/globals.css): la misma familia visual que
+     la aplicación y el tablero del legajo por OC. */
   :root {
-    --bg:#EDF1F4; --surface:#FFFFFF; --surface3:#EEF2F6;
+    --bg:#EDF1F4; --surface:#FFFFFF; --surface2:#F6F8FA; --surface3:#EEF2F6;
     --border:#E4E9EE; --border2:#D2DAE2;
-    --accent:#00A298; --accent-texto:#007A72;
+    --accent:#00A298; --accent-texto:#007A72; --accent-suave:#E1F4F2;
+    --azul:#006DB1; --azul-suave:#E3EEF7; --amarillo:#FFDD00;
     --tinta:#1D1D1B; --text:#101A24; --text2:#52627A; --text3:#8494A8;
-    --danger:#C62828; --warn:#A15C07;
+    --danger:#C62828; --danger-suave:#FBE9E9; --warn:#A15C07; --warn-suave:#FCF1E0;
+    --ok:#1E7F4F; --ok-suave:#E4F4EB;
     --sombra: 0 2px 4px rgba(16,26,38,.05), 0 6px 16px rgba(16,26,38,.06);
   }
   * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--bg); color: var(--text);
-    font-family: "DM Sans", system-ui, sans-serif; -webkit-font-smoothing: antialiased;
-  }
-  h2 { font-family: "Sora", sans-serif; font-size: 15px; font-weight: 700; margin: 0 0 16px; }
-  .pagina { max-width: 1080px; margin: 0 auto; padding: 28px 24px 56px; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font-family: "DM Sans", system-ui, sans-serif; -webkit-font-smoothing: antialiased; font-size: 14px; }
+  h2 { font-family: "Sora", sans-serif; font-size: 15px; font-weight: 700; margin: 0; }
+  button, select, input { font-family: inherit; font-size: 13.5px; }
+  .pagina { max-width: 1240px; margin: 0 auto; padding: 28px 24px 56px; }
+  a { color: var(--azul); }
 
-  #cargando, #error { max-width: 1080px; margin: 60px auto; padding: 0 24px; color: var(--text2); font-size: 14px; }
-  #error .sub { color: var(--text2); font-size: 13.5px; }
+  #cargando { max-width: 1240px; margin: 80px auto; padding: 0 24px; color: var(--text2); font-size: 14px; display: flex; align-items: center; gap: 12px; }
+  .giro { width: 18px; height: 18px; border: 2.5px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: giro .8s linear infinite; }
+  @keyframes giro { to { transform: rotate(360deg); } }
+  #error { max-width: 520px; margin: 60px auto; }
 
-  .cabecera { display: flex; align-items: center; justify-content: space-between; gap: 16px;
-              flex-wrap: wrap; margin-bottom: 28px; padding-bottom: 20px; border-bottom: 1px solid var(--border2); }
+  /* ── Cabecera ── */
+  .cabecera { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+              margin-bottom: 22px; padding-bottom: 20px; border-bottom: 1px solid var(--border2); }
   .marca { display: flex; align-items: center; gap: 16px; }
   .marca-titulo { font-family: "Sora", sans-serif; font-weight: 700; font-size: 17px; }
   .marca-sub { font-size: 12.5px; color: var(--text2); margin-top: 2px; }
-  .boton { display: inline-flex; align-items: center; gap: 6px; background: var(--tinta); color: #fff;
-           text-decoration: none; font-weight: 600; font-size: 13.5px; padding: 11px 18px; border-radius: 10px;
-           box-shadow: var(--sombra); white-space: nowrap; }
+  .boton { display: inline-flex; align-items: center; gap: 6px; background: var(--tinta); color: #fff; border: 0; cursor: pointer;
+           text-decoration: none; font-weight: 600; font-size: 13.5px; padding: 11px 18px; border-radius: 10px; box-shadow: var(--sombra); white-space: nowrap; }
   .boton:hover { background: #000; }
   .boton-accent { background: var(--accent); }
   .boton-accent:hover { background: var(--accent-texto); }
 
-  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 24px; }
-  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
-         padding: 18px 18px 16px; box-shadow: var(--sombra); }
-  .kpi-rotulo { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text3); margin-bottom: 8px; }
-  .kpi-valor { font-family: "Sora", sans-serif; font-size: 24px; font-weight: 800; letter-spacing: -.01em; }
-  .kpi-valor-chico { font-size: 16px; font-weight: 700; }
+  /* ── Franja de estado ── */
+  .estado { display: grid; grid-template-columns: 1.2fr 1fr 1fr; background: var(--surface); border: 1px solid var(--border);
+            border-radius: 14px; box-shadow: var(--sombra); margin-bottom: 18px; overflow: hidden; }
+  .estado > div { padding: 16px 20px; min-width: 0; }
+  .estado > div + div { border-left: 1px solid var(--border); }
+  .rotulo { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text3); margin-bottom: 8px; }
+  .chip { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; font-size: 12.5px; padding: 5px 11px; border-radius: 999px; white-space: nowrap; }
+  .chip-ok { background: var(--ok-suave); color: var(--ok); }
+  .chip-warn { background: var(--warn-suave); color: var(--warn); }
+  .chip-azul { background: var(--azul-suave); color: var(--azul); }
+  .chip-gris { background: var(--surface3); color: var(--text2); }
+  .punto { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
+  .pasos { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--text2); }
+  .paso { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 4px 9px; }
+  .linea { font-size: 13px; color: var(--text2); line-height: 1.45; }
+  .linea b { color: var(--text); }
+  .grande { font-family: "Sora", sans-serif; font-size: 20px; font-weight: 700; margin: 2px 0 4px; }
+
+  /* ── Filtros ── */
+  .filtros { position: sticky; top: 0; z-index: 5; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+             background: rgba(237,241,244,.94); backdrop-filter: blur(6px); padding: 10px 24px 12px; margin: 0 -24px 8px; }
+  .filtros label { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--text3); margin-right: -4px; }
+  .filtros select { background: var(--surface); border: 1px solid var(--border2); border-radius: 9px; padding: 8px 10px; color: var(--text); }
+  .segmento { display: inline-flex; background: var(--surface); border: 1px solid var(--border2); border-radius: 9px; padding: 3px; }
+  .segmento button { background: none; border: 0; padding: 6px 12px; border-radius: 7px; cursor: pointer; color: var(--text2); font-weight: 600; font-size: 12.5px; }
+  .segmento button.activo { background: var(--tinta); color: #fff; }
+  .limpiar { background: none; border: 0; color: var(--azul); cursor: pointer; font-weight: 600; font-size: 12.5px; padding: 6px 4px; }
+  .filtro-activo { font-size: 12px; color: var(--text2); margin-left: auto; }
+
+  /* ── KPIs ── */
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 18px; }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px 14px; box-shadow: var(--sombra); min-width: 0; }
+  .kpi-valor { font-family: "Sora", sans-serif; font-size: 25px; font-weight: 800; letter-spacing: -.01em; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .kpi-valor small { font-size: 13px; font-weight: 700; color: var(--text2); }
   .kpi-extra { font-size: 12px; color: var(--text2); margin-top: 6px; }
+  .kpi-riesgo { border-color: #F2C9C9; background: linear-gradient(180deg, #FFF 0%, #FFF7F7 100%); }
+  .kpi-riesgo .kpi-valor { color: var(--danger); }
+  .kpi-anillo { display: flex; align-items: center; gap: 14px; }
+  .chispa { display: block; margin-top: 10px; }
+  .variacion { font-weight: 700; }
+  .sube { color: var(--danger); } .baja { color: var(--ok); } .igual { color: var(--text3); }
 
-  .dos-columnas { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
-  @media (max-width: 760px) { .dos-columnas { grid-template-columns: 1fr; } .cabecera { flex-direction: column; align-items: flex-start; } }
-
-  .tarjeta { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px; box-shadow: var(--sombra); }
+  /* ── Tarjetas ── */
+  .grilla { display: grid; grid-template-columns: 1.55fr 1fr; gap: 14px; margin-bottom: 14px; }
+  .tarjeta { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px; box-shadow: var(--sombra); min-width: 0; }
   .tarjeta-ancha { margin-bottom: 14px; }
+  .tarjeta-cab { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+  .nota { font-size: 12px; color: var(--text3); }
+  .vacio { color: var(--text3); font-size: 13px; margin: 0; }
+  .seccion { font-family: "Sora", sans-serif; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent-texto); margin: 26px 0 12px; }
 
-  .fila-barra { margin-bottom: 14px; }
-  .fila-barra:last-child { margin-bottom: 0; }
+  /* Meses */
+  .meses { display: flex; align-items: flex-end; gap: 10px; height: 210px; padding-top: 6px; overflow-x: auto; }
+  .mes { flex: 1 0 46px; display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; height: 100%; justify-content: flex-end; }
+  .mes-cifra { font-size: 11.5px; font-weight: 700; color: var(--text2); white-space: nowrap; }
+  .mes-barra { width: 70%; max-width: 46px; border-radius: 7px 7px 3px 3px; background: var(--accent); transition: opacity .12s; min-height: 3px; }
+  .mes-barra.neg { background: var(--danger); }
+  .mes:hover .mes-barra { opacity: .8; }
+  .mes.atenuado .mes-barra { opacity: .3; }
+  .mes-etq { font-size: 12px; color: var(--text2); white-space: nowrap; }
+  .mes.activo .mes-etq { color: var(--text); font-weight: 700; }
+
+  /* Dona */
+  .dona { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+  .dona-leyenda { flex: 1; min-width: 180px; display: flex; flex-direction: column; gap: 10px; }
+  .ley { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; }
+  .ley i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 8px; vertical-align: -1px; }
+  .ley b { font-variant-numeric: tabular-nums; }
+
+  /* Barras */
+  .fila-barra { margin-bottom: 11px; border-radius: 8px; padding: 4px 6px; margin-left: -6px; margin-right: -6px; }
+  .fila-barra:hover { background: var(--surface2); }
   .fb-cab { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; gap: 10px; }
-  .fb-etq { font-size: 13.5px; font-weight: 600; text-transform: capitalize; }
+  .fb-etq { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .fb-cifras { font-size: 12.5px; color: var(--text2); white-space: nowrap; }
   .fb-pista { height: 8px; background: var(--surface3); border-radius: 6px; overflow: hidden; }
-  .fb-relleno { height: 100%; border-radius: 6px; }
-  .vacio { color: var(--text3); font-size: 13px; margin: 0; }
+  .fb-pista > span { display: block; height: 100%; border-radius: 6px; background: var(--accent); }
 
+  /* Mapa de calor proveedor × mes */
+  .calor-caja { overflow-x: auto; }
+  .calor { width: 100%; border-collapse: separate; border-spacing: 3px; font-size: 12.5px; }
+  .calor th { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text3); padding: 0 4px 4px; white-space: nowrap; }
+  .calor th.activo { color: var(--text); }
+  .calor td.prov { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; padding-right: 10px; }
+  .calor td.celda { text-align: center; border-radius: 7px; padding: 8px 4px; font-variant-numeric: tabular-nums; min-width: 66px; white-space: nowrap; }
+  .calor td.total { text-align: right; font-weight: 700; padding-left: 10px; white-space: nowrap; }
+
+  /* Buscador */
+  .buscador-caja { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+  .buscador { flex: 1; min-width: 260px; padding: 12px 14px 12px 40px; border: 1px solid var(--border2); border-radius: 12px; background: var(--surface) no-repeat 14px center;
+              background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%238494A8' stroke-width='2'%3E%3Ccircle cx='7' cy='7' r='5'/%3E%3Cpath d='m11 11 4 4'/%3E%3C/svg%3E"); font-size: 14px; color: var(--text); }
+  .buscador:focus { outline: 2px solid var(--accent-suave); border-color: var(--accent); }
+  .resultados { display: flex; flex-direction: column; }
+  .producto { display: grid; grid-template-columns: minmax(0, 2.2fr) 1fr 1.1fr 130px 92px; gap: 14px; align-items: center; padding: 12px 6px; border-top: 1px solid var(--border); }
+  .producto:first-child { border-top: 0; }
+  .producto:hover { background: var(--surface2); }
+  .p-nombre { font-weight: 600; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .p-sub { font-size: 12px; color: var(--text3); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .p-dato { font-size: 13px; font-variant-numeric: tabular-nums; }
+  .p-dato small { display: block; font-size: 11.5px; color: var(--text3); }
+  .p-pdf { font-size: 12.5px; font-weight: 600; text-decoration: none; white-space: nowrap; }
+  .p-cab { display: grid; grid-template-columns: minmax(0, 2.2fr) 1fr 1.1fr 130px 92px; gap: 14px; padding: 0 6px 8px; font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--text3); border-bottom: 1px solid var(--border2); }
+  .mas { margin-top: 10px; }
+
+  /* Tablas */
   .tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
-  .tabla th { text-align: left; padding: 0 10px 10px 0; font-size: 11px; font-weight: 600; letter-spacing: .05em;
-              text-transform: uppercase; color: var(--text3); border-bottom: 1px solid var(--border2); }
-  .tabla th.th-num { text-align: right; }
+  .tabla th { text-align: left; padding: 0 10px 10px 0; font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--text3); border-bottom: 1px solid var(--border2); }
+  .tabla th.num { text-align: right; }
   .tabla td { padding: 11px 10px 11px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
-  .td-num { text-align: right; font-variant-numeric: tabular-nums; color: var(--text2); }
-  .td-monto { color: var(--text); font-weight: 600; }
-  .td-sub { font-size: 11.5px; color: var(--text3); margin-top: 2px; }
+  .tabla td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .sub { font-size: 11.5px; color: var(--text3); margin-top: 2px; }
 
-  /* Indicadores para Contabilidad */
-  .seccion-titulo { font-family: "Sora", sans-serif; font-size: 13px; font-weight: 700; letter-spacing: .08em;
-                    text-transform: uppercase; color: var(--accent-texto); margin: 30px 0 12px; }
-  .nota { font-size: 12.5px; color: var(--text2); margin: -6px 0 14px; line-height: 1.45; }
-  .buscador { width: 100%; max-width: 360px; padding: 9px 12px; border: 1px solid var(--border2); border-radius: 10px;
-              font: inherit; font-size: 13.5px; margin-bottom: 12px; background: var(--surface); color: var(--text); }
-  .desplazable { overflow-x: auto; }
-  .sube { color: var(--danger); font-weight: 600; }
-  .baja { color: #0A6E4E; font-weight: 600; }
-  .igual { color: var(--text3); }
-  .pildora { display: inline-block; font-size: 11.5px; padding: 2px 8px; border-radius: 20px; background: var(--surface3); color: var(--text2); }
-  .pie { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;
-         margin-top: 24px; font-size: 12px; color: var(--text3); }
+  .pie { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; margin-top: 24px; font-size: 12px; color: var(--text3); }
+
+  @media (max-width: 980px) {
+    .kpis { grid-template-columns: repeat(2, 1fr); }
+    .grilla, .estado { grid-template-columns: 1fr; }
+    .estado > div + div { border-left: 0; border-top: 1px solid var(--border); }
+    .producto { grid-template-columns: minmax(0, 1fr) auto; row-gap: 6px; }
+    .producto > :first-child { grid-column: 1 / -1; }
+    .producto > :nth-child(2), .producto > :nth-child(4) { display: none; }
+    .p-cab { display: none; }
+  }
+  @media (max-width: 560px) { .kpis { grid-template-columns: 1fr; } .filtro-activo { margin-left: 0; } }
 </style>
 </head>
 <body>
 
-<div id="cargando">Cargando el resumen…</div>
+<div id="cargando"><span class="giro"></span> Leyendo el detalle de comprobantes…</div>
 
-<div id="error" class="tarjeta" style="display:none; max-width:520px; margin:60px auto;">
+<div id="error" class="tarjeta" style="display:none">
   <h2>No se pudo armar la vista</h2>
-  <p class="sub" id="errorTexto"></p>
+  <p class="linea" id="errorTexto"></p>
 </div>
 
 <div id="pagina" class="pagina" style="display:none">
@@ -123,219 +206,381 @@
         <path d="M77.3037 22.8049C76.686 21.553 75.7234 20.6738 74.4159 20.1619C73.2808 19.7558 72.0066 19.6445 70.5988 19.8337C69.1855 20.0228 68.0393 20.6182 67.1435 21.6364C66.5926 22.2429 66.1865 23.0052 65.9305 23.9178C65.6746 24.8303 65.541 25.7484 65.541 26.6609C65.541 27.7793 65.6968 28.8532 66.0084 29.8825C66.3144 30.9175 66.8319 31.7354 67.5552 32.3475C68.2396 32.954 69.1633 33.388 70.3151 33.6439C71.4669 33.8999 72.6131 33.8721 73.7482 33.566C75.0224 33.2989 76.0684 32.6034 76.8975 31.485C77.2758 30.9453 77.5819 30.2832 77.8267 29.5042C78.066 28.7252 78.1884 27.796 78.1884 26.711C78.1884 25.2253 77.8935 23.9178 77.3092 22.7994L77.3037 22.8049ZM71.8619 30.9954C69.9144 30.9954 68.9741 29.1091 68.9741 26.7833C68.9741 24.4575 69.9089 22.5712 71.8619 22.5712C73.8149 22.5712 74.7497 24.4575 74.7497 26.7833C74.7497 29.1091 73.8038 30.9954 71.8619 30.9954Z" fill="#1D1D1B"/>
       </svg>
       <div>
-        <div class="marca-titulo">SUNAT · Comprobantes</div>
-        <div class="marca-sub">Vista ejecutiva · INROPRIN S.A.C.</div>
+        <div class="marca-titulo">SUNAT · Comprobantes con detalle</div>
+        <div class="marca-sub">Vista ejecutiva para Contabilidad · INROPRIN S.A.C.</div>
       </div>
     </div>
     <a class="boton" id="enlaceHoja" href="#" target="_blank" rel="noopener">Abrir la hoja completa ↗</a>
   </header>
 
+  <section class="estado">
+    <div>
+      <div class="rotulo">Cómo se alimenta</div>
+      <span class="chip chip-ok"><span class="punto"></span>Se actualiza solo, cada mañana</span>
+      <div class="pasos"><span class="paso">SIRE · 8:00</span><span>→</span><span class="paso">XML y PDF · 8:00 y 8:30</span><span>→</span><span class="paso">Esta vista</span></div>
+    </div>
+    <div>
+      <div class="rotulo">Lo que hay en la hoja</div>
+      <div class="grande" id="estadoDocs">—</div>
+      <div class="linea" id="estadoRango"></div>
+    </div>
+    <div>
+      <div class="rotulo">Esta vista se armó</div>
+      <div class="grande" id="estadoHora">—</div>
+      <div class="linea">Recarga la página para ver lo último.</div>
+    </div>
+  </section>
+
+  <div class="filtros">
+    <label>Mes</label>
+    <select id="fMes"></select>
+    <div class="segmento" id="fOrigen"><button data-v="0" class="activo">Compras</button><button data-v="1">Ventas</button></div>
+    <div class="segmento" id="fMoneda"></div>
+    <button class="limpiar" id="fLimpiar">Quitar filtros</button>
+    <span class="filtro-activo" id="fResumen"></span>
+  </div>
+
   <section class="kpis" id="kpis"></section>
 
-  <section class="dos-columnas">
-    <div class="tarjeta"><h2>Por tipo de comprobante</h2><div id="barrasTipo"></div></div>
-    <div class="tarjeta"><h2>Emitidas vs. recibidas</h2><div id="barrasOrigen"></div></div>
+  <section class="grilla">
+    <div class="tarjeta">
+      <div class="tarjeta-cab"><h2 id="tituloMeses">Compras por mes</h2><span class="nota">Clic en un mes para filtrar · notas de crédito restadas</span></div>
+      <div class="meses" id="meses"></div>
+    </div>
+    <div class="tarjeta">
+      <div class="tarjeta-cab"><h2>Por tipo de comprobante</h2><span class="nota" id="notaTipo"></span></div>
+      <div class="dona" id="dona"></div>
+    </div>
   </section>
 
+  <p class="seccion">Buscador de compras</p>
   <section class="tarjeta tarjeta-ancha">
-    <h2>Compras por mes (recibidos, notas de crédito restadas)</h2>
-    <p class="nota">Por mes de emisión del comprobante. El SIRE anota cada uno en el mes en que se registra: un mes puede diferir un poco del SIRE.</p>
-    <div id="barrasPeriodo"></div>
+    <div class="tarjeta-cab"><h2>¿Cuánto pagamos por…?</h2><span class="nota" id="notaBuscador"></span></div>
+    <div class="buscador-caja">
+      <input class="buscador" id="buscar" type="search" placeholder="Producto o proveedor: impresora, pollo brasa, tóner, cemento…">
+      <div class="segmento" id="bModo"><button data-v="todo" class="activo">Todas las compras</button><button data-v="repite">Compradas en 2+ meses</button></div>
+      <select id="bOrden"><option value="gasto">Más gasto</option><option value="sube">Más subió</option><option value="baja">Más bajó</option><option value="reciente">Más reciente</option></select>
+    </div>
+    <div class="p-cab"><span>Producto · proveedor</span><span>Compras</span><span>Último precio</span><span>Precio en el tiempo</span><span></span></div>
+    <div class="resultados" id="resultados"></div>
+    <button class="limpiar mas" id="verMas" style="display:none">Ver más</button>
   </section>
 
-  <section class="tarjeta tarjeta-ancha">
-    <h2>Principales proveedores (comprobantes recibidos)</h2>
-    <div id="tablaProveedores"></div>
+  <p class="seccion">Proveedores</p>
+  <section class="grilla">
+    <div class="tarjeta">
+      <div class="tarjeta-cab"><h2>Proveedores mes a mes</h2><span class="nota">Los 12 de más monto · más intenso = más monto</span></div>
+      <div class="calor-caja" id="calor"></div>
+    </div>
+    <div class="tarjeta">
+      <div class="tarjeta-cab"><h2>Principales del período</h2><span class="nota" id="notaTop"></span></div>
+      <div id="top"></div>
+    </div>
   </section>
 
-  <p class="seccion-titulo">Indicadores para Contabilidad</p>
-
-  <section class="tarjeta tarjeta-ancha">
-    <h2>Por mes: compras, ventas, detracción y gastos de importación (en soles)</h2>
-    <div class="desplazable" id="tablaMes"></div>
-  </section>
-
-  <section class="tarjeta tarjeta-ancha">
-    <h2>Precios en el tiempo</h2>
-    <p class="nota">Lo que se pagó por cada producto la primera y la última vez que se compró (precio unitario sin IGV, en su moneda). Sirve para revalorizar el Kardex. Solo productos comprados en dos meses o más.</p>
-    <input class="buscador" id="buscarPrecio" type="search" placeholder="Buscar producto o proveedor… (ej.: pollo brasa)">
-    <p class="nota" id="cuentaPrecios"></p>
-    <div class="desplazable" id="tablaPrecios"></div>
-  </section>
-
-  <section class="tarjeta tarjeta-ancha">
-    <h2>Importaciones: gastos con factura en SUNAT</h2>
-    <p class="nota">Flete, aduana, courier y demás gastos en Perú unidos a cada OC de importación. La factura del proveedor extranjero no pasa por SUNAT: está en la carpeta de la OC.</p>
-    <div class="desplazable" id="tablaImpo"></div>
-  </section>
-
-  <section class="tarjeta tarjeta-ancha">
-    <h2>Proveedores mes a mes (últimos 6 meses, en soles)</h2>
-    <div class="desplazable" id="tablaProvMes"></div>
-  </section>
-
-  <section class="tarjeta tarjeta-ancha">
-    <h2>A dónde va el gasto: centros de costo</h2>
-    <p class="nota" id="notaCentros"></p>
-    <div id="barrasCentros"></div>
+  <p class="seccion">Importaciones y centros de costo</p>
+  <section class="grilla">
+    <div class="tarjeta">
+      <div class="tarjeta-cab"><h2>Importaciones: gastos con factura en SUNAT</h2><span class="nota">Flete, aduana, courier… La factura del proveedor extranjero está en la carpeta de la OC.</span></div>
+      <div id="impo"></div>
+    </div>
+    <div class="tarjeta">
+      <div class="tarjeta-cab"><h2>A dónde va el gasto</h2><span class="nota" id="notaCc"></span></div>
+      <div id="centros"></div>
+    </div>
   </section>
 
   <footer class="pie">
     <span id="pie"></span>
     <a class="boton boton-accent" id="enlaceHoja2" href="#" target="_blank" rel="noopener">Ver el detalle completo ↗</a>
   </footer>
-
 </div>
 
 <script>
-  var esc = function (s) {
-    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
-    });
-  };
+  // ── Estado ──
+  var D = null;                          // lo que manda el servidor
+  var F = { mes: '', origen: 0, moneda: 0 };
+  var B = { texto: '', modo: 'todo', orden: 'gasto', cuantos: 25 };
+  var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'set', 'oct', 'nov', 'dic'];
+  var TIPOS = { F: ['Facturas', '#00A298'], B: ['Boletas', '#006DB1'], C: ['Notas de crédito', '#C62828'], D: ['Notas de débito', '#A15C07'], O: ['Otros', '#8494A8'] };
 
-  function pedirDatos() {
-    google.script.run
-      .withSuccessHandler(pintar)
-      .withFailureHandler(function (e) {
-        document.getElementById('cargando').style.display = 'none';
-        document.getElementById('error').style.display = '';
-        document.getElementById('errorTexto').textContent = e && e.message ? e.message : String(e);
-      })
-      .datosDeLaVistaEjecutiva();
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  var plano = function (t) { return String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase(); };
+  var etqMes = function (p) { return /^\d{6}$/.test(p) ? MESES[Number(p.slice(4)) - 1] + ' ' + p.slice(2, 4) : (p || '—'); };
+  var simbolo = function (m) { var c = D.dic.moneda[m] || 'PEN'; return c === 'PEN' ? 'S/' : c === 'USD' ? 'US$' : c; };
+  function dinero(n, m, corto) {
+    var s = simbolo(m == null ? F.moneda : m), neg = n < 0, a = Math.abs(n);
+    if (corto && a >= 1e6) return (neg ? '-' : '') + s + ' ' + (a / 1e6).toFixed(a >= 1e7 ? 0 : 1) + ' M';
+    if (corto && a >= 1e4) return (neg ? '-' : '') + s + ' ' + Math.round(a / 1e3) + ' mil';
+    var p = a.toFixed(2).split('.');
+    return (neg ? '-' : '') + s + ' ' + p[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '.' + p[1];
   }
+  var miles = function (n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ','); };
+  var pct = function (a, b) { return b ? Math.round(100 * a / b) : 0; };
 
-  function filaBarra(x) {
-    return '<div class="fila-barra">' +
-      '<div class="fb-cab">' +
-      '<span class="fb-etq">' + esc(x.etiqueta) + '</span>' +
-      '<span class="fb-cifras"><b>' + esc(x.montoTexto) + '</b> · ' + x.cantidad + (x.cantidad === 1 ? ' doc.' : ' docs.') + '</span>' +
-      '</div>' +
-      '<div class="fb-pista"><div class="fb-relleno" style="width:' + x.pct + '%; background:' + x.color + '"></div></div>' +
-      '</div>';
-  }
+  // ── Arranque ──
+  google.script.run.withSuccessHandler(arrancar).withFailureHandler(function (e) { fallar(e && e.message ? e.message : String(e)); }).datosDeLaVistaEjecutiva();
 
-  function pintar(d) {
+  function fallar(t) {
     document.getElementById('cargando').style.display = 'none';
-
-    if (d.error) {
-      document.getElementById('error').style.display = '';
-      document.getElementById('errorTexto').textContent = d.error;
-      return;
-    }
-
-    document.getElementById('pagina').style.display = '';
-    document.getElementById('enlaceHoja').href = d.urlHoja;
-    document.getElementById('enlaceHoja2').href = d.urlHoja;
-
-    var otrasMonedasHtml = d.otrasMonedas.length
-      ? d.otrasMonedas.map(function (m) { return '<div class="kpi-extra">+ ' + esc(m) + '</div>'; }).join('')
-      : '';
-
-    document.getElementById('kpis').innerHTML =
-      tarjetaKpi('Comprobantes con detalle', d.totalDocumentosTexto) +
-      tarjetaKpi('Compras · recibidos (' + esc(d.monedaPrincipal) + ')', esc(d.montoPrincipalTexto), otrasMonedasHtml + '<div class="kpi-extra">notas de crédito restadas</div>') +
-      (d.ventasTexto ? tarjetaKpi('Ventas · emitidos', esc(d.ventasTexto), '<div class="kpi-extra">' + d.ventasDocs + ' comprobantes</div>') : '') +
-      tarjetaKpi('Proveedores distintos', d.proveedoresDistintosTexto) +
-      tarjetaKpi('Con detracción', esc(d.montoDetraccionTexto), '<div class="kpi-extra">' + d.documentosConDetraccion + ' comprobantes</div>') +
-      tarjetaKpi('Período cubierto', esc(d.rangoPeriodo), null, true) +
-      (d.cobertura ? tarjetaKpi('Unidos a su OC', d.cobertura.conOcPct + '%', '<div class="kpi-extra">' + d.cobertura.conOcTexto + ' de los recibidos</div>') +
-        tarjetaKpi('Con centro de costo', d.cobertura.conCcPct + '%', '<div class="kpi-extra">' + d.cobertura.conCcTexto + ' de los recibidos</div>') : '');
-
-    document.getElementById('barrasTipo').innerHTML = d.porTipo.length
-      ? d.porTipo.map(filaBarra).join('') : '<p class="vacio">Sin datos.</p>';
-    document.getElementById('barrasOrigen').innerHTML = d.porOrigen.length
-      ? d.porOrigen.map(filaBarra).join('') : '<p class="vacio">Sin datos.</p>';
-    document.getElementById('barrasPeriodo').innerHTML = d.periodos.length
-      ? d.periodos.map(filaBarra).join('') : '<p class="vacio">Sin datos.</p>';
-
-    document.getElementById('tablaProveedores').innerHTML = d.proveedoresTop.length
-      ? '<table class="tabla"><thead><tr><th></th><th>Proveedor</th><th class="th-num">Comprobantes</th><th class="th-num">Monto</th></tr></thead><tbody>' +
-        d.proveedoresTop.map(function (p, i) {
-          return '<tr><td class="td-num">' + (i + 1) + '</td>' +
-            '<td>' + esc(p.nombre) + '<div class="td-sub">' + esc(p.ruc) + '</div></td>' +
-            '<td class="td-num">' + p.cantidad + '</td>' +
-            '<td class="td-num td-monto">' + esc(p.montoTexto) + '</td></tr>';
-        }).join('') + '</tbody></table>'
-      : '<p class="vacio">Sin comprobantes recibidos en el detalle.</p>';
-
-    pintarIndicadores(d);
-
-    document.getElementById('pie').textContent =
-      'Generado el ' + d.generadoEl + ' · a partir de "COMPROBANTES SUNAT - DETALLE"';
+    document.getElementById('error').style.display = '';
+    document.getElementById('errorTexto').textContent = t;
   }
 
-  function tabla(cabeceras, filas, numericas) {
-    return '<table class="tabla"><thead><tr>' + cabeceras.map(function (c, i) {
-      return '<th' + (numericas && numericas.indexOf(i) !== -1 ? ' class="th-num"' : '') + '>' + esc(c) + '</th>';
-    }).join('') + '</tr></thead><tbody>' + filas.join('') + '</tbody></table>';
-  }
-
-  var PRECIOS = [];
-  // Sin tildes ni mayúsculas, para que «panaderia» encuentre «PANADERÍA».
-  var plano = function (t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase(); };
-  function pintarPrecios(filtro) {
-    // Cada palabra por separado y en cualquier orden: «pollo brasa» encuentra
-    // «1/4 POLLO A LA BRASA». Se ignoran las palabras cortas («a», «la», «de»).
-    var palabras = plano(filtro).split(/\s+/).filter(function (w) { return w.length > 2; });
-    var todas = PRECIOS.filter(function (p) {
-      if (!palabras.length) return true;
-      var texto = p._texto || (p._texto = plano(p.desc + ' ' + p.proveedores));
-      return palabras.every(function (w) { return texto.indexOf(w) !== -1; });
+  function arrancar(d) {
+    if (d.error) return fallar(d.error);
+    D = d;
+    // Índices que se usan en cada repintado.
+    D.meses = Array.from(new Set(d.docs.map(function (x) { return x[0]; }))).filter(function (p) { return /^\d{6}$/.test(p); }).sort();
+    D.productos.forEach(function (p) {
+      var prov = d.dic.prov[p[3]] || ['', ''];
+      p.texto = plano(p[0] + ' ' + prov[1] + ' ' + prov[0]);
+      var s = p[6];
+      p.ini = s.length ? s[0][1] : 0; p.fin = s.length ? s[s.length - 1][1] : 0;
+      p.var = s.length > 1 && p.ini > 0 ? Math.round(1000 * (p.fin - p.ini) / p.ini) / 10 : null;
+      p.ult = s.length ? s[s.length - 1][0] : '';
     });
-    var lista = todas.slice(0, 40);
-    document.getElementById('cuentaPrecios').textContent = palabras.length
-      ? todas.length + ' productos encontrados' + (todas.length > 40 ? ' (se muestran los 40 de más gasto)' : '')
-      : PRECIOS.length + ' productos comprados en dos meses o más · escribe para buscar';
-    document.getElementById('tablaPrecios').innerHTML = lista.length ? tabla(['Producto', 'Primera compra', 'Última compra', 'Variación', 'Meses'],
-      lista.map(function (p) {
-        var clase = p.variacion > 0.5 ? 'sube' : p.variacion < -0.5 ? 'baja' : 'igual';
-        var txt = (p.variacion > 0 ? '+' : '') + p.variacion + '%';
-        return '<tr><td>' + esc(p.desc) + '<div class="td-sub">' + esc(p.unidad) + (p.proveedores ? ' · ' + esc(p.proveedores) : '') + '</div></td>' +
-          '<td class="td-num">' + esc(p.primero) + '</td><td class="td-num td-monto">' + esc(p.ultimo) + '</td>' +
-          '<td class="td-num ' + clase + '">' + txt + '</td><td class="td-num">' + p.meses + '</td></tr>';
-      }), [1, 2, 3, 4]) : '<p class="vacio">Ningún producto coincide.</p>';
+    document.getElementById('cargando').style.display = 'none';
+    document.getElementById('pagina').style.display = '';
+    ['enlaceHoja', 'enlaceHoja2'].forEach(function (id) { document.getElementById(id).href = d.urlHoja; });
+    document.getElementById('estadoDocs').textContent = miles(d.docs.length) + ' comprobantes';
+    document.getElementById('estadoRango').innerHTML = 'De <b>' + etqMes(D.meses[0]) + '</b> a <b>' + etqMes(D.meses[D.meses.length - 1]) + '</b> · ' + miles(d.lineas) + ' líneas de detalle';
+    document.getElementById('estadoHora').textContent = d.generadoEl.replace(/ de \d{4},/, ',');
+    document.getElementById('pie').textContent = 'Generado el ' + d.generadoEl + ' · a partir de «COMPROBANTES SUNAT - DETALLE»';
+
+    var sel = document.getElementById('fMes');
+    sel.innerHTML = '<option value="">Todo el año</option>' + D.meses.slice().reverse().map(function (m) { return '<option value="' + m + '">' + etqMes(m) + '</option>'; }).join('');
+    sel.onchange = function () { F.mes = this.value; pintar(); };
+    var monedas = d.dic.moneda.map(function (m, i) { return { i: i, n: d.docs.filter(function (x) { return x[4] === i; }).length }; }).sort(function (a, b) { return b.n - a.n; });
+    F.moneda = monedas.length ? monedas[0].i : 0;
+    document.getElementById('fMoneda').innerHTML = monedas.map(function (m) { return '<button data-v="' + m.i + '"' + (m.i === F.moneda ? ' class="activo"' : '') + '>' + esc(simbolo(m.i)) + '</button>'; }).join('');
+    segmento('fOrigen', function (v) { F.origen = Number(v); pintar(); });
+    segmento('fMoneda', function (v) { F.moneda = Number(v); pintar(); });
+    segmento('bModo', function (v) { B.modo = v; B.cuantos = 25; pintarBuscador(); });
+    document.getElementById('bOrden').onchange = function () { B.orden = this.value; B.cuantos = 25; pintarBuscador(); };
+    var t; document.getElementById('buscar').oninput = function () { var v = this.value; clearTimeout(t); t = setTimeout(function () { B.texto = v; B.cuantos = 25; pintarBuscador(); }, 120); };
+    document.getElementById('verMas').onclick = function () { B.cuantos += 25; pintarBuscador(); };
+    document.getElementById('fLimpiar').onclick = function () { F.mes = ''; F.origen = 0; sel.value = ''; marcar('fOrigen', 0); pintar(); };
+    pintar();
+    pintarBuscador();
   }
 
-  function pintarIndicadores(d) {
-    if (!d.porMes) return; // un script viejo en el servidor: sin estas secciones
-    document.getElementById('tablaMes').innerHTML = d.porMes.length ? tabla(['Mes', 'Recibidos', 'Compras', 'Ventas', 'Detracción', 'Gastos de importación'],
-      d.porMes.map(function (m) {
-        return '<tr><td>' + esc(m.etiqueta) + '</td><td class="td-num">' + m.docs + '</td><td class="td-num td-monto">' + esc(m.total) +
-          '</td><td class="td-num">' + esc(m.ventas || '') + '</td><td class="td-num">' + esc(m.detraccion) + '</td><td class="td-num">' + esc(m.impo) + '</td></tr>';
-      }), [1, 2, 3, 4, 5]) : '<p class="vacio">Sin datos.</p>';
+  function segmento(id, alCambiar) {
+    document.getElementById(id).onclick = function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      marcar(id, b.getAttribute('data-v')); alCambiar(b.getAttribute('data-v'));
+    };
+  }
+  function marcar(id, v) { Array.prototype.forEach.call(document.getElementById(id).children, function (b) { b.classList.toggle('activo', b.getAttribute('data-v') === String(v)); }); }
 
-    PRECIOS = d.precios || [];
-    pintarPrecios('');
-    document.getElementById('buscarPrecio').oninput = function () { pintarPrecios(this.value); };
+  // ── Filtros ──
+  function base() { return D.docs.filter(function (x) { return x[1] === F.origen && x[4] === F.moneda; }); }
+  function delMes(lista) { return F.mes ? lista.filter(function (x) { return x[0] === F.mes; }) : lista; }
+  var suma = function (l, i) { return l.reduce(function (a, x) { return a + x[i]; }, 0); };
 
-    document.getElementById('tablaImpo').innerHTML = d.importaciones.length ? tabla(['OC', 'Proveedores en Perú', 'Comprobantes', 'Gastos en SUNAT', 'Legajo'],
-      d.importaciones.map(function (x) {
-        return '<tr><td><b>' + esc(x.oc) + '</b>' + (x.situacion ? '<div class="td-sub">' + esc(x.situacion) + '</div>' : '') + '</td><td>' + esc(x.proveedores) +
-          '</td><td class="td-num">' + x.docs + '</td><td class="td-num td-monto">' + esc(x.monto) + '</td><td>' +
-          (x.legajo ? '<span class="pildora">' + esc(x.legajo) + '</span>' : '') + '</td></tr>';
-      }), [2, 3]) : '<p class="vacio">Todavía no hay facturas unidas a OC de importación.</p>';
-
-    var pm = d.proveedoresMes;
-    document.getElementById('tablaProvMes').innerHTML = pm.filas.length ? tabla(['Proveedor'].concat(pm.meses).concat(['Total']),
-      pm.filas.map(function (x) {
-        return '<tr><td>' + esc(x.nombre) + '<div class="td-sub">' + esc(x.ruc) + '</div></td>' +
-          x.valores.map(function (v) { return '<td class="td-num">' + esc(v) + '</td>'; }).join('') +
-          '<td class="td-num td-monto">' + esc(x.total) + '</td></tr>';
-      }), pm.meses.map(function (_, i) { return i + 1; }).concat([pm.meses.length + 1])) : '<p class="vacio">Sin datos.</p>';
-
-    document.getElementById('notaCentros').textContent = d.cobertura.conCcPct + '% de los comprobantes recibidos ya tiene centro de costo (sale de su OC). El resto espera que su factura quede unida a una OC.';
-    document.getElementById('barrasCentros').innerHTML = d.centros.length ? d.centros.map(filaBarra).join('') : '<p class="vacio">Todavía sin centros de costo.</p>';
+  function pintar() {
+    var todos = base(), docs = delMes(todos), compras = F.origen === 0;
+    document.getElementById('fResumen').textContent = (compras ? 'Compras' : 'Ventas') + ' en ' + simbolo(F.moneda) + ' · ' + (F.mes ? etqMes(F.mes) : 'todo el año') + ' · ' + miles(docs.length) + ' comprobantes';
+    document.getElementById('tituloMeses').textContent = (compras ? 'Compras' : 'Ventas') + ' por mes';
+    pintarKpis(todos, docs);
+    pintarMeses(todos);
+    pintarDona(docs);
+    pintarCalor(todos);
+    pintarTop(docs);
+    pintarImpo();
+    pintarCentros(docs);
   }
 
-  function tarjetaKpi(rotulo, valor, extraHtml, chico) {
-    return '<div class="kpi"><div class="kpi-rotulo">' + esc(rotulo) + '</div>' +
-      '<div class="kpi-valor' + (chico ? ' kpi-valor-chico' : '') + '">' + valor + '</div>' +
-      (extraHtml || '') + '</div>';
+  // ── KPIs ──
+  function chispa(valores, ancho, alto, color) {
+    if (!valores.length) return '';
+    var max = Math.max.apply(null, valores.map(Math.abs).concat([1])), w = ancho / valores.length;
+    return '<svg class="chispa" width="' + ancho + '" height="' + alto + '" viewBox="0 0 ' + ancho + ' ' + alto + '">' + valores.map(function (v, i) {
+      var h = Math.max(2, Math.abs(v) / max * alto);
+      return '<rect x="' + (i * w + 1.5) + '" y="' + (alto - h) + '" width="' + Math.max(2, w - 3) + '" height="' + h + '" rx="2" fill="' + color + '" opacity="' + (D.meses[i] === F.mes || !F.mes ? 1 : .35) + '"/>';
+    }).join('') + '</svg>';
+  }
+  function anillo(p, color) {
+    var r = 24, c = 2 * Math.PI * r;
+    return '<svg width="62" height="62" viewBox="0 0 62 62"><circle cx="31" cy="31" r="' + r + '" fill="none" stroke="#EEF2F6" stroke-width="8"/>' +
+      '<circle cx="31" cy="31" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="8" stroke-linecap="round" stroke-dasharray="' + (c * p / 100) + ' ' + c + '" transform="rotate(-90 31 31)"/>' +
+      '<text x="31" y="35.5" text-anchor="middle" font-family="Sora, sans-serif" font-size="13" font-weight="800" fill="#101A24">' + p + '%</text></svg>';
+  }
+  function kpi(rotulo, valor, extra, clase) {
+    return '<div class="kpi ' + (clase || '') + '"><div class="rotulo">' + rotulo + '</div><div class="kpi-valor">' + valor + '</div>' + (extra || '') + '</div>';
+  }
+  function pintarKpis(todos, docs) {
+    var compras = F.origen === 0;
+    var porMes = D.meses.map(function (m) { return suma(todos.filter(function (x) { return x[0] === m; }), 5); });
+    var neto = suma(docs, 5);
+    var notas = docs.filter(function (x) { return x[3] === 'C'; });
+    var provs = new Set(docs.map(function (x) { return x[2]; })).size;
+    var det = docs.filter(function (x) { return x[6] > 0; });
+    var conOc = docs.filter(function (x) { return x[7] >= 0; }).length, conCc = docs.filter(function (x) { return x[8] >= 0; }).length;
+    // Variación contra el mes anterior, cuando hay un mes elegido.
+    var varTxt = '';
+    if (F.mes) {
+      var i = D.meses.indexOf(F.mes);
+      if (i > 0 && porMes[i - 1]) {
+        var v = Math.round(100 * (porMes[i] - porMes[i - 1]) / Math.abs(porMes[i - 1]));
+        varTxt = ' · <span class="variacion ' + (v > 0 ? 'sube' : v < 0 ? 'baja' : 'igual') + '">' + (v > 0 ? '+' : '') + v + '%</span> vs ' + etqMes(D.meses[i - 1]);
+      }
+    }
+    document.getElementById('kpis').innerHTML =
+      kpi(compras ? 'Compras' : 'Ventas', dinero(neto), '<div class="kpi-extra">' + miles(docs.length) + ' comprobantes' + varTxt + '</div>' + chispa(porMes, 220, 34, '#00A298')) +
+      kpi(compras ? 'Proveedores' : 'Clientes', miles(provs), '<div class="kpi-extra">' + (docs.length ? dinero(neto / Math.max(provs, 1), null, true) + ' en promedio' : '') + '</div>') +
+      kpi('Notas de crédito', dinero(suma(notas, 5)), '<div class="kpi-extra">' + notas.length + ' notas · ya restadas del total</div>', notas.length ? 'kpi-riesgo' : '') +
+      kpi('Detracción', dinero(suma(det, 6)), '<div class="kpi-extra">' + det.length + ' comprobantes con detracción</div>') +
+      (compras ? kpi('Unidos a su OC', '<div class="kpi-anillo">' + anillo(pct(conOc, docs.length), '#00A298') + '<div class="kpi-extra" style="margin:0">' + miles(conOc) + ' de ' + miles(docs.length) + '<br>con su orden de compra</div></div>') : '') +
+      (compras ? kpi('Con centro de costo', '<div class="kpi-anillo">' + anillo(pct(conCc, docs.length), '#006DB1') + '<div class="kpi-extra" style="margin:0">' + miles(conCc) + ' de ' + miles(docs.length) + '<br>listos para CONCAR</div></div>') : '') +
+      (compras ? kpi('Importaciones', dinero(suma(docs.filter(function (x) { return x[9]; }), 5)), '<div class="kpi-extra">gastos en Perú unidos a OC de importación</div>') : '') +
+      (compras ? kpi('Productos distintos', miles(D.totalProductos), '<div class="kpi-extra">en el buscador, con su precio</div>') : '');
   }
 
-  pedirDatos();
+  // ── Meses ──
+  function pintarMeses(todos) {
+    var vals = D.meses.map(function (m) { var l = todos.filter(function (x) { return x[0] === m; }); return { m: m, v: suma(l, 5), n: l.length }; });
+    var max = Math.max.apply(null, vals.map(function (x) { return Math.abs(x.v); }).concat([1]));
+    var caja = document.getElementById('meses');
+    caja.innerHTML = vals.map(function (x) {
+      return '<div class="mes' + (F.mes === x.m ? ' activo' : F.mes ? ' atenuado' : '') + '" data-m="' + x.m + '" title="' + esc(etqMes(x.m) + ': ' + dinero(x.v) + ' · ' + x.n + ' comprobantes') + '">' +
+        '<span class="mes-cifra">' + esc(dinero(x.v, null, true)) + '</span>' +
+        '<div class="mes-barra' + (x.v < 0 ? ' neg' : '') + '" style="height:' + Math.max(2, Math.abs(x.v) / max * 150) + 'px"></div>' +
+        '<span class="mes-etq">' + etqMes(x.m) + '</span></div>';
+    }).join('');
+    caja.onclick = function (e) {
+      var m = e.target.closest('.mes'); if (!m) return;
+      F.mes = F.mes === m.getAttribute('data-m') ? '' : m.getAttribute('data-m');
+      document.getElementById('fMes').value = F.mes; pintar();
+    };
+  }
+
+  // ── Dona por tipo ──
+  function pintarDona(docs) {
+    var grupos = {};
+    docs.forEach(function (x) { var g = grupos[x[3]] || (grupos[x[3]] = { n: 0, v: 0 }); g.n++; g.v += Math.abs(x[5]); });
+    var claves = Object.keys(grupos).sort(function (a, b) { return grupos[b].v - grupos[a].v; });
+    var total = claves.reduce(function (a, k) { return a + grupos[k].v; }, 0);
+    if (!total) { document.getElementById('dona').innerHTML = '<p class="vacio">Sin comprobantes con este filtro.</p>'; return; }
+    var r = 54, c = 2 * Math.PI * r, acum = 0;
+    var arcos = claves.map(function (k) {
+      var largo = c * grupos[k].v / total, a = '<circle cx="70" cy="70" r="' + r + '" fill="none" stroke="' + TIPOS[k][1] + '" stroke-width="22" stroke-dasharray="' + largo + ' ' + (c - largo) + '" stroke-dashoffset="' + (-acum) + '" transform="rotate(-90 70 70)"/>';
+      acum += largo; return a;
+    }).join('');
+    document.getElementById('notaTipo').textContent = 'monto sin signo';
+    document.getElementById('dona').innerHTML = '<svg width="140" height="140" viewBox="0 0 140 140">' + arcos +
+      '<text x="70" y="66" text-anchor="middle" font-family="Sora, sans-serif" font-size="20" font-weight="800" fill="#101A24">' + miles(docs.length) + '</text>' +
+      '<text x="70" y="84" text-anchor="middle" font-family="DM Sans, sans-serif" font-size="11" fill="#8494A8">comprobantes</text></svg>' +
+      '<div class="dona-leyenda">' + claves.map(function (k) {
+        return '<div class="ley"><span><i style="background:' + TIPOS[k][1] + '"></i>' + TIPOS[k][0] + ' <span class="nota">(' + grupos[k].n + ')</span></span><b>' + dinero(grupos[k].v, null, true) + '</b></div>';
+      }).join('') + '</div>';
+  }
+
+  // ── Mapa de calor proveedor × mes ──
+  function pintarCalor(todos) {
+    var ult = D.meses.slice(-6), prov = {};
+    todos.forEach(function (x) {
+      if (ult.indexOf(x[0]) === -1) return;
+      var p = prov[x[2]] || (prov[x[2]] = { t: 0, m: {} }); p.t += x[5]; p.m[x[0]] = (p.m[x[0]] || 0) + x[5];
+    });
+    var filas = Object.keys(prov).sort(function (a, b) { return prov[b].t - prov[a].t; }).slice(0, 12);
+    if (!filas.length) { document.getElementById('calor').innerHTML = '<p class="vacio">Sin datos.</p>'; return; }
+    var max = 1; filas.forEach(function (k) { ult.forEach(function (m) { max = Math.max(max, prov[k].m[m] || 0); }); });
+    document.getElementById('calor').innerHTML = '<table class="calor"><thead><tr><th></th>' + ult.map(function (m) { return '<th class="' + (m === F.mes ? 'activo' : '') + '">' + etqMes(m) + '</th>'; }).join('') + '<th style="text-align:right">6 meses</th></tr></thead><tbody>' +
+      filas.map(function (k) {
+        var nombre = (D.dic.prov[k] || ['', ''])[1] || (D.dic.prov[k] || [''])[0];
+        return '<tr><td class="prov" title="' + esc(nombre) + '">' + esc(nombre) + '</td>' + ult.map(function (m) {
+          var v = prov[k].m[m] || 0, a = v > 0 ? .08 + .8 * v / max : 0;
+          return '<td class="celda" title="' + esc(nombre + ' · ' + etqMes(m) + ': ' + dinero(v)) + '" style="background:rgba(0,162,152,' + a.toFixed(2) + ');color:' + (a > .55 ? '#fff' : v ? '#101A24' : '#B5C0CC') + ';' + (m === F.mes ? 'outline:2px solid #1D1D1B;' : '') + '">' + (v ? esc(dinero(v, null, true)) : '—') + '</td>';
+        }).join('') + '<td class="total">' + esc(dinero(prov[k].t, null, true)) + '</td></tr>';
+      }).join('') + '</tbody></table>';
+  }
+
+  // ── Principales del período ──
+  function pintarTop(docs) {
+    var prov = {}; docs.forEach(function (x) { prov[x[2]] = (prov[x[2]] || 0) + x[5]; });
+    var claves = Object.keys(prov).sort(function (a, b) { return prov[b] - prov[a]; }).slice(0, 8);
+    var total = suma(docs, 5), max = Math.max.apply(null, claves.map(function (k) { return prov[k]; }).concat([1]));
+    document.getElementById('notaTop').textContent = F.mes ? etqMes(F.mes) : 'todo el año';
+    document.getElementById('top').innerHTML = claves.length ? claves.map(function (k) {
+      var p = D.dic.prov[k] || ['', ''];
+      return '<div class="fila-barra" title="' + esc(p[0]) + '"><div class="fb-cab"><span class="fb-etq">' + esc(p[1] || p[0]) + '</span><span class="fb-cifras"><b>' + dinero(prov[k], null, true) + '</b> · ' + pct(prov[k], total) + '%</span></div>' +
+        '<div class="fb-pista"><span style="width:' + Math.max(3, 100 * prov[k] / max) + '%"></span></div></div>';
+    }).join('') : '<p class="vacio">Sin datos.</p>';
+  }
+
+  // ── Importaciones ──
+  function pintarImpo() {
+    var g = {};
+    D.docs.forEach(function (x) {
+      if (x[1] !== 0 || !x[9] || x[7] < 0 || (F.mes && x[0] !== F.mes)) return;
+      var info = D.dic.oc[x[7]];
+      info[0].split(' / ').forEach(function (oc) {
+        oc = oc.trim(); if (!oc) return;
+        var o = g[oc] || (g[oc] = { oc: oc, legajo: info[1], sit: info[2], docs: 0, montos: {}, prov: {}, soles: 0 });
+        o.docs++; o.montos[x[4]] = (o.montos[x[4]] || 0) + x[5]; o.prov[(D.dic.prov[x[2]] || ['', ''])[1]] = 1;
+        if (x[4] === F.moneda) o.soles += x[5];
+      });
+    });
+    var lista = Object.keys(g).map(function (k) { return g[k]; }).sort(function (a, b) { return b.soles - a.soles; });
+    document.getElementById('impo').innerHTML = lista.length ? '<table class="tabla"><thead><tr><th>OC</th><th>Proveedores en Perú</th><th class="num">Gastos</th><th>Legajo</th></tr></thead><tbody>' +
+      lista.slice(0, 10).map(function (o) {
+        var leg = o.legajo || '', clase = /^Completo/.test(leg) ? 'chip-ok' : /^Falta/.test(leg) ? 'chip-warn' : 'chip-gris';
+        return '<tr><td><b>' + esc(o.oc) + '</b><div class="sub">' + esc(o.sit || '') + '</div></td><td>' + esc(Object.keys(o.prov).join(' / ')) + '<div class="sub">' + o.docs + (o.docs === 1 ? ' comprobante' : ' comprobantes') + '</div></td>' +
+          '<td class="num"><b>' + Object.keys(o.montos).map(function (m) { return dinero(o.montos[m], Number(m)); }).join('<br>') + '</b></td>' +
+          '<td>' + (leg ? '<span class="chip ' + clase + '" style="white-space:normal">' + esc(leg) + '</span>' : '') + '</td></tr>';
+      }).join('') + '</tbody></table>' + (lista.length > 10 ? '<p class="nota" style="margin-top:8px">y ' + (lista.length - 10) + ' importaciones más en la hoja.</p>' : '')
+      : '<p class="vacio">Todavía no hay facturas unidas a OC de importación' + (F.mes ? ' en ' + etqMes(F.mes) : '') + '.</p>';
+  }
+
+  // ── Centros de costo ──
+  function pintarCentros(docs) {
+    if (F.origen !== 0) { document.getElementById('centros').innerHTML = '<p class="vacio">El centro de costo es de las compras.</p>'; document.getElementById('notaCc').textContent = ''; return; }
+    var cc = {}, con = 0;
+    docs.forEach(function (x) { if (x[8] < 0) return; con++; cc[x[8]] = (cc[x[8]] || 0) + x[5]; });
+    var claves = Object.keys(cc).sort(function (a, b) { return cc[b] - cc[a]; }).slice(0, 9);
+    var max = Math.max.apply(null, claves.map(function (k) { return cc[k]; }).concat([1]));
+    document.getElementById('notaCc').textContent = pct(con, docs.length) + '% del gasto ya tiene centro de costo';
+    document.getElementById('centros').innerHTML = claves.length ? claves.map(function (k) {
+      return '<div class="fila-barra"><div class="fb-cab"><span class="fb-etq" title="' + esc(D.dic.cc[k]) + '">' + esc(D.dic.cc[k]) + '</span><span class="fb-cifras"><b>' + dinero(cc[k], null, true) + '</b></span></div>' +
+        '<div class="fb-pista"><span style="width:' + Math.max(3, 100 * cc[k] / max) + '%;background:#006DB1"></span></div></div>';
+    }).join('') : '<p class="vacio">Todavía sin centros de costo: llegan cuando la factura queda unida a su OC.</p>';
+  }
+
+  // ── Buscador de compras ──
+  function linea(serie, ancho, alto) {
+    if (serie.length < 2) return '<span class="nota">una sola compra</span>';
+    var v = serie.map(function (x) { return x[1]; }), min = Math.min.apply(null, v), max = Math.max.apply(null, v), rango = max - min || 1;
+    var pts = v.map(function (y, i) { return (4 + i * (ancho - 8) / (v.length - 1)).toFixed(1) + ',' + (alto - 4 - (y - min) / rango * (alto - 8)).toFixed(1); });
+    var ultimo = pts[pts.length - 1].split(',');
+    var sube = v[v.length - 1] > v[0], color = v[v.length - 1] === v[0] ? '#8494A8' : sube ? '#C62828' : '#1E7F4F';
+    return '<svg width="' + ancho + '" height="' + alto + '" viewBox="0 0 ' + ancho + ' ' + alto + '"><polyline points="' + pts.join(' ') + '" fill="none" stroke="' + color + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>' +
+      '<circle cx="' + ultimo[0] + '" cy="' + ultimo[1] + '" r="3" fill="' + color + '"/></svg>';
+  }
+  function pintarBuscador() {
+    var palabras = plano(B.texto).split(/\s+/).filter(function (w) { return w.length > 2; });
+    var lista = D.productos.filter(function (p) {
+      if (B.modo === 'repite' && p[6].length < 2) return false;
+      return palabras.every(function (w) { return p.texto.indexOf(w) !== -1; });
+    });
+    if (B.orden === 'sube' || B.orden === 'baja') {
+      lista = lista.filter(function (p) { return p.var !== null; });
+      lista.sort(function (a, b) { return B.orden === 'sube' ? b.var - a.var : a.var - b.var; });
+    } else if (B.orden === 'reciente') lista.sort(function (a, b) { return a.ult < b.ult ? 1 : a.ult > b.ult ? -1 : b[5] - a[5]; });
+    document.getElementById('notaBuscador').textContent = (palabras.length ? miles(lista.length) + ' encontrados de ' : '') + miles(D.productos.length) + ' productos' +
+      (D.totalProductos > D.productos.length ? ' (los de más gasto, de ' + miles(D.totalProductos) + ')' : '') + ' · precio unitario sin IGV';
+    var caja = document.getElementById('resultados');
+    caja.innerHTML = lista.length ? lista.slice(0, B.cuantos).map(function (p) {
+      var prov = D.dic.prov[p[3]] || ['', ''], s = p[6], ult = s[s.length - 1];
+      var v = p.var === null ? '' : '<div class="variacion ' + (p.var > 0.5 ? 'sube' : p.var < -0.5 ? 'baja' : 'igual') + '" style="font-size:12px">' + (p.var > 0 ? '+' : '') + p.var + '% desde ' + etqMes(s[0][0]) + '</div>';
+      return '<div class="producto"><div><div class="p-nombre" title="' + esc(p[0]) + '">' + esc(p[0]) + '</div><div class="p-sub">' + esc((p[1] ? p[1] + ' · ' : '') + (prov[1] || prov[0])) + '</div></div>' +
+        '<div class="p-dato">' + p[4] + (p[4] === 1 ? ' vez' : ' veces') + '<small>' + s.length + (s.length === 1 ? ' mes' : ' meses') + ' · ' + dinero(p[5], p[2], true) + '</small></div>' +
+        '<div class="p-dato"><b>' + dinero(ult[1], p[2]) + '</b><small>' + etqMes(ult[0]) + '</small>' + v + '</div>' +
+        '<div>' + linea(s, 120, 34) + '</div>' +
+        '<div>' + (p[7] ? '<a class="p-pdf" href="https://drive.google.com/file/d/' + esc(p[7]) + '/view" target="_blank" rel="noopener">Ver PDF ↗</a>' : '') + '</div></div>';
+    }).join('') : '<p class="vacio" style="padding:14px 6px">Nada con «' + esc(B.texto) + '». Prueba con una palabra más corta o sin la marca.</p>';
+    document.getElementById('verMas').style.display = lista.length > B.cuantos ? '' : 'none';
+  }
 </script>
-
 </body>
 </html>

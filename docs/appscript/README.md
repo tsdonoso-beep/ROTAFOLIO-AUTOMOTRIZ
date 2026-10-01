@@ -259,17 +259,28 @@ Son dos archivos, mismo patrón que `TableroPadron.gs` + `TableroPadron.html`:
 el script calcula los números una vez por visita y el HTML solo los pinta
 (se los pide con `google.script.run`, no hay que tocar nada de eso).
 
-Además, **indicadores para Contabilidad**, todos con columnas que la hoja ya
-trae (los montos se suman por moneda, sin convertir):
+Desde octubre de 2026 es un **tablero interactivo**, con el mismo lenguaje
+que el del legajo por OC: el servidor manda cada comprobante en forma
+compacta (≈1.4 MB para todo el año) y el navegador arma los totales al
+instante según el filtro.
 
-- **Por mes:** total, detracción y gastos de importación.
-- **Precios en el tiempo:** primera y última compra de cada producto, con su
-  variación (sirve para revalorizar el Kardex), con buscador.
-- **Importaciones:** los gastos en Perú con factura de SUNAT (flete, aduana,
-  courier) unidos a cada OC de importación. La factura del proveedor
-  extranjero no pasa por SUNAT: está en la carpeta de la OC.
-- **Proveedores mes a mes** (últimos 6 meses) y **centros de costo**, con el
-  % de lo recibido que ya está unido a su OC y a un centro de costo.
+- **Filtros fijos arriba:** mes, compras o ventas, y moneda (no se convierten).
+- **Indicadores:** compras con su evolución, proveedores, notas de crédito (ya
+  restadas), detracción, % unido a su OC, % con centro de costo,
+  importaciones y productos distintos.
+- **Compras por mes** (clic en un mes = filtro) y **dona por tipo**.
+- **Buscador de compras** («¿Cuánto pagamos por…?»): todo lo comprado, no
+  solo lo que se repite, por palabras sueltas y sin tildes («pollo brasa»,
+  «impresora»), con veces, último precio, su línea en el tiempo, la
+  variación y el **PDF de la última compra**. Viajan los 7 000 productos de
+  más gasto (`VISTA_MAX_PRODUCTOS`).
+- **Proveedores mes a mes** como mapa de calor, y los principales del período.
+- **Importaciones** (gastos con factura en SUNAT por OC, con su legajo) y
+  **centros de costo**.
+
+Cada comprobante se suma una sola vez (la hoja trae una fila por ítem) y la
+nota de crédito resta. El mes es el de emisión; el SIRE lo anota en el mes en
+que se registra, así que un mes puede diferir un poco del SIRE.
 
 ### Instalación
 

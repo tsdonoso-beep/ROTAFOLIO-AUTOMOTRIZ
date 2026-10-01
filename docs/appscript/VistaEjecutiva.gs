@@ -6,10 +6,15 @@
  * Un enlace propio (no la hoja) para compartir de forma formal: resume el
  * detalle de comprobantes —cuánto, de quién, en qué tipo, cómo se mueve mes
  * a mes— con un botón que abre la hoja real para quien necesite el
- * desglose línea por línea. Y los indicadores para Contabilidad: precios de
- * cada producto en el tiempo (para revalorizar el Kardex), cuánto costó cada
- * importación en gastos con factura de SUNAT, proveedores mes a mes,
- * detracción por mes y cuánto del gasto ya tiene su OC y su centro de costo.
+ * desglose línea por línea. Con filtros por mes, compras/ventas y moneda,
+ * un buscador de TODO lo comprado (con su precio en el tiempo y el PDF de la
+ * última compra), proveedores mes a mes, importaciones, centros de costo y
+ * cuánto del gasto ya tiene su OC.
+ *
+ * El servidor ya no manda totales hechos: manda cada comprobante en forma
+ * compacta (una fila de números y códigos) y el navegador arma los totales
+ * según el filtro. Así los filtros responden al instante sin volver a leer la
+ * hoja.
  *
  * Mismo espíritu que `TableroPadron.gs` + `TableroPadron.html`: este archivo
  * calcula los números UNA vez por visita —no tiene sentido bajar cientos de
@@ -54,14 +59,24 @@ function doGet() {
 /** Lo que pide el HTML por `google.script.run`. Nunca lanza: el error viaja en el objeto. */
 function datosDeLaVistaEjecutiva() {
   try {
-    return calcularResumenVista_();
+    return datosCompactosVista_();
   } catch (e) {
     return { error: e.message };
   }
 }
 
-/** Lee la pestaña de detalle y arma todos los agregados que pinta la página. */
-function calcularResumenVista_() {
+var VISTA_MAX_PRODUCTOS = 7000; // lo que viaja al navegador para el buscador (los de más gasto primero)
+
+/**
+ * Lee la pestaña de detalle una vez y devuelve:
+ *   docs      una fila por COMPROBANTE (la hoja trae una por ítem):
+ *             [período, origen, proveedor, tipo, moneda, neto, detracción, oc, centro de costo, ¿importación?]
+ *             (origen 0 recibido / 1 emitido / 2 otro; tipo F B C D O; neto con la nota de crédito restando)
+ *   productos una fila por producto comprado:
+ *             [descripción, unidad, moneda, proveedor, veces, gasto, [[período, precio], …], id del PDF de la última compra]
+ *   dic       los textos que se repiten (proveedores, OC, centros de costo, monedas), una sola vez.
+ */
+function datosCompactosVista_() {
   var libro = SpreadsheetApp.openById(HOJA_ID_VISTA);
   var hoja = libro.getSheetByName(NOMBRE_PESTANA_VISTA) || libro.getSheets()[0];
   var valores = hoja.getDataRange().getValues();
@@ -71,325 +86,101 @@ function calcularResumenVista_() {
     if (i === -1) throw new Error('La hoja no trae la columna "' + nombre + '".');
     return i;
   };
-
-  var iPeriodo = col('Período'), iOrigen = col('Origen'), iRuc = col('RUC proveedor'),
-    iProveedor = col('Proveedor'), iTipo = col('Tipo'), iSerie = col('Serie'),
-    iNumero = col('Número'), iMoneda = col('Moneda'), iDetraccion = col('Detracción'),
-    iTotal = col('Total del comprobante');
-  // Las columnas que se fueron sumando al final de la hoja: si una versión
-  // vieja no las trae, esas secciones salen vacías en vez de fallar.
   var opc = function (nombre) { return cab.indexOf(nombre); };
-  var extra = {
-    origen: iOrigen, periodo: iPeriodo, proveedor: iProveedor, moneda: iMoneda, tipo: iTipo,
+  var c = {
+    periodo: col('Período'), origen: col('Origen'), ruc: col('RUC proveedor'), proveedor: col('Proveedor'),
+    tipo: col('Tipo'), serie: col('Serie'), numero: col('Número'), moneda: col('Moneda'),
+    detraccion: col('Detracción'), total: col('Total del comprobante'),
     descripcion: opc('Descripción'), unidad: opc('Unidad'), cantidad: opc('Cantidad'),
-    precio: opc('Precio unitario'), importe: opc('Importe'),
+    precio: opc('Precio unitario'), importe: opc('Importe'), pdf: opc('PDF'),
     oc: opc('OC (carpeta)'), cc: opc('Centro de costo (CG)'), area: opc('Área que completa el legajo'),
     legajo: opc('Legajo de la OC'), situacion: opc('Situación del pago (OC)')
   };
+  var txt = function (f, i) { return i >= 0 ? String(f[i] == null ? '' : f[i]).trim() : ''; };
 
-  // El detalle trae una fila por ÍTEM: el mismo comprobante se repite tantas
-  // veces como productos tenga. Para no contar ni sumar de más, se agrupa
-  // primero por documento (proveedor + tipo + serie + número) y todo lo que
-  // sigue se calcula sobre esa lista, no sobre las filas crudas.
-  var documentos = {};
-  var precios = {}; // producto → lo que se pagó por él cada mes (para «Precios en el tiempo»)
-  for (var f = 1; f < valores.length; f++) {
-    var fila = valores[f];
-    if (!fila[iRuc] && !fila[iSerie]) continue;
-    anotarPrecio_(precios, fila, extra);
-    var clave = [fila[iRuc], fila[iTipo], fila[iSerie], fila[iNumero]].join('|');
-    if (documentos[clave]) continue;
-    documentos[clave] = {
-      oc: extra.oc >= 0 ? String(fila[extra.oc] || '').trim() : '',
-      cc: extra.cc >= 0 ? String(fila[extra.cc] || '').trim() : '',
-      area: extra.area >= 0 ? String(fila[extra.area] || '') : '',
-      legajo: extra.legajo >= 0 ? String(fila[extra.legajo] || '') : '',
-      situacion: extra.situacion >= 0 ? String(fila[extra.situacion] || '') : '',
-      periodo: String(fila[iPeriodo] || ''),
-      origen: String(fila[iOrigen] || 'Otro'),
-      proveedorRuc: String(fila[iRuc] || ''),
-      proveedor: String(fila[iProveedor] || fila[iRuc] || 'Sin nombre'),
-      tipo: String(fila[iTipo] || 'Otro'),
-      moneda: String(fila[iMoneda] || 'PEN'),
-      total: Number(fila[iTotal]) || 0,
-      // El XML trae la nota de crédito en positivo: aquí resta, como en el SIRE.
-      neto: (/cr[eé]dito/i.test(String(fila[iTipo])) ? -1 : 1) * Math.abs(Number(fila[iTotal]) || 0),
-      detraccion: Number(fila[iDetraccion]) || 0
-    };
-  }
-  var docs = [];
-  for (var clave2 in documentos) docs.push(documentos[clave2]);
-
-  var sumarEn = function (mapa, clave, monto) {
-    var act = mapa[clave] || { cantidad: 0, monto: 0 };
-    act.cantidad++; act.monto += monto;
-    mapa[clave] = act;
+  // Diccionarios: cada texto repetido viaja una vez y las filas llevan su número.
+  var dic = { prov: [], oc: [], cc: [], moneda: [] }, idx = { prov: {}, oc: {}, cc: {}, moneda: {} };
+  var cod = function (tabla, clave, valor) {
+    if (!clave) return -1;
+    if (!(clave in idx[tabla])) { idx[tabla][clave] = dic[tabla].length; dic[tabla].push(valor === undefined ? clave : valor); }
+    return idx[tabla][clave];
   };
 
-  // Compras (recibidos) y ventas (emitidos) se suman APARTE: juntas no se
-  // comparan con nada. Las notas de crédito restan (d.neto). El período es el
-  // de emisión del comprobante; el SIRE lo anota en el mes en que se registra,
-  // así que un mes puede diferir un poco del SIRE aunque el año cuadre.
-  var porOrigen = {}, porTipo = {}, porPeriodo = {}, porMoneda = {}, porMonedaVentas = {}, porProveedorRecibido = {};
-  var documentosConDetraccion = 0, montoDetraccion = 0;
+  var vistos = {}, docs = [], productos = {};
+  for (var r = 1; r < valores.length; r++) {
+    var f = valores[r];
+    if (!f[c.ruc] && !f[c.serie]) continue;
+    var origen = txt(f, c.origen), tipo = txt(f, c.tipo), moneda = txt(f, c.moneda) || 'PEN', periodo = txt(f, c.periodo);
+    var esNota = /cr[eé]dito/i.test(tipo);
+    var prov = cod('prov', txt(f, c.ruc) || txt(f, c.proveedor), [txt(f, c.ruc), txt(f, c.proveedor)]);
+    var mon = cod('moneda', moneda);
 
-  docs.forEach(function (d) {
-    sumarEn(porOrigen, d.origen, d.neto);
-    sumarEn(porTipo, d.tipo, Math.abs(d.total));
-    if (d.origen === 'Recibido') { sumarEn(porPeriodo, d.periodo, d.neto); sumarEn(porMoneda, d.moneda, d.neto); }
-    else if (d.origen === 'Emitido') sumarEn(porMonedaVentas, d.moneda, d.neto);
-    if (d.detraccion > 0) { documentosConDetraccion++; montoDetraccion += d.detraccion; }
-    if (d.origen === 'Recibido') {
-      var act = porProveedorRecibido[d.proveedorRuc] || { nombre: d.proveedor, cantidad: 0, monto: 0 };
-      act.cantidad++; act.monto += d.neto;
-      porProveedorRecibido[d.proveedorRuc] = act;
+    // Producto (solo compras de verdad: ni ventas, ni notas, ni líneas de anticipo en negativo).
+    if (origen === 'Recibido' && !/nota/i.test(tipo) && c.descripcion >= 0 && c.precio >= 0) {
+      var desc = txt(f, c.descripcion).replace(/\s+/g, ' ');
+      var precio = Number(f[c.precio]) || 0;
+      if (desc.length >= 3 && precio > 0) {
+        var unidad = txt(f, c.unidad);
+        var k = desc.toUpperCase() + '|' + unidad.toUpperCase() + '|' + mon + '|' + prov;
+        var p = productos[k] || (productos[k] = { desc: desc, unidad: unidad, mon: mon, prov: prov, veces: 0, gasto: 0, meses: {}, ult: '', pdf: '' });
+        var cant = c.cantidad >= 0 ? Number(f[c.cantidad]) || 0 : 0;
+        var imp = c.importe >= 0 ? Number(f[c.importe]) || 0 : 0;
+        var m = p.meses[periodo] || (p.meses[periodo] = { cant: 0, imp: 0, suma: 0, n: 0 });
+        if (cant > 0 && imp > 0) { m.cant += cant; m.imp += imp; }
+        m.suma += precio; m.n++;
+        p.veces++; p.gasto += imp > 0 ? imp : precio * (cant || 1);
+        if (periodo >= p.ult) { p.ult = periodo; p.pdf = idDrive_(txt(f, c.pdf)) || p.pdf; }
+      }
     }
-  });
 
-  var aLista = function (mapa) {
-    var out = [];
-    for (var k in mapa) out.push({ clave: k, cantidad: mapa[k].cantidad, monto: mapa[k].monto });
-    return out;
-  };
-  var porMonto = function (a, b) { return b.monto - a.monto; };
-
-  var periodos = aLista(porPeriodo).sort(function (a, b) { return a.clave < b.clave ? -1 : a.clave > b.clave ? 1 : 0; });
-  var maxPeriodo = Math.max.apply(null, [1].concat(periodos.map(function (p) { return p.monto; })));
-  periodos = periodos.map(function (p) {
-    return { etiqueta: etiquetaPeriodo_(p.clave), cantidad: p.cantidad, montoTexto: moneda_(p.monto), pct: pct_(p.monto, maxPeriodo) };
-  });
-
-  var listaOrigen = aLista(porOrigen).sort(porMonto);
-  var maxOrigen = Math.max.apply(null, [1].concat(listaOrigen.map(function (x) { return x.monto; })));
-  var COLOR_ORIGEN = { 'Emitido': 'var(--accent)', 'Recibido': 'var(--tinta)', 'Otro': 'var(--text3)' };
-  listaOrigen = listaOrigen.map(function (x) {
-    return { etiqueta: x.clave || 'Otro', cantidad: x.cantidad, montoTexto: moneda_(x.monto), pct: pct_(x.monto, maxOrigen), color: COLOR_ORIGEN[x.clave] || 'var(--text3)' };
-  });
-
-  var listaTipo = aLista(porTipo).sort(porMonto);
-  var maxTipo = Math.max.apply(null, [1].concat(listaTipo.map(function (x) { return x.monto; })));
-  var COLOR_TIPO = { 'Factura': 'var(--accent)', 'Boleta': '#5B8DEF', 'Nota de crédito': 'var(--danger)', 'Nota de débito': 'var(--warn)' };
-  listaTipo = listaTipo.map(function (x) {
-    return { etiqueta: x.clave || 'Otro', cantidad: x.cantidad, montoTexto: moneda_(x.monto), pct: pct_(x.monto, maxTipo), color: COLOR_TIPO[x.clave] || 'var(--text3)' };
-  });
-
-  var proveedoresTop = [];
-  for (var ruc in porProveedorRecibido) {
-    var p = porProveedorRecibido[ruc];
-    proveedoresTop.push({ ruc: ruc, nombre: p.nombre, cantidad: p.cantidad, montoTexto: moneda_(p.monto), monto: p.monto });
-  }
-  proveedoresTop.sort(porMonto);
-  proveedoresTop = proveedoresTop.slice(0, 8);
-
-  var listaMoneda = aLista(porMoneda).sort(porMonto);
-  var monedaPrincipal = listaMoneda[0] || { clave: 'PEN', monto: 0 };
-  var otrasMonedas = listaMoneda.slice(1).map(function (m) {
-    return moneda_(m.monto, m.clave) + ' (' + m.cantidad + (m.cantidad === 1 ? ' doc.)' : ' docs.)');
-  });
-  var ventas = aLista(porMonedaVentas).sort(porMonto);
-  var ventasTexto = ventas.length ? ventas.map(function (m) { return moneda_(m.monto, m.clave); }).join(' + ') : moneda_(0);
-  var ventasDocs = ventas.reduce(function (a, m) { return a + m.cantidad; }, 0);
-
-  var proveedoresDistintos = {};
-  docs.forEach(function (d) { proveedoresDistintos[d.proveedorRuc] = true; });
-  var cuantosProveedores = 0;
-  for (var x in proveedoresDistintos) cuantosProveedores++;
-
-  var rangoPeriodo = periodos.length ? '' : 'Sin datos';
-  if (periodos.length) {
-    var claves = aLista(porPeriodo).map(function (p) { return p.clave; }).sort();
-    rangoPeriodo = etiquetaPeriodo_(claves[0]) + (claves[0] === claves[claves.length - 1] ? '' : ' – ' + etiquetaPeriodo_(claves[claves.length - 1]));
+    var clave = [f[c.ruc], tipo, f[c.serie], f[c.numero], origen].join('|');
+    if (vistos[clave]) continue;
+    vistos[clave] = true;
+    var oc = txt(f, c.oc);
+    var impo = /COMEX|IMPORTA/i.test(txt(f, c.area)) || oc.split(' / ').some(function (o) { return /^\d{3}-\d{4}$/.test(o.trim()); });
+    docs.push([
+      periodo,
+      origen === 'Recibido' ? 0 : origen === 'Emitido' ? 1 : 2,
+      prov,
+      esNota ? 'C' : /d[eé]bito/i.test(tipo) ? 'D' : /boleta/i.test(tipo) ? 'B' : /factura/i.test(tipo) ? 'F' : 'O',
+      mon,
+      redondear2_((esNota ? -1 : 1) * Math.abs(Number(f[c.total]) || 0)),
+      redondear2_(Number(f[c.detraccion]) || 0),
+      cod('oc', oc, [oc, txt(f, c.legajo), txt(f, c.situacion)]),
+      cod('cc', txt(f, c.cc) === '-' ? '' : txt(f, c.cc)),
+      impo ? 1 : 0
+    ]);
   }
 
-  var nuevos = indicadoresNuevos_(docs, precios, periodos.length ? aLista(porPeriodo).map(function (p) { return p.clave; }).sort() : []);
+  // Productos: los de más gasto primero, con su precio de cada mes.
+  var lista = [];
+  for (var kp in productos) {
+    var x = productos[kp];
+    var serie = Object.keys(x.meses).sort().map(function (per) {
+      var mm = x.meses[per];
+      return [per, redondear4_(mm.cant > 0 ? mm.imp / mm.cant : mm.suma / mm.n)];
+    });
+    lista.push([x.desc.slice(0, 140), x.unidad, x.mon, x.prov, x.veces, redondear2_(x.gasto), serie, x.pdf]);
+  }
+  lista.sort(function (a, b) { return b[5] - a[5]; });
 
   return {
     error: null,
-    cobertura: nuevos.cobertura,
-    porMes: nuevos.porMes,
-    precios: nuevos.precios,
-    importaciones: nuevos.importaciones,
-    proveedoresMes: nuevos.proveedoresMes,
-    centros: nuevos.centros,
     urlHoja: URL_HOJA_VISTA,
     generadoEl: Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'America/Lima', "d 'de' MMMM 'de' yyyy, HH:mm"),
-    totalDocumentosTexto: miles_(docs.length),
-    proveedoresDistintosTexto: miles_(cuantosProveedores),
-    monedaPrincipal: monedaPrincipal.clave,
-    montoPrincipalTexto: moneda_(monedaPrincipal.monto, monedaPrincipal.clave),
-    ventasTexto: ventasTexto,
-    ventasDocs: ventasDocs,
-    otrasMonedas: otrasMonedas,
-    documentosConDetraccion: documentosConDetraccion,
-    montoDetraccionTexto: moneda_(montoDetraccion),
-    rangoPeriodo: rangoPeriodo,
-    porOrigen: listaOrigen,
-    porTipo: listaTipo,
-    periodos: periodos,
-    proveedoresTop: proveedoresTop
+    dic: dic,
+    docs: docs,
+    productos: lista.slice(0, VISTA_MAX_PRODUCTOS),
+    totalProductos: lista.length,
+    lineas: valores.length - 1
   };
 }
 
-// ── Los indicadores para Contabilidad ──
-// Todo sale de columnas que la hoja ya trae. Los montos se suman por
-// moneda y no se convierten: la hoja no trae el tipo de cambio de cada ítem.
-
-/** Una fila de ítem recibido suma a su producto, en su mes. */
-function anotarPrecio_(precios, fila, c) {
-  if (c.descripcion < 0 || c.precio < 0) return;
-  if (String(fila[c.origen]) !== 'Recibido') return;
-  if (/nota/i.test(String(fila[c.tipo]))) return; // una nota corrige un precio, no es una compra
-  var desc = String(fila[c.descripcion] || '').replace(/\s+/g, ' ').trim();
-  var precio = Number(fila[c.precio]) || 0;
-  if (desc.length < 4 || precio <= 0) return;
-  var unidad = c.unidad >= 0 ? String(fila[c.unidad] || '').trim() : '';
-  var moneda = String(fila[c.moneda] || 'PEN');
-  var k = desc.toUpperCase() + '|' + unidad.toUpperCase() + '|' + moneda;
-  var p = precios[k] || (precios[k] = { desc: desc, unidad: unidad, moneda: moneda, total: 0, meses: {}, proveedores: {} });
-  var cant = c.cantidad >= 0 ? Number(fila[c.cantidad]) || 0 : 0;
-  var imp = c.importe >= 0 ? Number(fila[c.importe]) || 0 : 0;
-  var periodo = String(fila[c.periodo] || '');
-  var m = p.meses[periodo] || (p.meses[periodo] = { cant: 0, imp: 0, suma: 0, n: 0 });
-  if (cant > 0 && imp > 0) { m.cant += cant; m.imp += imp; }
-  m.suma += precio; m.n++;
-  p.total += imp || precio * (cant || 1);
-  p.proveedores[String(fila[c.proveedor] || '')] = true;
+/** El ID de un enlace de Drive (…/file/d/ID/…, …?id=ID), para no mandar la URL entera. */
+function idDrive_(url) {
+  var m = /\/d\/([\w-]{20,})/.exec(url) || /[?&]id=([\w-]{20,})/.exec(url);
+  return m ? m[1] : '';
 }
 
-function indicadoresNuevos_(docs, precios, clavesPeriodo) {
-  var recibidos = docs.filter(function (d) { return d.origen === 'Recibido'; });
-  var esImpo = function (d) {
-    return /COMEX|IMPORTA/i.test(d.area) || d.oc.split(' / ').some(function (o) { return /^\d{3}-\d{4}$/.test(o.trim()); });
-  };
-  var enSoles = function (d) { return d.moneda === 'PEN' ? d.neto : 0; };
-
-  // Cobertura: cuántos recibidos ya están unidos a su OC y a un centro de costo.
-  var conOc = recibidos.filter(function (d) { return d.oc; }).length;
-  var conCc = recibidos.filter(function (d) { return d.cc && d.cc !== '-'; }).length;
-  var cobertura = {
-    recibidos: recibidos.length,
-    conOcTexto: miles_(conOc), conOcPct: recibidos.length ? Math.round(100 * conOc / recibidos.length) : 0,
-    conCcTexto: miles_(conCc), conCcPct: recibidos.length ? Math.round(100 * conCc / recibidos.length) : 0
-  };
-
-  // Por mes: total, detracción y gastos de importación (en soles).
-  var mes = {};
-  docs.forEach(function (d) {
-    var m = mes[d.periodo] || (mes[d.periodo] = { docs: 0, compras: 0, ventas: 0, detraccion: 0, impo: 0 });
-    if (d.origen === 'Recibido') {
-      m.docs++; m.compras += enSoles(d); m.detraccion += d.detraccion;
-      if (esImpo(d)) m.impo += enSoles(d);
-    } else if (d.origen === 'Emitido') m.ventas += enSoles(d);
-  });
-  var porMes = clavesPeriodo.map(function (k) {
-    var m = mes[k] || { docs: 0, compras: 0, ventas: 0, detraccion: 0, impo: 0 };
-    return { etiqueta: etiquetaPeriodo_(k), docs: miles_(m.docs), total: moneda_(m.compras), ventas: moneda_(m.ventas),
-      detraccion: moneda_(m.detraccion), impo: moneda_(m.impo) };
-  });
-
-  // Precios en el tiempo: productos comprados en dos meses o más.
-  var lista = [];
-  for (var k in precios) {
-    var p = precios[k];
-    var meses = Object.keys(p.meses).filter(function (x) { return /^\d{6}$/.test(x); }).sort();
-    if (meses.length < 2) continue;
-    var precioDe = function (x) { var m = p.meses[x]; return m.cant > 0 ? m.imp / m.cant : m.suma / m.n; };
-    var ini = precioDe(meses[0]), fin = precioDe(meses[meses.length - 1]);
-    lista.push({
-      desc: p.desc, unidad: p.unidad, moneda: p.moneda, total: p.total,
-      proveedores: Object.keys(p.proveedores).filter(String).slice(0, 2).join(' / '),
-      meses: meses.length,
-      primero: etiquetaPeriodo_(meses[0]) + ' · ' + moneda_(ini, p.moneda),
-      ultimo: etiquetaPeriodo_(meses[meses.length - 1]) + ' · ' + moneda_(fin, p.moneda),
-      variacion: ini > 0 ? Math.round(1000 * (fin - ini) / ini) / 10 : 0
-    });
-  }
-  // Todos los productos (no solo los de más gasto): el buscador tiene que
-  // encontrar también lo barato, como un 1/4 de pollo a la brasa. El tope es
-  // solo para no reventar lo que Apps Script puede mandar al navegador.
-  lista.sort(function (a, b) { return b.total - a.total; });
-  var preciosTop = lista.slice(0, 3000).map(function (p) { delete p.total; return p; });
-
-  // Importaciones: los comprobantes de SUNAT unidos a una OC de importación.
-  var impo = {};
-  recibidos.filter(esImpo).forEach(function (d) {
-    d.oc.split(' / ').forEach(function (o) {
-      o = o.trim(); if (!o) return;
-      var x = impo[o] || (impo[o] = { oc: o, docs: 0, montos: {}, proveedores: {}, legajo: d.legajo, situacion: d.situacion, soles: 0 });
-      x.docs++; x.montos[d.moneda] = (x.montos[d.moneda] || 0) + d.neto; x.proveedores[d.proveedor] = true;
-      if (d.moneda === 'PEN') x.soles += d.neto;
-    });
-  });
-  var importaciones = Object.keys(impo).map(function (o) {
-    var x = impo[o];
-    return { oc: o, docs: x.docs, soles: x.soles,
-      monto: Object.keys(x.montos).map(function (m) { return moneda_(x.montos[m], m); }).join(' + '),
-      proveedores: Object.keys(x.proveedores).slice(0, 3).join(' / '), legajo: x.legajo, situacion: x.situacion };
-  }).sort(function (a, b) { return b.soles - a.soles; });
-
-  // Proveedores mes a mes: los 10 que más facturaron en los últimos 6 meses (en soles).
-  var ult = clavesPeriodo.filter(function (x) { return /^\d{6}$/.test(x); }).slice(-6);
-  var prov = {};
-  recibidos.forEach(function (d) {
-    if (ult.indexOf(d.periodo) === -1 || d.moneda !== 'PEN') return;
-    var x = prov[d.proveedorRuc] || (prov[d.proveedorRuc] = { nombre: d.proveedor, ruc: d.proveedorRuc, total: 0, meses: {} });
-    x.total += d.neto; x.meses[d.periodo] = (x.meses[d.periodo] || 0) + d.neto;
-  });
-  var provLista = Object.keys(prov).map(function (r) { return prov[r]; }).sort(function (a, b) { return b.total - a.total; }).slice(0, 10);
-  var proveedoresMes = {
-    meses: ult.map(etiquetaPeriodo_),
-    filas: provLista.map(function (x) {
-      return { nombre: x.nombre, ruc: x.ruc, total: moneda_(x.total),
-        valores: ult.map(function (m) { return x.meses[m] ? moneda_(x.meses[m]) : '—'; }) };
-    })
-  };
-
-  // Centros de costo: a dónde va el gasto recibido ya unido a su OC (en soles).
-  var cc = {};
-  recibidos.forEach(function (d) {
-    if (!d.cc || d.cc === '-') return;
-    var x = cc[d.cc] || (cc[d.cc] = { cantidad: 0, monto: 0 });
-    x.cantidad++; x.monto += enSoles(d);
-  });
-  var centrosLista = Object.keys(cc).map(function (k) { return { clave: k, cantidad: cc[k].cantidad, monto: cc[k].monto }; })
-    .sort(function (a, b) { return b.monto - a.monto; }).slice(0, 10);
-  var maxCc = Math.max.apply(null, [1].concat(centrosLista.map(function (x) { return x.monto; })));
-  var centros = centrosLista.map(function (x) {
-    return { etiqueta: x.clave, cantidad: x.cantidad, montoTexto: moneda_(x.monto), pct: pct_(x.monto, maxCc), color: 'var(--accent)' };
-  });
-
-  return { cobertura: cobertura, porMes: porMes, precios: preciosTop, importaciones: importaciones.slice(0, 40),
-    preciosTotal: lista.length, importacionesTotal: importaciones.length, proveedoresMes: proveedoresMes, centros: centros };
-}
-
-/** "mar 2026" a partir de un período "AAAAMM"; lo que no calce se muestra tal cual. */
-function etiquetaPeriodo_(periodo) {
-  if (!/^\d{6}$/.test(periodo)) return periodo || 'Sin período';
-  var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'set', 'oct', 'nov', 'dic'];
-  var mes = Number(periodo.slice(4, 6)) - 1;
-  return MESES[mes] + ' ' + periodo.slice(0, 4);
-}
-
-/**
- * "S/ 1,234.56" a mano, sin `toLocaleString`: el runtime V8 de Apps Script
- * no trae el paquete de idiomas completo y una vez desplegado formatea
- * distinto a como se probó en el editor — más vale no depender de eso para
- * una cifra en soles.
- */
-function moneda_(monto, cod) {
-  var signo = cod === 'USD' ? 'US$ ' : 'S/ ';
-  var n = Number(monto) || 0;
-  var negativo = n < 0;
-  var partes = Math.abs(n).toFixed(2).split('.');
-  var entero = partes[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  return (negativo ? '-' : '') + signo + entero + '.' + partes[1];
-}
-
-/** "1,234" a mano, mismo motivo que `moneda_`. */
-function miles_(n) {
-  return String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-}
-
-function pct_(monto, maximo) {
-  return maximo > 0 ? Math.max(4, Math.round((monto / maximo) * 100)) : 0;
-}
+function redondear2_(n) { return Math.round(n * 100) / 100; }
+function redondear4_(n) { return Math.round(n * 10000) / 10000; }
