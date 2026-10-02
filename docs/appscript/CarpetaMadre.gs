@@ -111,10 +111,17 @@ function instalarCarpetaMadre() {
 
 /** El menú «Carpeta madre» (se agrega solo al abrir la hoja). */
 function menuCarpetaMadre() {
-  SpreadsheetApp.getUi().createMenu('Carpeta madre')
+  var menu = SpreadsheetApp.getUi().createMenu('Carpeta madre')
     .addItem('Traer ahora de la base', 'traerCarpetaMadre')
-    .addItem('Dejar de traerla sola', 'quitarCarpetaMadre')
-    .addToUi();
+    .addItem('Dejar de traerla sola', 'quitarCarpetaMadre');
+  // Las alertas a los compradores (AlertasLegajo.gs), si está en el proyecto.
+  if (typeof enviarAlertasAhora === 'function') {
+    menu.addSeparator()
+      .addItem('Alertas: completar la pestaña de correos', 'prepararCorreosAlertas')
+      .addItem('Alertas: enviar las de hoy ahora', 'enviarAlertasAhora')
+      .addItem('Alertas: dejar de enviarlas solas', 'quitarAlertas');
+  }
+  menu.addToUi();
 }
 
 function quitarCarpetaMadre() {
