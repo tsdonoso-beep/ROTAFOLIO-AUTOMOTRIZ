@@ -568,7 +568,14 @@ comprobante —del SIRE, o del XML si no está en el SIRE—, su **tipo de
 cambio**, el **total en soles** y **«Detracción: revisar»**: si el % aplicado
 no es el de su código de bien o servicio (anexos de la R.S. 183-2004/SUNAT).
 
-La vista ejecutiva (`VistaEjecutiva.gs` + `VistaEjecutivaPagina.html`) los usa:
+La vista ejecutiva (`VistaEjecutiva.gs` + `VistaEjecutivaPagina.html`) va con
+un **menú lateral**: arriba los filtros (mes, compras o ventas, moneda), que
+aplican a todo; abajo las secciones —Resumen, Impuestos, Buscar factura,
+Precios, Proveedores, OC y centros de costo—, una a la vez y a todo el ancho
+de la pantalla. Recuerda la última sección vista; en el celular el menú pasa
+arriba. «Impuestos» lleva en rojo cuántas detracciones hay a revisar.
+
+Usa las columnas nuevas así:
 
 - botón **«Todo en S/»** junto a S/ y US$: suma todas las monedas con el tipo
   de cambio de cada comprobante;

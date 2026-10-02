@@ -23,7 +23,36 @@
          font-family: "DM Sans", system-ui, sans-serif; -webkit-font-smoothing: antialiased; font-size: 14px; }
   h2 { font-family: "Sora", sans-serif; font-size: 15px; font-weight: 700; margin: 0; }
   button, select, input { font-family: inherit; font-size: 13.5px; }
-  .pagina { max-width: 1240px; margin: 0 auto; padding: 28px 24px 56px; }
+  /* Menú lateral (filtros + secciones) y una sección a la vez a la derecha,
+     a todo el ancho de la pantalla. */
+  .app { display: grid; grid-template-columns: 252px minmax(0, 1fr); min-height: 100vh; }
+  .lateral { position: sticky; top: 0; height: 100vh; overflow-y: auto; background: var(--surface); border-right: 1px solid var(--border);
+             padding: 22px 16px 18px; display: flex; flex-direction: column; gap: 18px; }
+  .lat-marca svg { display: block; width: 138px; height: auto; }
+  .lat-titulo { font-family: "Sora", sans-serif; font-weight: 700; font-size: 15px; margin-top: 14px; }
+  .lat-titulo span { color: var(--accent-texto); }
+  .lat-sub { font-size: 12px; color: var(--text3); margin-top: 2px; }
+  .lat-bloque { display: flex; flex-direction: column; gap: 8px; }
+  .lat-rotulo { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--text3); }
+  .lat-bloque select { width: 100%; background: var(--surface); border: 1px solid var(--border2); border-radius: 9px; padding: 8px 10px; color: var(--text); }
+  .lat-bloque .segmento { display: flex; flex-wrap: wrap; }
+  .lat-bloque .segmento button { flex: 1 1 auto; }
+  .nav { display: flex; flex-direction: column; gap: 2px; }
+  .nav button { display: flex; align-items: center; gap: 10px; width: 100%; background: none; border: 0; border-radius: 10px; padding: 9px 10px;
+                cursor: pointer; color: var(--text2); font-weight: 600; font-size: 13.5px; text-align: left; }
+  .nav button:hover { background: var(--surface2); color: var(--text); }
+  .nav button.activo { background: var(--accent-suave); color: var(--accent-texto); }
+  .nav svg { flex: none; width: 17px; height: 17px; }
+  .nav .insignia { margin-left: auto; background: var(--danger); color: #fff; font-size: 11px; font-weight: 700; border-radius: 999px; padding: 1px 7px; }
+  .lat-pie { margin-top: auto; border-top: 1px solid var(--border); padding-top: 14px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--text2); }
+  .lat-pie .grande { font-size: 17px; margin: 0; }
+  .lat-pie .boton { justify-content: center; margin-top: 6px; padding: 9px 12px; font-size: 12.5px; }
+  .principal { padding: 22px 28px 40px; min-width: 0; }
+  .encabezado { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  .encabezado h1 { font-family: "Sora", sans-serif; font-size: 21px; font-weight: 800; margin: 0; }
+  .encabezado .filtro-activo { margin: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px; }
+  .vista { display: none; }
+  .vista.activa { display: block; }
   a { color: var(--azul); }
 
   #cargando { max-width: 1240px; margin: 80px auto; padding: 0 24px; color: var(--text2); font-size: 14px; display: flex; align-items: center; gap: 12px; }
@@ -73,7 +102,7 @@
   .filtro-activo { font-size: 12px; color: var(--text2); margin-left: auto; }
 
   /* ── KPIs ── */
-  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 18px; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 14px; }
   .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px 14px; box-shadow: var(--sombra); min-width: 0; }
   .kpi-valor { font-family: "Sora", sans-serif; font-size: 25px; font-weight: 800; letter-spacing: -.01em; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .kpi-valor small { font-size: 13px; font-weight: 700; color: var(--text2); }
@@ -87,6 +116,7 @@
 
   /* ── Tarjetas ── */
   .grilla { display: grid; grid-template-columns: 1.55fr 1fr; gap: 14px; margin-bottom: 14px; }
+  .grilla-igual { grid-template-columns: 1fr 1fr; }
   .tarjeta { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px; box-shadow: var(--sombra); min-width: 0; }
   .tarjeta-ancha { margin-bottom: 14px; }
   /* Detracciones a revisar: empieza cerrada, una línea; se abre con un clic. */
@@ -184,8 +214,19 @@
   .ayuda button:hover { border-color: var(--accent); color: var(--accent-texto); }
   .pie { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; margin-top: 24px; font-size: 12px; color: var(--text3); }
 
+  @media (max-width: 900px) {
+    /* En el celular el menú pasa arriba: filtros en una fila y las secciones como pestañas. */
+    .app { grid-template-columns: 1fr; }
+    .lateral { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--border); padding: 14px 16px; gap: 12px; }
+    .lat-filtros { flex-direction: row; flex-wrap: wrap; align-items: center; }
+    .lat-filtros .lat-rotulo { display: none; }
+    .lat-filtros select { width: auto; }
+    .nav { flex-direction: row; overflow-x: auto; }
+    .nav button { width: auto; white-space: nowrap; }
+    .lat-pie { display: none; }
+    .principal { padding: 16px; }
+  }
   @media (max-width: 980px) {
-    .kpis { grid-template-columns: repeat(2, 1fr); }
     .grilla, .estado { grid-template-columns: 1fr; }
     .estado > div + div { border-left: 0; border-top: 1px solid var(--border); }
     .producto { grid-template-columns: minmax(0, 1fr) auto; row-gap: 6px; }
@@ -195,7 +236,7 @@
     .factura { grid-template-columns: minmax(0, 1fr) auto; row-gap: 4px; }
     .factura > :nth-child(1), .factura > :nth-child(5) { display: none; }
   }
-  @media (max-width: 560px) { .kpis { grid-template-columns: 1fr; } .filtro-activo { margin-left: 0; } }
+  @media (max-width: 560px) { .kpis { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -207,11 +248,11 @@
   <p class="linea" id="errorTexto"></p>
 </div>
 
-<div id="pagina" class="pagina" style="display:none">
+<div id="pagina" class="app" style="display:none">
 
-  <header class="cabecera">
-    <div class="marca">
-      <svg width="130" height="29" viewBox="0 0 183 41" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Roland Print">
+  <aside class="lateral">
+    <div class="lat-marca">
+      <svg width="138" height="31" viewBox="0 0 183 41" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Roland Print">
         <path opacity="0.15" d="M15.3066 35.9092L26.7855 35.8535L31.4094 40.5052H19.9305L15.3066 35.9092Z" fill="#1D1D1B"/>
         <path d="M11.9185 20.6918L5.95923 26.6176L0 20.6918L5.95923 14.7715L11.9185 20.6918Z" fill="#006DB1"/>
         <path d="M18.8459 13.8087L12.8867 19.7345L6.92188 13.8087L12.8867 7.88281L18.8459 13.8087Z" fill="#E30613"/>
@@ -234,106 +275,122 @@
         <path d="M183.001 22.6211H180.886V33.7495H177.325V16.1055H180.886V20.1562H183.001V22.6155" fill="#1D1D1B"/>
         <path d="M77.3037 22.8049C76.686 21.553 75.7234 20.6738 74.4159 20.1619C73.2808 19.7558 72.0066 19.6445 70.5988 19.8337C69.1855 20.0228 68.0393 20.6182 67.1435 21.6364C66.5926 22.2429 66.1865 23.0052 65.9305 23.9178C65.6746 24.8303 65.541 25.7484 65.541 26.6609C65.541 27.7793 65.6968 28.8532 66.0084 29.8825C66.3144 30.9175 66.8319 31.7354 67.5552 32.3475C68.2396 32.954 69.1633 33.388 70.3151 33.6439C71.4669 33.8999 72.6131 33.8721 73.7482 33.566C75.0224 33.2989 76.0684 32.6034 76.8975 31.485C77.2758 30.9453 77.5819 30.2832 77.8267 29.5042C78.066 28.7252 78.1884 27.796 78.1884 26.711C78.1884 25.2253 77.8935 23.9178 77.3092 22.7994L77.3037 22.8049ZM71.8619 30.9954C69.9144 30.9954 68.9741 29.1091 68.9741 26.7833C68.9741 24.4575 69.9089 22.5712 71.8619 22.5712C73.8149 22.5712 74.7497 24.4575 74.7497 26.7833C74.7497 29.1091 73.8038 30.9954 71.8619 30.9954Z" fill="#1D1D1B"/>
       </svg>
-      <div>
-        <div class="marca-titulo">SUNAT · Comprobantes con detalle</div>
-        <div class="marca-sub">Vista ejecutiva para Contabilidad · INROPRIN S.A.C.</div>
-      </div>
+      <div class="lat-titulo">Vista <span>SUNAT</span></div>
+      <div class="lat-sub">Comprobantes con detalle · Contabilidad</div>
     </div>
-    <a class="boton" id="enlaceHoja" href="#" target="_blank" rel="noopener">Abrir la hoja completa ↗</a>
-  </header>
 
-  <section class="estado">
-    <div>
-      <div class="rotulo">Cómo se alimenta</div>
-      <span class="chip chip-ok"><span class="punto"></span>Se actualiza solo, cada mañana</span>
-      <div class="pasos"><span class="paso">SIRE · 8:00</span><span>→</span><span class="paso">XML y PDF · 8:00 y 8:30</span><span>→</span><span class="paso">Esta vista</span></div>
+    <div class="lat-bloque lat-filtros">
+      <div class="lat-rotulo">Filtros</div>
+      <select id="fMes" aria-label="Mes"></select>
+      <div class="segmento" id="fOrigen"><button data-v="0" class="activo">Compras</button><button data-v="1">Ventas</button></div>
+      <div class="segmento" id="fMoneda"></div>
+      <button class="limpiar" id="fLimpiar" style="align-self:flex-start">Quitar filtros</button>
     </div>
-    <div>
-      <div class="rotulo">Lo que hay en la hoja</div>
+
+    <div class="lat-bloque">
+      <div class="lat-rotulo">Secciones</div>
+      <nav class="nav" id="nav">
+      <button data-vista="resumen" class="activo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg><span>Resumen</span></button>
+      <button data-vista="impuestos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 5 5 19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg><span>Impuestos</span><span class="insignia" id="insigniaImpuestos" style="display:none"></span></button>
+      <button data-vista="factura"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6"/><circle cx="11.5" cy="14.5" r="2.5"/><path d="m13.5 16.5 2 2"/></svg><span>Buscar factura</span></button>
+      <button data-vista="precios"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg><span>Precios</span></button>
+      <button data-vista="proveedores"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V8l7-5 7 5v13"/><path d="M9 21v-6h6v6"/></svg><span>Proveedores</span></button>
+      <button data-vista="oc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18v13H3z"/><path d="M8 7V4h8v3"/><path d="M3 12h18"/></svg><span>OC y centros de costo</span></button>
+      </nav>
+    </div>
+
+    <div class="lat-pie">
+      <span class="chip chip-ok" style="align-self:flex-start"><span class="punto"></span>Se actualiza sola</span>
       <div class="grande" id="estadoDocs">—</div>
       <div class="linea" id="estadoRango"></div>
+      <div class="linea">Vista armada: <b id="estadoHora">—</b></div>
+      <a class="boton" id="enlaceHoja" href="#" target="_blank" rel="noopener">Abrir la hoja completa ↗</a>
     </div>
-    <div>
-      <div class="rotulo">Esta vista se armó</div>
-      <div class="grande" id="estadoHora">—</div>
-      <div class="linea">Recarga la página para ver lo último.</div>
+  </aside>
+
+  <main class="principal">
+    <div class="encabezado">
+      <h1 id="tituloSeccion">Resumen</h1>
+      <span class="filtro-activo" id="fResumen"></span>
     </div>
-  </section>
 
-  <section class="tarjeta tarjeta-ancha buscar-factura">
-    <div class="tarjeta-cab"><h2>Buscar una factura</h2><span class="nota">En todo el año, compras y ventas · funciona aunque SUNAT esté caída</span></div>
-    <input class="buscador" id="buscarFactura" type="search" placeholder="F001-123, número, RUC, proveedor o monto (ej.: 43.64)">
-    <div class="facturas" id="facturas"></div>
-  </section>
+    <section class="vista activa" data-vista="resumen">
+      <div class="kpis" id="kpis"></div>
+      <div class="grilla">
+        <div class="tarjeta">
+          <div class="tarjeta-cab"><h2 id="tituloMeses">Compras por mes</h2><span class="nota">Clic en un mes para filtrar · notas de crédito restadas</span></div>
+          <div class="meses" id="meses"></div>
+        </div>
+        <div class="tarjeta">
+          <div class="tarjeta-cab"><h2>Por tipo de comprobante</h2><span class="nota" id="notaTipo"></span></div>
+          <div class="dona" id="dona"></div>
+        </div>
+      </div>
+    </section>
 
-  <div class="filtros">
-    <label>Mes</label>
-    <select id="fMes"></select>
-    <div class="segmento" id="fOrigen"><button data-v="0" class="activo">Compras</button><button data-v="1">Ventas</button></div>
-    <div class="segmento" id="fMoneda"></div>
-    <button class="limpiar" id="fLimpiar">Quitar filtros</button>
-    <span class="filtro-activo" id="fResumen"></span>
-  </div>
+    <section class="vista" data-vista="impuestos">
+      <div class="kpis" id="kpisImpuestos"></div>
+      <details class="tarjeta tarjeta-ancha desplegable" id="detCaja" style="display:none" open>
+        <summary><h2>Detracciones a revisar · <span class="det-cuenta" id="detCuenta"></span></h2><span class="nota">El % aplicado no es el que lleva su código de bien o servicio (anexos de la R.S. 183-2004/SUNAT)</span></summary>
+        <div id="detLista"></div>
+      </details>
+      <p class="vacio" id="detVacio" style="display:none">Ninguna detracción a revisar con este filtro: todas usan el % de su código de bien o servicio.</p>
+    </section>
 
-  <section class="kpis" id="kpis"></section>
+    <section class="vista" data-vista="factura">
+      <div class="tarjeta tarjeta-ancha buscar-factura">
+        <div class="tarjeta-cab"><h2>Buscar una factura</h2><span class="nota">En todo el año, compras y ventas (sin filtros) · funciona aunque SUNAT esté caída</span></div>
+        <input class="buscador" id="buscarFactura" type="search" placeholder="F001-123, número, RUC, proveedor o monto (ej.: 43.64)">
+        <div class="facturas" id="facturas"></div>
+      </div>
+    </section>
 
-  <details class="tarjeta tarjeta-ancha desplegable" id="detCaja" style="display:none">
-    <summary><h2>Detracciones a revisar · <span class="det-cuenta" id="detCuenta"></span></h2><span class="nota">El % aplicado no es el que lleva su código de bien o servicio (anexos de la R.S. 183-2004/SUNAT) · clic para ver</span></summary>
-    <div id="detLista"></div>
-  </details>
+    <section class="vista" data-vista="precios">
+      <div class="tarjeta tarjeta-ancha">
+        <div class="tarjeta-cab"><h2>¿Cuánto pagamos por…?</h2><span class="nota" id="notaBuscador"></span></div>
+        <div class="buscador-caja">
+          <input class="buscador" id="buscar" type="search" placeholder="Producto o proveedor: impresora, pollo brasa, tóner, cemento…">
+          <div class="segmento" id="bModo"><button data-v="todo" class="activo">Todas las compras</button><button data-v="repite">Compradas en 2+ meses</button></div>
+          <select id="bOrden"><option value="gasto">Más gasto</option><option value="sube">Más subió</option><option value="baja">Más bajó</option><option value="reciente">Más reciente</option></select>
+        </div>
+        <div class="p-cab"><span>Producto · proveedor</span><span>Compras</span><span>Último precio</span><span>Precio en el tiempo</span><span></span></div>
+        <div class="resultados" id="resultados"></div>
+        <button class="limpiar mas" id="verMas" style="display:none">Ver más</button>
+      </div>
+    </section>
 
-  <section class="grilla">
-    <div class="tarjeta">
-      <div class="tarjeta-cab"><h2 id="tituloMeses">Compras por mes</h2><span class="nota">Clic en un mes para filtrar · notas de crédito restadas</span></div>
-      <div class="meses" id="meses"></div>
-    </div>
-    <div class="tarjeta">
-      <div class="tarjeta-cab"><h2>Por tipo de comprobante</h2><span class="nota" id="notaTipo"></span></div>
-      <div class="dona" id="dona"></div>
-    </div>
-  </section>
+    <section class="vista" data-vista="proveedores">
+      <div class="grilla">
+        <div class="tarjeta">
+          <div class="tarjeta-cab"><h2>Proveedores mes a mes</h2><span class="nota">Los 12 de más monto · más intenso = más monto</span></div>
+          <div class="calor-caja" id="calor"></div>
+        </div>
+        <div class="tarjeta">
+          <div class="tarjeta-cab"><h2>Principales del período</h2><span class="nota" id="notaTop"></span></div>
+          <div id="top"></div>
+        </div>
+      </div>
+    </section>
 
-  <p class="seccion">Buscador de compras</p>
-  <section class="tarjeta tarjeta-ancha">
-    <div class="tarjeta-cab"><h2>¿Cuánto pagamos por…?</h2><span class="nota" id="notaBuscador"></span></div>
-    <div class="buscador-caja">
-      <input class="buscador" id="buscar" type="search" placeholder="Producto o proveedor: impresora, pollo brasa, tóner, cemento…">
-      <div class="segmento" id="bModo"><button data-v="todo" class="activo">Todas las compras</button><button data-v="repite">Compradas en 2+ meses</button></div>
-      <select id="bOrden"><option value="gasto">Más gasto</option><option value="sube">Más subió</option><option value="baja">Más bajó</option><option value="reciente">Más reciente</option></select>
-    </div>
-    <div class="p-cab"><span>Producto · proveedor</span><span>Compras</span><span>Último precio</span><span>Precio en el tiempo</span><span></span></div>
-    <div class="resultados" id="resultados"></div>
-    <button class="limpiar mas" id="verMas" style="display:none">Ver más</button>
-  </section>
+    <section class="vista" data-vista="oc">
+      <div class="kpis" id="kpisOc"></div>
+      <div class="grilla grilla-igual">
+        <div class="tarjeta">
+          <div class="tarjeta-cab"><h2>Importaciones: gastos con factura en SUNAT</h2><span class="nota">Flete, aduana, courier… La factura del proveedor extranjero está en la carpeta de la OC.</span></div>
+          <div id="impo"></div>
+        </div>
+        <div class="tarjeta">
+          <div class="tarjeta-cab"><h2>A dónde va el gasto</h2><span class="nota" id="notaCc"></span></div>
+          <div id="centros"></div>
+        </div>
+      </div>
+    </section>
 
-  <p class="seccion">Proveedores</p>
-  <section class="grilla">
-    <div class="tarjeta">
-      <div class="tarjeta-cab"><h2>Proveedores mes a mes</h2><span class="nota">Los 12 de más monto · más intenso = más monto</span></div>
-      <div class="calor-caja" id="calor"></div>
-    </div>
-    <div class="tarjeta">
-      <div class="tarjeta-cab"><h2>Principales del período</h2><span class="nota" id="notaTop"></span></div>
-      <div id="top"></div>
-    </div>
-  </section>
-
-  <p class="seccion">Importaciones y centros de costo</p>
-  <section class="grilla">
-    <div class="tarjeta">
-      <div class="tarjeta-cab"><h2>Importaciones: gastos con factura en SUNAT</h2><span class="nota">Flete, aduana, courier… La factura del proveedor extranjero está en la carpeta de la OC.</span></div>
-      <div id="impo"></div>
-    </div>
-    <div class="tarjeta">
-      <div class="tarjeta-cab"><h2>A dónde va el gasto</h2><span class="nota" id="notaCc"></span></div>
-      <div id="centros"></div>
-    </div>
-  </section>
-
-  <footer class="pie">
-    <span id="pie"></span>
-    <a class="boton boton-accent" id="enlaceHoja2" href="#" target="_blank" rel="noopener">Ver el detalle completo ↗</a>
-  </footer>
+    <footer class="pie">
+      <span id="pie"></span>
+      <a class="boton boton-accent" id="enlaceHoja2" href="#" target="_blank" rel="noopener">Ver el detalle completo ↗</a>
+    </footer>
+  </main>
 </div>
 
 <script>
@@ -387,6 +444,13 @@
     document.getElementById('estadoRango').innerHTML = 'De <b>' + etqMes(D.meses[0]) + '</b> a <b>' + etqMes(D.meses[D.meses.length - 1]) + '</b> · ' + miles(d.lineas) + ' líneas de detalle';
     document.getElementById('estadoHora').textContent = d.generadoEl.replace(/ de \d{4},/, ',');
     document.getElementById('pie').textContent = 'Generado el ' + d.generadoEl + ' · a partir de «COMPROBANTES SUNAT - DETALLE»';
+    // El menú lateral: una sección a la vez; se recuerda la última vista.
+    document.getElementById('nav').onclick = function (e) {
+      var b = e.target.closest('button[data-vista]'); if (b) mostrarSeccion(b.getAttribute('data-vista'));
+    };
+    var guardada = null;
+    try { guardada = localStorage.getItem('vistaSunatSeccion'); } catch (e) { /* sin almacenamiento: se empieza por el resumen */ }
+    mostrarSeccion(guardada && document.querySelector('.vista[data-vista="' + guardada + '"]') ? guardada : 'resumen');
 
     var sel = document.getElementById('fMes');
     sel.innerHTML = '<option value="">Todo el año</option>' + D.meses.slice().reverse().map(function (m) { return '<option value="' + m + '">' + etqMes(m) + '</option>'; }).join('');
@@ -413,6 +477,21 @@
       var fila = e.target.closest('.factura'); if (fila) abrirFactura(fila);
     };
     buscarFacturas('');
+  }
+
+  function mostrarSeccion(k) {
+    Array.prototype.forEach.call(document.querySelectorAll('.vista'), function (v) { v.classList.toggle('activa', v.getAttribute('data-vista') === k); });
+    var titulo = '';
+    Array.prototype.forEach.call(document.querySelectorAll('#nav button'), function (b) {
+      var es = b.getAttribute('data-vista') === k;
+      b.classList.toggle('activo', es);
+      if (es) titulo = b.querySelector('span').textContent;
+    });
+    document.getElementById('tituloSeccion').textContent = titulo;
+    // El buscador de facturas no usa los filtros: el resumen de filtros no aplica ahí.
+    document.getElementById('fResumen').style.visibility = k === 'factura' ? 'hidden' : '';
+    try { localStorage.setItem('vistaSunatSeccion', k); } catch (e) { /* sin almacenamiento */ }
+    window.scrollTo(0, 0);
   }
 
   function segmento(id, alCambiar) {
@@ -492,18 +571,25 @@
         varTxt = ' · <span class="variacion ' + (v > 0 ? 'sube' : v < 0 ? 'baja' : 'igual') + '">' + (v > 0 ? '+' : '') + v + '%</span> vs ' + etqMes(D.meses[i - 1]);
       }
     }
+    var revisar = docs.filter(function (x) { return x[18]; }).length;
+    var kNotas = kpi('Notas de crédito', dinero(suma(notas, 5)), '<div class="kpi-extra">' + notas.length + ' notas · ya restadas del total</div>', notas.length ? 'kpi-riesgo' : '');
+    var kDet = kpi('Detracción', dinero(suma(det, 6), idxPen()), '<div class="kpi-extra">' + det.length + ' comprobantes con detracción' +
+        (revisar ? ' · <span class="variacion sube">' + revisar + ' a revisar</span>' : '') + '</div>', revisar ? 'kpi-riesgo' : '');
+    var igv = kpiIgv(docs);
+    // Resumen: lo principal. Impuestos: IGV, no gravado, notas y detracción. OC: el vínculo con la orden de compra.
     document.getElementById('kpis').innerHTML =
       kpi(compras ? 'Compras' : 'Ventas', dinero(neto), '<div class="kpi-extra">' + miles(docs.length) + ' comprobantes' + varTxt + '</div>' + chispa(porMes, 220, 34, '#00A298')) +
       kpi(compras ? 'Proveedores' : 'Clientes', miles(provs), '<div class="kpi-extra">' + (docs.length ? dinero(neto / Math.max(provs, 1), null, true) + ' en promedio' : '') + '</div>') +
-      kpi('Notas de crédito', dinero(suma(notas, 5)), '<div class="kpi-extra">' + notas.length + ' notas · ya restadas del total</div>', notas.length ? 'kpi-riesgo' : '') +
-      kpiIgv(docs) +
-      kpi('Detracción', dinero(suma(det, 6), idxPen()), '<div class="kpi-extra">' + det.length + ' comprobantes con detracción' +
-        (docs.filter(function (x) { return x[18]; }).length ? ' · <span class="variacion sube">' + docs.filter(function (x) { return x[18]; }).length + ' a revisar</span>' : '') + '</div>',
-        docs.some(function (x) { return x[18]; }) ? 'kpi-riesgo' : '') +
-      (compras ? kpi('Unidos a su OC', '<div class="kpi-anillo">' + anillo(pct(conOc, docs.length), '#00A298') + '<div class="kpi-extra" style="margin:0">' + miles(conOc) + ' de ' + miles(docs.length) + '<br>con su orden de compra</div></div>') : '') +
-      (compras ? kpi('Con centro de costo', '<div class="kpi-anillo">' + anillo(pct(conCc, docs.length), '#006DB1') + '<div class="kpi-extra" style="margin:0">' + miles(conCc) + ' de ' + miles(docs.length) + '<br>listos para CONCAR</div></div>') : '') +
-      (compras ? kpi('Importaciones', dinero(suma(docs.filter(function (x) { return x[9]; }), 5)), '<div class="kpi-extra">gastos en Perú unidos a OC de importación</div>') : '') +
-      (compras ? kpi('Productos distintos', miles(D.totalProductos), '<div class="kpi-extra">en el buscador, con su precio</div>') : '');
+      kNotas + (igv ? igv.igv : '') + kDet;
+    document.getElementById('kpisImpuestos').innerHTML = (igv ? igv.igv + igv.noGravado : '') + kNotas + kDet;
+    document.getElementById('kpisOc').innerHTML = compras ?
+      kpi('Unidos a su OC', '<div class="kpi-anillo">' + anillo(pct(conOc, docs.length), '#00A298') + '<div class="kpi-extra" style="margin:0">' + miles(conOc) + ' de ' + miles(docs.length) + '<br>con su orden de compra</div></div>') +
+      kpi('Con centro de costo', '<div class="kpi-anillo">' + anillo(pct(conCc, docs.length), '#006DB1') + '<div class="kpi-extra" style="margin:0">' + miles(conCc) + ' de ' + miles(docs.length) + '<br>listos para CONCAR</div></div>') +
+      kpi('Importaciones', dinero(suma(docs.filter(function (x) { return x[9]; }), 5)), '<div class="kpi-extra">gastos en Perú unidos a OC de importación</div>')
+      : '<p class="vacio">Las órdenes de compra y los centros de costo son de las compras: elige «Compras» en los filtros.</p>';
+    var ins = document.getElementById('insigniaImpuestos');
+    ins.textContent = revisar; ins.style.display = revisar ? '' : 'none';
+    ins.title = revisar + ' detracciones a revisar';
   }
 
   /**
@@ -513,14 +599,16 @@
    */
   function kpiIgv(docs) {
     var con = docs.filter(function (x) { return x[16] != null; });
-    if (!con.length) return '';
+    if (!con.length) return null;
     var igv = suma(con, 16), baseG = suma(con, 15), noGrav = con.reduce(function (a, x) { return a + (x[17] || 0); }, 0);
     var tasa = baseG ? Math.round(1000 * igv / baseG) / 10 : 0;
     var falta = docs.length - con.length;
-    return kpi('IGV', dinero(igv), '<div class="kpi-extra">Base gravada ' + dinero(baseG, null, true) + ' · IGV ÷ base = <b>' + tasa + '%</b>' +
+    return {
+      igv: kpi('IGV', dinero(igv), '<div class="kpi-extra">Base gravada ' + dinero(baseG, null, true) + ' · IGV ÷ base = <b>' + tasa + '%</b>' +
         (tasa && tasa < 17.9 ? ' <span class="nota">(hay compras al 10%: restaurantes y hoteles MYPE)</span>' : '') + '</div>' +
-        (falta ? '<div class="kpi-extra">' + falta + ' comprobantes sin desglose</div>' : '')) +
-      kpi('No gravado', dinero(noGrav), '<div class="kpi-extra">inafecto, exonerado y otros tributos · ' + pct(noGrav, Math.abs(baseG + igv + noGrav)) + '% del total</div>');
+        (falta ? '<div class="kpi-extra">' + falta + ' comprobantes sin desglose</div>' : '')),
+      noGravado: kpi('No gravado', dinero(noGrav), '<div class="kpi-extra">inafecto, exonerado y otros tributos · ' + pct(noGrav, Math.abs(baseG + igv + noGrav)) + '% del total</div>')
+    };
   }
 
   // ── Detracciones a revisar ──
@@ -528,6 +616,7 @@
     var lista = docs.filter(function (x) { return x[18]; });
     var caja = document.getElementById('detCaja');
     caja.style.display = lista.length ? '' : 'none';
+    document.getElementById('detVacio').style.display = lista.length ? 'none' : '';
     if (!lista.length) return;
     var provs = new Set(lista.map(function (x) { return x[2]; })).size;
     document.getElementById('detCuenta').textContent = lista.length + (lista.length === 1 ? ' comprobante' : ' comprobantes') +
