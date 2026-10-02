@@ -89,6 +89,15 @@
   .grilla { display: grid; grid-template-columns: 1.55fr 1fr; gap: 14px; margin-bottom: 14px; }
   .tarjeta { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px; box-shadow: var(--sombra); min-width: 0; }
   .tarjeta-ancha { margin-bottom: 14px; }
+  /* Detracciones a revisar: empieza cerrada, una línea; se abre con un clic. */
+  details.desplegable { padding-top: 14px; padding-bottom: 14px; border-color: #F2C9C9; }
+  details.desplegable > summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  details.desplegable > summary::-webkit-details-marker { display: none; }
+  details.desplegable > summary h2 { display: flex; align-items: center; gap: 8px; }
+  details.desplegable > summary h2::before { content: '▸'; font-size: 13px; color: var(--danger); transition: transform .15s; }
+  details.desplegable[open] > summary h2::before { transform: rotate(90deg); }
+  details.desplegable[open] > summary { margin-bottom: 14px; }
+  details.desplegable .det-cuenta { color: var(--danger); font-weight: 700; }
   .tarjeta-cab { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
   .nota { font-size: 12px; color: var(--text3); }
   .vacio { color: var(--text3); font-size: 13px; margin: 0; }
@@ -268,10 +277,10 @@
 
   <section class="kpis" id="kpis"></section>
 
-  <section class="tarjeta tarjeta-ancha" id="detCaja" style="display:none">
-    <div class="tarjeta-cab"><h2>Detracciones a revisar</h2><span class="nota">El % aplicado no es el que lleva su código de bien o servicio (anexos de la R.S. 183-2004/SUNAT)</span></div>
+  <details class="tarjeta tarjeta-ancha desplegable" id="detCaja" style="display:none">
+    <summary><h2>Detracciones a revisar · <span class="det-cuenta" id="detCuenta"></span></h2><span class="nota">El % aplicado no es el que lleva su código de bien o servicio (anexos de la R.S. 183-2004/SUNAT) · clic para ver</span></summary>
     <div id="detLista"></div>
-  </section>
+  </details>
 
   <section class="grilla">
     <div class="tarjeta">
@@ -520,6 +529,9 @@
     var caja = document.getElementById('detCaja');
     caja.style.display = lista.length ? '' : 'none';
     if (!lista.length) return;
+    var provs = new Set(lista.map(function (x) { return x[2]; })).size;
+    document.getElementById('detCuenta').textContent = lista.length + (lista.length === 1 ? ' comprobante' : ' comprobantes') +
+      ' de ' + provs + (provs === 1 ? ' proveedor' : ' proveedores') + ' · ' + dinero(suma(lista, 6), idxPen()) + ' de detracción';
     document.getElementById('detLista').innerHTML = '<table class="tabla"><thead><tr><th>Fecha</th><th>Proveedor</th><th>Comprobante</th><th>Qué pasa</th><th class="num">Detracción</th></tr></thead><tbody>' +
       lista.map(function (x) {
         var p = D.dic.prov[x[2]] || ['', ''];
