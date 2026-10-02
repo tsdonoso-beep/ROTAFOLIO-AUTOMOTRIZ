@@ -617,10 +617,11 @@ Para actualizar desde una versión anterior: borrar el contenido de
    `SubirLegajo.gs`, no hay que hacer nada).
 3. En la lista de funciones elige **instalarCarpetaMadre → Ejecutar** y
    acepta los permisos. Trae los datos en ese momento, agrega el menú
-   **Carpeta madre** y la deja programada a las 7:00 y a las 15:00 (después
-   de cada corrida del robot, a las 02:00 y a las 12:00).
+   **Carpeta madre** y la deja revisando cada hora: apenas el robot lee las
+   carpetas (01:17 y 11:47, o cuando GitHub lo deje correr), la hoja se pone
+   al día. Si no hay lectura nueva, no reescribe nada.
 
-Si la última lectura del robot tiene más de 15 horas (una corrida falló o
+Si la última lectura del robot tiene más de 20 horas (una corrida falló o
 quedó a medias), el resumen lo avisa en rojo: lo subido desde entonces
 puede seguir figurando como pendiente.
 

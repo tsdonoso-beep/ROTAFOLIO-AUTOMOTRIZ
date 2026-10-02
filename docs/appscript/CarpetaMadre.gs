@@ -26,8 +26,8 @@
  *
  * ── Para actualizar una versión anterior ──
  * Abre CarpetaMadre.gs en Apps Script, borra todo, pega esta versión y
- * guarda. Después ejecuta «instalarCarpetaMadre» una vez más: deja los dos
- * horarios (7:00 y 15:00) en lugar del único de antes.
+ * guarda. Después ejecuta «instalarCarpetaMadre» una vez más: cambia el
+ * horario fijo de antes por la revisión de cada hora.
  *
  * ── Instalación (una sola vez) ──
  * 1. Abre la hoja GENERAL → Extensiones → Apps Script.
@@ -39,20 +39,24 @@
  *    valores de SubirCapturaOC.gs / OrdenarCPE.gs.
  * 4. Arriba, en la lista de funciones, elige «instalarCarpetaMadre» → Ejecutar
  *    → acepta los permisos. Trae los datos en ese momento, agrega el menú
- *    «Carpeta madre» a la hoja y la deja programada a las 7:00 y a las 15:00
- *    (después de cada corrida del robot, a las 02:00 y a las 12:00).
+ *    «Carpeta madre» a la hoja y la deja revisando cada hora: apenas el
+ *    robot de las carpetas lee algo nuevo (01:17 y 11:47, o cuando GitHub lo
+ *    deje correr), la hoja se pone al día.
  */
 
 var CM_HOJA = 'CARPETA MADRE';
 var CM_HOJA_RESUMEN = 'CARPETA MADRE - RESUMEN';
 var CM_HOJA_SIN_OC = 'FACTURAS SIN OC';
 var CM_RUC = '20512201611';
-// Se trae sola dos veces al día, después de cada corrida del robot de las
-// carpetas (02:00 y 12:00): a las 7:00 y a las 15:00.
-var CM_HORAS = [7, 15];
+// Se revisa sola cada hora, pero solo reescribe las pestañas cuando el robot
+// de las carpetas leyó algo nuevo (corre a las 01:17 y a las 11:47, aunque
+// GitHub a veces lo atrasa horas): así la hoja se pone al día apenas termina.
+// Además, una vez al día a esta hora se reescribe igual (para el resumen y la
+// hora de «traído de la base»).
+var CM_HORA_SIEMPRE = 7;
 // Si la última lectura del robot es más vieja que esto, alguna corrida falló:
 // se avisa en el resumen (los pendientes pueden estar desactualizados).
-var CM_HORAS_SIN_LECTURA = 15;
+var CM_HORAS_SIN_LECTURA = 20;
 var CM_PAGINA = 1000;
 
 var CM_COLUMNAS = [
@@ -90,16 +94,14 @@ function instalarCarpetaMadre() {
     var f = t.getHandlerFunction();
     if (f === 'traerCarpetaMadreSola' || f === 'menuCarpetaMadre') ScriptApp.deleteTrigger(t);
   });
-  CM_HORAS.forEach(function (h) {
-    ScriptApp.newTrigger('traerCarpetaMadreSola').timeBased().everyDays(1).atHour(h).create();
-  });
+  ScriptApp.newTrigger('traerCarpetaMadreSola').timeBased().everyHours(1).create();
   ScriptApp.newTrigger('menuCarpetaMadre').forSpreadsheet(libro).onOpen().create();
   var r = traerCarpetaMadre_();
   try {
     menuCarpetaMadre();
     var ui = SpreadsheetApp.getUi();
     ui.alert(r.error ? 'Instalado, pero no se pudo traer' : 'Instalado', (r.error || r.texto) +
-      '\n\nSe traerá sola todos los días a las ' + CM_HORAS.join(':00 y a las ') + ':00, y queda el menú «Carpeta madre».', ui.ButtonSet.OK);
+      '\n\nSe pondrá al día sola apenas el robot lea las carpetas (revisa cada hora), y queda el menú «Carpeta madre».', ui.ButtonSet.OK);
   } catch (e) {
     // Corrido desde el editor sin la hoja abierta: no hay ventana, el resultado va al registro.
     Logger.log(r.error || r.texto);
@@ -130,13 +132,27 @@ function traerCarpetaMadre() {
   else ui.alert('Carpeta madre actualizada', r.texto, ui.ButtonSet.OK);
 }
 
-/** La de cada mañana: sin ventanas (nadie las vería). */
+/**
+ * La automática, cada hora y sin ventanas (nadie las vería): reescribe solo
+ * si el robot leyó algo desde la última vez, o una vez al día a las
+ * CM_HORA_SIEMPRE.
+ */
 function traerCarpetaMadreSola() {
-  var r = traerCarpetaMadre_();
+  var props = PropertiesService.getDocumentProperties();
+  var hora = Number(Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'H'));
+  var hoy = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  var obligatoria = hora === CM_HORA_SIEMPRE && props.getProperty('CM_ULTIMO_DIA') !== hoy;
+  var r = traerCarpetaMadre_(obligatoria ? null : props.getProperty('CM_ULTIMA_LECTURA'));
   if (r.error) throw new Error(r.error); // queda en Ejecuciones y Google avisa por correo
+  if (!r.sinCambios && obligatoria) props.setProperty('CM_ULTIMO_DIA', hoy);
 }
 
-function traerCarpetaMadre_() {
+/**
+ * Trae y escribe las pestañas. Con `siNoEs` (la última lectura del robot que
+ * ya está en la hoja), si el robot no leyó nada nuevo no escribe nada y
+ * devuelve { sinCambios: true }.
+ */
+function traerCarpetaMadre_(siNoEs) {
   var cfg = configuracionCarpetaMadre_();
   var faltan = ['supabaseUrl', 'anonKey', 'robotCorreo', 'robotClave'].filter(function (k) { return !cfg[k]; });
   if (faltan.length) {
@@ -153,6 +169,8 @@ function traerCarpetaMadre_() {
       if (parte.length < CM_PAGINA) break;
     }
     if (!filas.length) return { error: 'La base no devolvió carpetas: ¿ya corrió el robot de las carpetas?' };
+    var ultimaLectura = filas.reduce(function (m, f) { return f.cargado_en && f.cargado_en > m ? f.cargado_en : m; }, '');
+    if (siNoEs && ultimaLectura === siNoEs) return { sinCambios: true };
     // Solo las que aparentan que les falta la OC (ALTA y MEDIA).
     var sinOc = [];
     for (var d2 = 0; ; d2 += CM_PAGINA) {
@@ -165,6 +183,7 @@ function traerCarpetaMadre_() {
     escribirDetalleCarpetaMadre_(libro, filas);
     escribirFacturasSinOc_(libro, sinOc);
     var texto = escribirResumenCarpetaMadre_(libro, filas, sinOc);
+    PropertiesService.getDocumentProperties().setProperty('CM_ULTIMA_LECTURA', ultimaLectura);
     return { texto: texto };
   } catch (e) {
     return { error: String(e.message || e) };

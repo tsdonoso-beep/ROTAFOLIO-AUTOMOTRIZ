@@ -9,7 +9,7 @@
 # mañana. Ver scripts/carpetas-oc.mts.
 #
 # Las dos carpetas tienen que estar compartidas como Lector con el correo de
-# la cuenta de servicio (GOOGLE_SA_EMAIL). Dos veces al día (02:00 y 12:00)
+# la cuenta de servicio (GOOGLE_SA_EMAIL). Dos veces al día (01:17 y 11:47)
 # corren las dos.
 #
 # Además arma el legajo de cada OC (qué le falta), su centro de costo, y en
@@ -26,12 +26,12 @@ name: Carpetas de OC (nacionales e importaciones)
 
 on:
   schedule:
-    # 02:00 en Lima (UTC-5): antes de «SUNAT diario» (08:00), que publica las
-    # hojas con lo que encuentre.
-    - cron: "0 7 * * *"
-    # 12:00 en Lima: lo que Compras suba en la mañana aparece en la tarde
-    # (la hoja GENERAL lo trae a las 15:00, CarpetaMadre.gs).
-    - cron: "0 17 * * *"
+    # 01:17 y 11:47 en Lima (UTC-5). Fuera de la hora en punto: GitHub atrasa
+    # los horarios cuando está saturado, y más a la hora en punto (el de las
+    # 02:00 arrancó a las 08:38 el 02/10/2026). La hoja GENERAL no depende de
+    # la hora: CarpetaMadre.gs mira cada hora si hay una lectura nueva.
+    - cron: "17 6 * * *"
+    - cron: "47 16 * * *"
   workflow_dispatch:
     inputs:
       debug:
