@@ -14,6 +14,7 @@
 #
 # Además arma el legajo de cada OC (qué le falta), su centro de costo, y en
 # las corridas completas anota qué cambió desde la anterior (pestaña CAMBIOS).
+# Al final republica la hoja DETALLE, que lee la vista ejecutiva.
 #
 # Disparo manual: arranca en depuración (no toca la base ni la hoja); se
 # elige nacionales, importaciones o ambas, y nacionales se puede limitar a un
@@ -129,6 +130,23 @@ jobs:
           LEER_MAX: ${{ inputs.leer_max || '3000' }}
           LEER_MINUTOS: ${{ inputs.leer_minutos || (inputs.debug && '15' || '30') }}
         run: node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/local/comun/con-bitacora.mts scripts/carpetas-oc.mts
+
+      # La hoja DETALLE con lo que se acaba de leer (legajo, OC, centro de
+      # costo): así la vista ejecutiva no espera a que alguien la republique.
+      # Solo en las corridas de verdad (no en depuración).
+      - name: Republicar la hoja DETALLE
+        if: always() && (github.event_name == 'schedule' || !inputs.debug)
+        env:
+          GOOGLE_SA_EMAIL: ${{ secrets.GOOGLE_SA_EMAIL }}
+          GOOGLE_SA_PRIVATE_KEY: ${{ secrets.GOOGLE_SA_PRIVATE_KEY }}
+          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          PROJECT_URL: ${{ secrets.PROJECT_URL }}
+          ANON_KEY: ${{ secrets.ANON_KEY }}
+          ROBOT_CORREO: ${{ secrets.ROBOT_CORREO }}
+          ROBOT_CLAVE: ${{ secrets.ROBOT_CLAVE }}
+        run: node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/local/comun/con-bitacora.mts scripts/local/publicar-detalle.mts
 
       - name: Subir el resultado
         if: always()

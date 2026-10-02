@@ -230,7 +230,10 @@ que es la evidencia para diagnosticar cuando algo falla.
 - **Cuándo:** cron 01:17 y 11:47 (completas, de verdad) + manual. GitHub
   atrasa a veces horas los horarios (el de las 02:00 del 02/10/2026 arrancó
   08:38); por eso la hoja GENERAL (`CarpetaMadre.gs`) mira cada hora si hay
-  una lectura nueva y se pone al día apenas termina. A mano arranca en
+  una lectura nueva y se pone al día apenas termina.
+- **Al final** republica la hoja DETALLE (`publicar-detalle.mts`), que lee la
+  vista ejecutiva: la columna «Legajo de la OC» sale de la carpeta madre
+  (migración 054); el legajo de GENERAL, solo para las OC que la madre no tiene. A mano arranca en
   depuración (no toca la base ni la hoja); se elige nacionales, importaciones
   o ambas, y nacionales se puede limitar a un proyecto (`subcarpeta`). El resumen queda en la página de la corrida; los CSV, en el
   artefacto `carpetas-oc`. Solo una corrida completa y sin fallas reemplaza
