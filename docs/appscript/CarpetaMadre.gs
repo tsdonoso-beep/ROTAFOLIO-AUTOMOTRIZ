@@ -2,10 +2,13 @@
  * La carpeta madre de compras, en la hoja GENERAL
  * --------------------------------------------------------------------------
  *
- * Trae de la base (función legajo_de_carpetas) lo que el robot de cada noche
+ * Trae de la base (función carpetas_madre) lo que el robot de cada noche
  * (`scripts/carpetas-oc.mts`, 02:00) leyó de las dos carpetas madre de
  * compras: «5. Ordenes de Compra» (nacionales) e importaciones. Una fila por
  * carpeta de OC:
+ *   · a quién le toca completarlo: el área (nacionales → Compras
+ *     nacionales; importaciones → COMEX) y, si el legajo por OC lo sabe, el
+ *     comprador, la situación del pago y la forma de pago;
  *   · su legajo: qué documentos tiene, qué le falta y su estado;
  *   · su centro de costo y de dónde salió (CG, cuadro, su carpeta de
  *     proyecto, el nombre de la carpeta o el área administrativa);
@@ -13,8 +16,17 @@
  *   · si está en la base de Control de Gestión (CG) y el último cambio que
  *     vio el robot (archivo nuevo, eliminado, completó, ahora le falta…).
  *
- * Deja dos pestañas: CARPETA MADRE (el detalle) y CARPETA MADRE - RESUMEN.
- * Las reemplaza cada vez: no escribas a mano en ellas.
+ * Y las facturas de SUNAT que no están unidas a ninguna OC pero aparentan
+ * que deberían (función facturas_sin_oc): ALTA si el proveedor trabaja con
+ * OC; MEDIA si el monto es alto y no es un gasto típico sin OC (bancos,
+ * seguros, combustible, pasajes, comida…).
+ *
+ * Deja tres pestañas: CARPETA MADRE (el detalle), FACTURAS SIN OC y CARPETA
+ * MADRE - RESUMEN. Las reemplaza cada vez: no escribas a mano en ellas.
+ *
+ * ── Para actualizar una versión anterior ──
+ * Abre CarpetaMadre.gs en Apps Script, borra todo, pega esta versión y
+ * guarda. No hace falta volver a instalar.
  *
  * ── Instalación (una sola vez) ──
  * 1. Abre la hoja GENERAL → Extensiones → Apps Script.
@@ -31,6 +43,7 @@
 
 var CM_HOJA = 'CARPETA MADRE';
 var CM_HOJA_RESUMEN = 'CARPETA MADRE - RESUMEN';
+var CM_HOJA_SIN_OC = 'FACTURAS SIN OC';
 var CM_RUC = '20512201611';
 var CM_HORA = 7; // de la mañana: el robot de las carpetas corre a las 02:00
 var CM_PAGINA = 1000;
@@ -38,6 +51,10 @@ var CM_PAGINA = 1000;
 var CM_COLUMNAS = [
   ['Procedencia', 'procedencia'],
   ['OC', 'oc'],
+  ['Área responsable', 'area_responsable'],
+  ['Comprador', 'comprador'],
+  ['Situación del pago', 'situacion_pago'],
+  ['Forma de pago', 'forma_pago'],
   ['Tipo', 'tipo'],
   ['Proveedor', 'proveedor'],
   ['Proyecto (carpeta)', 'proyecto_carpeta'],
@@ -121,15 +138,24 @@ function traerCarpetaMadre_() {
     var token = sesionCarpetaMadre_(cfg);
     var filas = [];
     for (var desde = 0; ; desde += CM_PAGINA) {
-      var parte = rpcCarpetaMadre_(cfg, token, 'legajo_de_carpetas', { p_empresa_ruc: CM_RUC },
+      var parte = rpcCarpetaMadre_(cfg, token, 'carpetas_madre', { p_empresa_ruc: CM_RUC },
         '?order=procedencia.desc,oc,carpeta_url&limit=' + CM_PAGINA + '&offset=' + desde);
       filas = filas.concat(parte);
       if (parte.length < CM_PAGINA) break;
     }
     if (!filas.length) return { error: 'La base no devolvió carpetas: ¿ya corrió el robot de las carpetas?' };
+    // Solo las que aparentan que les falta la OC (ALTA y MEDIA).
+    var sinOc = [];
+    for (var d2 = 0; ; d2 += CM_PAGINA) {
+      var p2 = rpcCarpetaMadre_(cfg, token, 'facturas_sin_oc', { p_empresa_ruc: CM_RUC },
+        '?senal=in.(ALTA,MEDIA)&order=senal,total.desc,proveedor_ruc,serie,numero&limit=' + CM_PAGINA + '&offset=' + d2);
+      sinOc = sinOc.concat(p2);
+      if (p2.length < CM_PAGINA) break;
+    }
     var libro = SpreadsheetApp.getActiveSpreadsheet();
     escribirDetalleCarpetaMadre_(libro, filas);
-    var texto = escribirResumenCarpetaMadre_(libro, filas);
+    escribirFacturasSinOc_(libro, sinOc);
+    var texto = escribirResumenCarpetaMadre_(libro, filas, sinOc);
     return { texto: texto };
   } catch (e) {
     return { error: String(e.message || e) };
@@ -148,6 +174,7 @@ function escribirDetalleCarpetaMadre_(libro, filas) {
       var v = f[c[1]];
       if (v == null) return '';
       if (c[1] === 'en_cg') return f.procedencia === 'Importación' ? 'No aplica (cuadro)' : v ? 'Sí' : 'No';
+      if (c[1] === 'comprador' && !v) return 'Por identificar';
       if (c[1] === 'ultimo_cambio_fecha' || c[1] === 'cargado_en') return Utilities.formatDate(new Date(v), zona, 'dd/MM/yyyy HH:mm');
       if (typeof v === 'string') return v.trim();
       return v;
@@ -183,7 +210,8 @@ function escribirDetalleCarpetaMadre_(libro, filas) {
   hoja.setFrozenColumns(2);
   hoja.getRange(1, 1, valores.length, CM_COLUMNAS.length).createFilter();
   hoja.autoResizeColumns(1, 4);
-  [5, 6, 8, 9, 11, 12, 15, 16, 18, 20].forEach(function (c) { hoja.setColumnWidth(c, 220); });
+  ['proyecto_carpeta', 'carpeta_nombre', 'le_falta', 'documentos', 'series', 'facturas_sunat', 'cc_nombre',
+    'centro_costo_segun', 'ultimo_cambio', 'misma_oc_en_otra_carpeta'].forEach(function (k) { hoja.setColumnWidth(cmCol_(k), 220); });
 }
 
 function cmCol_(campo) {
@@ -192,7 +220,7 @@ function cmCol_(campo) {
 }
 
 /** Cuántas carpetas, cuántas completas, qué falta y cuántas tienen factura de SUNAT. */
-function escribirResumenCarpetaMadre_(libro, filas) {
+function escribirResumenCarpetaMadre_(libro, filas, sinOc) {
   var grupos = ['Nacional', 'Importación', 'Total'];
   var cuenta = {};
   grupos.forEach(function (g) {
@@ -246,18 +274,123 @@ function escribirResumenCarpetaMadre_(libro, filas) {
     tabla.push(fila(s, function (c) { return c.fuentes[s] || 0; }));
   });
 
+  // Las facturas de SUNAT que aparentan no tener OC, por área probable.
+  var porArea = { 'Compras nacionales': 'Nacional', 'COMEX (importaciones)': 'Importación' };
+  var sinOcDe = function (senal, campo) {
+    return function (c, g) {
+      return sinOc.filter(function (x) {
+        return x.senal === senal && (g === 'Total' || porArea[x.area_probable] === g);
+      }).reduce(function (s, x) {
+        return s + (campo ? (Number(x[campo]) || 0) * (x.moneda === 'USD' ? 3.75 : 1) : 1);
+      }, 0);
+    };
+  };
+  var filaG = function (nombre, fn) { return [nombre].concat(grupos.map(function (g) { return fn(cuenta[g], g); })); };
+  var titulos = [tabla.length + 1];
+  tabla.push(['', '', '', '']);
+  titulos.push(tabla.length + 1);
+  tabla.push(['Facturas de SUNAT que aparentan no tener OC (pestaña ' + CM_HOJA_SIN_OC + ')', '', '', '']);
+  tabla.push(filaG('ALTA: el proveedor trabaja con OC', sinOcDe('ALTA')));
+  tabla.push(filaG('   … monto aprox. en soles (dólares × 3,75)', function (c, g) { return Math.round(sinOcDe('ALTA', 'total')(c, g)); }));
+  tabla.push(filaG('MEDIA: monto alto, no es gasto típico sin OC', sinOcDe('MEDIA')));
+  tabla.push(filaG('   … monto aprox. en soles (dólares × 3,75)', function (c, g) { return Math.round(sinOcDe('MEDIA', 'total')(c, g)); }));
+
+  // Por comprador, cuando se sabe (del legajo por OC): para el ranking.
+  var porComprador = {};
+  filas.forEach(function (f) {
+    var k = f.comprador || '';
+    if (!k) return;
+    var c = porComprador[k] || (porComprador[k] = { area: f.area_responsable, n: 0, ok: 0 });
+    c.n++;
+    if (f.estado === 'OK') c.ok++;
+  });
+  tabla.push(['', '', '', '']);
+  titulos.push(tabla.length + 1);
+  tabla.push(['Por comprador (solo las OC donde se sabe)', 'Área', 'Carpetas', '% completo']);
+  Object.keys(porComprador).sort(function (a, b) {
+    return porComprador[b].ok / porComprador[b].n - porComprador[a].ok / porComprador[a].n;
+  }).forEach(function (k) {
+    var c = porComprador[k];
+    tabla.push([k, c.area, c.n, Math.round(100 * c.ok / c.n) + '%']);
+  });
+  var sinComprador = filas.filter(function (f) { return !f.comprador; }).length;
+  tabla.push(['Comprador por identificar', '', sinComprador, '']);
+
   var hoja = libro.getSheetByName(CM_HOJA_RESUMEN) || libro.insertSheet(CM_HOJA_RESUMEN);
   hoja.clear();
   hoja.getRange(1, 1, tabla.length, 4).setValues(tabla);
   hoja.getRange(1, 1).setFontWeight('bold').setFontSize(12);
   hoja.getRange(2, 1, 1, 4).setFontWeight('bold').setBackground('#1f4e79').setFontColor('#ffffff');
   hoja.getRange(16, 1).setFontWeight('bold');
+  titulos.forEach(function (r) { hoja.getRange(r, 1, 1, 4).setFontWeight('bold'); });
   hoja.setColumnWidth(1, 330);
 
   var t = cuenta.Total;
   return t.carpetas + ' carpetas de OC (' + cuenta.Nacional.carpetas + ' nacionales, ' + cuenta['Importación'].carpetas +
     ' de importación): ' + t.ok + ' con el legajo completo, ' + t.incompletas + ' incompletas, ' + t.vacias +
-    ' vacías; ' + t.conFactura + ' con factura de SUNAT unida.\n\nPestañas «' + CM_HOJA + '» y «' + CM_HOJA_RESUMEN + '».';
+    ' vacías; ' + t.conFactura + ' con factura de SUNAT unida.\n\n' +
+    sinOc.filter(function (x) { return x.senal === 'ALTA'; }).length + ' facturas de SUNAT aparentan no tener OC (ALTA) y ' +
+    sinOc.filter(function (x) { return x.senal === 'MEDIA'; }).length + ' más para revisar (MEDIA).\n\nPestañas «' + CM_HOJA + '», «' +
+    CM_HOJA_SIN_OC + '» y «' + CM_HOJA_RESUMEN + '».';
+}
+
+var CM_COLUMNAS_SIN_OC = [
+  ['Señal', 'senal'],
+  ['Por qué', 'razon'],
+  ['Área probable', 'area_probable'],
+  ['Comprador probable', 'comprador_probable'],
+  ['Fecha de emisión', 'fecha_emision'],
+  ['RUC proveedor', 'proveedor_ruc'],
+  ['Proveedor', 'proveedor_nombre'],
+  ['Serie', 'serie'],
+  ['Número', 'numero'],
+  ['Moneda', 'moneda'],
+  ['Total', 'total'],
+  ['Facturas del proveedor', 'facturas_del_proveedor'],
+  ['…con OC', 'con_oc_del_proveedor'],
+  ['OC del proveedor', 'ocs_del_proveedor'],
+  ['PDF', 'enlace_pdf']
+];
+
+/** Las facturas de SUNAT sin OC que aparentan necesitarla: primero las ALTA, de mayor a menor monto. */
+function escribirFacturasSinOc_(libro, filas) {
+  var hoja = libro.getSheetByName(CM_HOJA_SIN_OC) || libro.insertSheet(CM_HOJA_SIN_OC);
+  if (hoja.getFilter()) hoja.getFilter().remove();
+  hoja.clear();
+  var n = CM_COLUMNAS_SIN_OC.length;
+  var valores = [CM_COLUMNAS_SIN_OC.map(function (c) { return c[0]; })].concat(filas.map(function (f) {
+    return CM_COLUMNAS_SIN_OC.map(function (c) {
+      var v = f[c[1]];
+      if (v == null) return '';
+      if (c[1] === 'fecha_emision') { var p = String(v).split('-'); return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : v; }
+      if ((c[1] === 'comprador_probable' || c[1] === 'area_probable') && !v) return 'Por identificar';
+      if (c[1] === 'enlace_pdf') return v ? 'abrir' : '';
+      return typeof v === 'string' ? v.trim() : v;
+    });
+  }));
+  hoja.getRange(1, 1, valores.length, n).setNumberFormat('@');
+  var col = function (k) { for (var i = 0; i < n; i++) if (CM_COLUMNAS_SIN_OC[i][1] === k) return i + 1; };
+  if (filas.length) {
+    hoja.getRange(2, col('total'), filas.length, 1).setNumberFormat('#,##0.00');
+    hoja.getRange(2, col('facturas_del_proveedor'), filas.length, 2).setNumberFormat('0');
+  }
+  hoja.getRange(1, 1, valores.length, n).setValues(valores);
+  if (filas.length) {
+    hoja.getRange(2, col('enlace_pdf'), filas.length, 1).setRichTextValues(filas.map(function (f) {
+      var r = SpreadsheetApp.newRichTextValue().setText(f.enlace_pdf ? 'abrir' : '');
+      if (f.enlace_pdf) r.setLinkUrl(f.enlace_pdf);
+      return [r.build()];
+    }));
+    hoja.getRange(2, 1, filas.length, 1).setBackgrounds(filas.map(function (f) {
+      return [f.senal === 'ALTA' ? '#f4cccc' : '#fff2cc'];
+    }));
+  }
+  hoja.getRange(1, 1, 1, n).setFontWeight('bold').setBackground('#1f4e79').setFontColor('#ffffff').setWrap(true);
+  hoja.setFrozenRows(1);
+  hoja.getRange(1, 1, valores.length, n).createFilter();
+  hoja.setColumnWidth(col('razon'), 320);
+  hoja.setColumnWidth(col('proveedor_nombre'), 260);
+  hoja.setColumnWidth(col('ocs_del_proveedor'), 220);
 }
 
 // ── La base ──

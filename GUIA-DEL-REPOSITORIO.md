@@ -323,6 +323,7 @@ Apps Script entran como el usuario robot; la app, como la persona.
 | `lectura_archivo` | — | Lo leído por dentro de cada archivo (XML, PDF, OCR), para no leerlo dos veces | `carpetas-oc` |
 | `proyecto_centro_costo` | — | Centro de costo de cada carpeta de proyecto (para OC que no están en CG); `MANUAL` no se pisa | `carpetas-oc`, Contabilidad |
 | `carpeta_cambio` | — | Qué cambió en las carpetas madre entre dos corridas completas | `carpetas-oc` |
+| `proveedor_sin_oc` | — | Proveedores que Contabilidad marca como «nunca llevan OC»: sus facturas no se alertan | a mano |
 | `equivalencia_centro_costo` | 2 | Centro de costo → código CONCAR, **solo lo confirmado** | a mano |
 
 ### 6.2 Funciones clave (en las migraciones)
@@ -334,6 +335,8 @@ Apps Script entran como el usuario robot; la app, como la persona.
 | `detalle_cpe(p_periodo)` | Filas de la hoja **COMPROBANTES SUNAT - DETALLE** | 032 a 036, 039, 041, 042 |
 | `detalle_cpe_carpeta(p_periodo)` | `detalle_cpe` + proyecto, de dónde sale el centro de costo y documentos de la carpeta madre (lo que publica el DETALLE) | 051 |
 | `legajo_de_carpetas(p_empresa_ruc)` | Una fila por carpeta de OC de las carpetas madre, para la pestaña CARPETA MADRE de GENERAL (`CarpetaMadre.gs`) | 051 |
+| `carpetas_madre(p_empresa_ruc)` | `legajo_de_carpetas` + área responsable (por la carpeta madre), comprador, situación y forma de pago (del legajo por OC). La usa `CarpetaMadre.gs` | 052 |
+| `facturas_sin_oc(p_empresa_ruc, p_desde)` | Facturas recibidas sin OC unida, con señal ALTA (el proveedor trabaja con OC) o MEDIA (monto alto, no es gasto típico sin OC). Pestaña FACTURAS SIN OC de GENERAL | 052 |
 | `vinculos_oc()` | Cruza comprobantes con archivos de las carpetas de OC | 039, 040, 042, 045, 046, 048, 049, 050 |
 | `cargar_captura_oc(...)` | Recibe la captura de OC desde Apps Script | 039, 042 |
 

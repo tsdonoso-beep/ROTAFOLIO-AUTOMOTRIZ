@@ -33,6 +33,17 @@ test("lo que le falta a una OC, como en el legajo", () => {
   assert.equal(documentosDeOC([], { servicio: false, importacion: false }).estado, "VACÍA");
 });
 
+test("si la carpeta trae guía o acta, esa dice si es bien o servicio", () => {
+  const a = (...claves: string[]) => ({ claves });
+  // Carpeta «OC» (bien) con el acta de un servicio: no se pide la guía.
+  assert.deepEqual(documentosDeOC([a("FACTURA"), a("ACTA")], { servicio: false, importacion: false }).leFalta, []);
+  // Carpeta «OS» (servicio) con guía: tampoco se pide el acta.
+  assert.deepEqual(documentosDeOC([a("FACTURA"), a("GUIA")], { servicio: true, importacion: false }).leFalta, []);
+  // Sin ninguna de las dos, se pide la que dice el nombre de la carpeta.
+  assert.deepEqual(documentosDeOC([a("FACTURA")], { servicio: false, importacion: false }).leFalta, ["Guía de remisión"]);
+  assert.deepEqual(documentosDeOC([a("FACTURA")], { servicio: true, importacion: false }).leFalta, ["Acta de conformidad"]);
+});
+
 // El catálogo real de CG (parte), con cuántas OC tiene cada uno.
 const cc = (nombre: string, ocs: number, codigo = "-") => ({ codigo, nombre, ocs });
 const CATALOGO = [

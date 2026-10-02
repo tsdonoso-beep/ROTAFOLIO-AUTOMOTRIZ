@@ -62,8 +62,14 @@ export function documentosDeOC(
     const nombre = DOCUMENTOS.find(d => d.clave === c)?.nombre;
     if (nombre) cuenta[nombre] = (cuenta[nombre] ?? 0) + 1;
   }
-  const requeridos = ["FACTURA", ...(o.servicio ? ["ACTA"] : ["GUIA"]), ...(o.importacion ? ["DAM"] : [])];
-  const leFalta = requeridos.map(c => DOCUMENTOS.find(d => d.clave === c)!.nombre).filter(n => !cuenta[n]);
+  // Guía si es un bien, acta si es un servicio. El tipo sale del nombre de
+  // la carpeta («OC …» u «OS …»), que no siempre acierta: hay servicios con
+  // carpeta «OC». Si la carpeta ya trae una de las dos, esa dice el tipo y
+  // no se pide la otra (0242-2026: carpeta «OC» con acta de un servicio).
+  const nombreDe = (clave: string) => DOCUMENTOS.find(d => d.clave === clave)!.nombre;
+  const segundo = cuenta[nombreDe("GUIA")] || cuenta[nombreDe("ACTA")] ? [] : [o.servicio ? "ACTA" : "GUIA"];
+  const requeridos = ["FACTURA", ...segundo, ...(o.importacion ? ["DAM"] : [])];
+  const leFalta = requeridos.map(nombreDe).filter(n => !cuenta[n]);
   const estado = archivos.length === 0 ? "VACÍA" : leFalta.length ? "INCOMPLETA" : "OK";
   return { cuenta, leFalta, estado };
 }

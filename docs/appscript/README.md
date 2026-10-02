@@ -571,8 +571,22 @@ dos pestañas que reemplaza cada vez:
   con su legajo (documentos, qué le falta, estado), centro de costo y de
   dónde salió, las facturas de SUNAT ya unidas, si está en CG y el último
   cambio que vio el robot. El nombre de la carpeta es un enlace.
+- **FACTURAS SIN OC**: las facturas de SUNAT que no están unidas a ninguna OC
+  pero aparentan necesitarla. **ALTA**: el proveedor trabaja con OC (otras de
+  sus facturas sí están unidas), con el área y comprador que suelen
+  comprarle. **MEDIA**: monto de S/ 2 000 o más de un proveedor que no es un
+  gasto típico sin OC (bancos, seguros, combustible, pasajes, hospedaje,
+  comida, peajes, servicios). Un proveedor que nunca lleva OC se marca en la
+  tabla `proveedor_sin_oc` y deja de aparecer.
 - **CARPETA MADRE - RESUMEN**: cuántas completas, incompletas, qué les falta,
-  cuántas con factura de SUNAT y de dónde sale el centro de costo.
+  cuántas con factura de SUNAT, de dónde sale el centro de costo, las
+  facturas sin OC por área y el % completo por comprador.
+
+Cada carpeta lleva su **área responsable** (nacionales → Compras nacionales;
+importaciones → COMEX) y, si el legajo por OC lo sabe, el comprador, la
+situación del pago y la forma de pago (`carpetas_madre()`, migración 052).
+Para actualizar desde una versión anterior: borrar el contenido de
+`CarpetaMadre.gs` en Apps Script, pegar la nueva y guardar.
 
 ### Cómo se instala
 
