@@ -9,7 +9,8 @@
 # mañana. Ver scripts/carpetas-oc.mts.
 #
 # Las dos carpetas tienen que estar compartidas como Lector con el correo de
-# la cuenta de servicio (GOOGLE_SA_EMAIL). Cada noche corren las dos.
+# la cuenta de servicio (GOOGLE_SA_EMAIL). Dos veces al día (02:00 y 12:00)
+# corren las dos.
 #
 # Además arma el legajo de cada OC (qué le falta), su centro de costo, y en
 # las corridas completas anota qué cambió desde la anterior (pestaña CAMBIOS).
@@ -28,6 +29,9 @@ on:
     # 02:00 en Lima (UTC-5): antes de «SUNAT diario» (08:00), que publica las
     # hojas con lo que encuentre.
     - cron: "0 7 * * *"
+    # 12:00 en Lima: lo que Compras suba en la mañana aparece en la tarde
+    # (la hoja GENERAL lo trae a las 15:00, CarpetaMadre.gs).
+    - cron: "0 17 * * *"
   workflow_dispatch:
     inputs:
       debug:

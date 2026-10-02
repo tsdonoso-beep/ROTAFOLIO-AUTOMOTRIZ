@@ -597,7 +597,12 @@ Para actualizar desde una versión anterior: borrar el contenido de
    `SubirLegajo.gs`, no hay que hacer nada).
 3. En la lista de funciones elige **instalarCarpetaMadre → Ejecutar** y
    acepta los permisos. Trae los datos en ese momento, agrega el menú
-   **Carpeta madre** y la deja programada cada mañana a las 7:00.
+   **Carpeta madre** y la deja programada a las 7:00 y a las 15:00 (después
+   de cada corrida del robot, a las 02:00 y a las 12:00).
+
+Si la última lectura del robot tiene más de 15 horas (una corrida falló o
+quedó a medias), el resumen lo avisa en rojo: lo subido desde entonces
+puede seguir figurando como pendiente.
 
 El DETALLE de SUNAT suma, al final, «Proyecto de la OC», «Centro de costo
 según» y «Documentos de la OC», de la misma carpeta madre

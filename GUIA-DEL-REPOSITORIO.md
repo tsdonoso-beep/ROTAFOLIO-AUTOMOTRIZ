@@ -227,7 +227,8 @@ que es la evidencia para diagnosticar cuando algo falla.
   el cuadro de aprobaciones), se compara contra el legajo del cuadro en vez
   de CG y publica «OC - CARPETAS IMPORTACIONES». Cada carpeta madre reemplaza
   solo lo suyo (migración 046).
-- **Cuándo:** cron 02:00 (completa, de verdad) + manual. A mano arranca en
+- **Cuándo:** cron 02:00 y 12:00 (completas, de verdad) + manual. La hoja
+  GENERAL las trae a las 7:00 y a las 15:00 (`CarpetaMadre.gs`). A mano arranca en
   depuración (no toca la base ni la hoja); se elige nacionales, importaciones
   o ambas, y nacionales se puede limitar a un proyecto (`subcarpeta`). El resumen queda en la página de la corrida; los CSV, en el
   artefacto `carpetas-oc`. Solo una corrida completa y sin fallas reemplaza

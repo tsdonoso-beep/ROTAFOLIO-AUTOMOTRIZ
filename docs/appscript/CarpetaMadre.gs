@@ -26,7 +26,8 @@
  *
  * ── Para actualizar una versión anterior ──
  * Abre CarpetaMadre.gs en Apps Script, borra todo, pega esta versión y
- * guarda. No hace falta volver a instalar.
+ * guarda. Después ejecuta «instalarCarpetaMadre» una vez más: deja los dos
+ * horarios (7:00 y 15:00) en lugar del único de antes.
  *
  * ── Instalación (una sola vez) ──
  * 1. Abre la hoja GENERAL → Extensiones → Apps Script.
@@ -38,14 +39,20 @@
  *    valores de SubirCapturaOC.gs / OrdenarCPE.gs.
  * 4. Arriba, en la lista de funciones, elige «instalarCarpetaMadre» → Ejecutar
  *    → acepta los permisos. Trae los datos en ese momento, agrega el menú
- *    «Carpeta madre» a la hoja y la deja programada cada mañana.
+ *    «Carpeta madre» a la hoja y la deja programada a las 7:00 y a las 15:00
+ *    (después de cada corrida del robot, a las 02:00 y a las 12:00).
  */
 
 var CM_HOJA = 'CARPETA MADRE';
 var CM_HOJA_RESUMEN = 'CARPETA MADRE - RESUMEN';
 var CM_HOJA_SIN_OC = 'FACTURAS SIN OC';
 var CM_RUC = '20512201611';
-var CM_HORA = 7; // de la mañana: el robot de las carpetas corre a las 02:00
+// Se trae sola dos veces al día, después de cada corrida del robot de las
+// carpetas (02:00 y 12:00): a las 7:00 y a las 15:00.
+var CM_HORAS = [7, 15];
+// Si la última lectura del robot es más vieja que esto, alguna corrida falló:
+// se avisa en el resumen (los pendientes pueden estar desactualizados).
+var CM_HORAS_SIN_LECTURA = 15;
 var CM_PAGINA = 1000;
 
 var CM_COLUMNAS = [
@@ -83,14 +90,16 @@ function instalarCarpetaMadre() {
     var f = t.getHandlerFunction();
     if (f === 'traerCarpetaMadreSola' || f === 'menuCarpetaMadre') ScriptApp.deleteTrigger(t);
   });
-  ScriptApp.newTrigger('traerCarpetaMadreSola').timeBased().everyDays(1).atHour(CM_HORA).create();
+  CM_HORAS.forEach(function (h) {
+    ScriptApp.newTrigger('traerCarpetaMadreSola').timeBased().everyDays(1).atHour(h).create();
+  });
   ScriptApp.newTrigger('menuCarpetaMadre').forSpreadsheet(libro).onOpen().create();
   var r = traerCarpetaMadre_();
   try {
     menuCarpetaMadre();
     var ui = SpreadsheetApp.getUi();
     ui.alert(r.error ? 'Instalado, pero no se pudo traer' : 'Instalado', (r.error || r.texto) +
-      '\n\nSe traerá sola cada mañana a las ' + CM_HORA + ':00 y queda el menú «Carpeta madre».', ui.ButtonSet.OK);
+      '\n\nSe traerá sola todos los días a las ' + CM_HORAS.join(':00 y a las ') + ':00, y queda el menú «Carpeta madre».', ui.ButtonSet.OK);
   } catch (e) {
     // Corrido desde el editor sin la hoja abierta: no hay ventana, el resultado va al registro.
     Logger.log(r.error || r.texto);
@@ -102,7 +111,7 @@ function instalarCarpetaMadre() {
 function menuCarpetaMadre() {
   SpreadsheetApp.getUi().createMenu('Carpeta madre')
     .addItem('Traer ahora de la base', 'traerCarpetaMadre')
-    .addItem('Dejar de traerla cada mañana', 'quitarCarpetaMadre')
+    .addItem('Dejar de traerla sola', 'quitarCarpetaMadre')
     .addToUi();
 }
 
@@ -214,6 +223,28 @@ function escribirDetalleCarpetaMadre_(libro, filas) {
     'centro_costo_segun', 'ultimo_cambio', 'misma_oc_en_otra_carpeta'].forEach(function (k) { hoja.setColumnWidth(cmCol_(k), 220); });
 }
 
+/**
+ * Si la última lectura del robot es vieja, la corrida de la noche (o la del
+ * mediodía) falló o quedó a medias: lo que se subió desde entonces todavía
+ * figura como pendiente. Vacío si está al día.
+ */
+function avisoDeLectura_(filas) {
+  // La última lectura de cada carpeta madre (nacionales e importaciones
+  // corren por separado: una puede fallar y la otra no).
+  var ultima = {};
+  filas.forEach(function (f) {
+    if (f.cargado_en && (!ultima[f.procedencia] || f.cargado_en > ultima[f.procedencia])) ultima[f.procedencia] = f.cargado_en;
+  });
+  var viejas = Object.keys(ultima).filter(function (p) {
+    return (Date.now() - new Date(ultima[p]).getTime()) / 3600000 > CM_HORAS_SIN_LECTURA;
+  });
+  if (!viejas.length) return '';
+  return viejas.map(function (p) {
+    return 'el robot no lee ' + (p === 'Importación' ? 'importaciones' : 'nacionales') + ' desde el ' +
+      Utilities.formatDate(new Date(ultima[p]), Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm');
+  }).join('; ') + ': lo subido desde entonces puede figurar como pendiente.';
+}
+
 function cmCol_(campo) {
   for (var i = 0; i < CM_COLUMNAS.length; i++) if (CM_COLUMNAS[i][1] === campo) return i + 1;
   throw new Error('Columna desconocida: ' + campo);
@@ -249,9 +280,10 @@ function escribirResumenCarpetaMadre_(libro, filas, sinOc) {
 
   var zona = Session.getScriptTimeZone();
   var ahora = Utilities.formatDate(new Date(), zona, 'dd/MM/yyyy HH:mm');
+  var aviso = avisoDeLectura_(filas);
   var fila = function (nombre, fn) { return [nombre].concat(grupos.map(function (g) { return fn(cuenta[g]); })); };
   var tabla = [
-    ['Carpeta madre de compras — traído de la base el ' + ahora, '', '', ''],
+    ['Carpeta madre de compras — traído de la base el ' + ahora + (aviso ? ' — ⚠ ' + aviso : ''), '', '', ''],
     ['', 'Nacional', 'Importación', 'Total'],
     fila('Carpetas de OC', function (c) { return c.carpetas; }),
     fila('OC distintas', function (c) { return Object.keys(c.ocs).length; }),
@@ -325,8 +357,9 @@ function escribirResumenCarpetaMadre_(libro, filas, sinOc) {
   titulos.forEach(function (r) { hoja.getRange(r, 1, 1, 4).setFontWeight('bold'); });
   hoja.setColumnWidth(1, 330);
 
+  if (aviso) hoja.getRange(1, 1).setFontColor('#cc0000');
   var t = cuenta.Total;
-  return t.carpetas + ' carpetas de OC (' + cuenta.Nacional.carpetas + ' nacionales, ' + cuenta['Importación'].carpetas +
+  return (aviso ? '⚠ ' + aviso + '\n\n' : '') + t.carpetas + ' carpetas de OC (' + cuenta.Nacional.carpetas + ' nacionales, ' + cuenta['Importación'].carpetas +
     ' de importación): ' + t.ok + ' con el legajo completo, ' + t.incompletas + ' incompletas, ' + t.vacias +
     ' vacías; ' + t.conFactura + ' con factura de SUNAT unida.\n\n' +
     sinOc.filter(function (x) { return x.senal === 'ALTA'; }).length + ' facturas de SUNAT aparentan no tener OC (ALTA) y ' +
