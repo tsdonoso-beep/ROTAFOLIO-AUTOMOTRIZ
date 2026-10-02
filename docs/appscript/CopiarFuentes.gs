@@ -7,8 +7,11 @@
  *   · la base de datos nacionales de Compras (BD-2026);
  *   · el STATUS DE CARGAS de COMEX (STATUS, BASE DE DATOS IMPORTACIONES y
  *     DUAS-SUNAT, con sus dos tablas una debajo de la otra);
- *   · el kardex de Almacén (solo ingresos por compra, devoluciones y
- *     anulados: lo que se cruza con la OC; las salidas no).
+ *   · el kardex de Almacén, de su base original (BASE DE DATOS INROPRIN):
+ *     KARDEX (una fila por producto) y KARDEX - VALES (una por vale, con el
+ *     enlace a la guía o factura que Almacén escaneó al recibir). Solo
+ *     ingresos por compra, servicio o devolución y anulados: lo que se cruza
+ *     con la OC; las salidas no.
  * Deja los VALORES (no fórmulas, no IMPORTRANGE) en pestañas propias, y en
  * COPIA - ESTADO cuándo se copió cada una, cuántas filas y si faltó alguna
  * columna. Quedan fuera contactos, teléfonos, correos, direcciones y bancos.
@@ -21,7 +24,8 @@
  * 1. En tu hoja privada → Extensiones → Apps Script → pega esto en un archivo
  *    «CopiarFuentes» → guarda.
  * 2. Elige «instalarCopiaFuentes» → Ejecutar → acepta los permisos (leer las
- *    tres hojas de origen y escribir en esta). Copia todo en ese momento y la
+ *    hojas de origen, escribir en esta y ver tus archivos de Drive para hallar
+ *    los PDF escaneados de Almacén; no cambia ni comparte nada en Drive). Copia todo en ese momento y la
  *    deja programada.
  * 3. Comparte ESTA hoja como Lector solo con la cuenta del robot
  *    (repo-print-drive@ardent-bulwark-489403-v6.iam.gserviceaccount.com).
@@ -31,6 +35,8 @@
 
 var CF_HORAS = [[0, 45], [11, 15]];   // [hora, minuto]: antes de cada lectura del robot (01:17 y 11:47)
 var CF_ESTADO = 'COPIA - ESTADO';
+var CF_KARDEX = '1Itr_Y3ZYXDr61m6bFTYzKEYjEY9Qnyi6ah2N_0jiMtA';   // BASE DE DATOS INROPRIN (Almacén)
+var CF_SEGUNDOS_ENLACES = 150;   // tope para buscar en Drive los archivos escaneados en cada corrida
 
 var CF_FUENTES = [
   {
@@ -72,20 +78,31 @@ var CF_FUENTES = [
     conDato: 'DUA'
   },
   {
-    // El kardex ORIGINAL de Almacén (no una copia con IMPORTRANGE): si cambia, basta con poner aquí su id.
-    destino: 'KARDEX', id: '1Itr_Y3ZYXDr61m6bFTYzKEYjEY9Qnyi6ah2N_0jiMtA', hoja: 'KARDEX',
+    // El kardex ORIGINAL de Almacén (la base de su app, no una copia con IMPORTRANGE): si cambia, basta con poner aquí su id.
+    // Una fila por producto de cada vale.
+    destino: 'KARDEX', id: CF_KARDEX, hoja: 'KARDEX',
     clave: ['VALE DE ALMACEN', 'NUMERO ORDEN'],
-    columnas: ['VALE DE ALMACEN', 'FECHA REGISTRO', 'FECHA OPERACION', 'TIPO DE MOVIMIENTO', 'TIPO DE OPERACION', 'TIPO DOCUMENTO',
-      'NUMERO DOCUMENTO', 'TIPO DE ORDEN', 'NUMERO ORDEN', 'PROYECTO', 'SEDE', 'RESPONSABLE DE REGISTRO', 'RECEPCIONADO POR',
-      'CODIGO SIDIGE', 'DESCRIPCION DE SKU', 'UNDIDAD DE MEDIDA', 'OBSERVACIONES', 'INGRESO', 'SALIDA'],
-    texto: ['VALE DE ALMACEN', 'NUMERO DOCUMENTO', 'NUMERO ORDEN', 'CODIGO SIDIGE'],
-    // Solo lo que se cruza con una OC: ingresos por compra o servicio, devoluciones y anulados.
-    filtro: function (v) {
-      var mov = normalizar_(v('TIPO DE MOVIMIENTO')), op = normalizar_(v('TIPO DE OPERACION'));
-      if (mov === 'ANULADO') return true;
-      if (mov !== 'INGRESO') return false;
-      return /COMPRA|DEVOLUCION|ORDEN DE SERVICIO/.test(op) || /\d{3,4}\s*-\s*20\d\d/.test(String(v('NUMERO ORDEN')));
-    }
+    columnas: ['ID', 'ID DOCUMENTO', 'VALE DE ALMACEN', 'FECHA REGISTRO', 'FECHA OPERACION', 'TIPO DE MOVIMIENTO', 'TIPO DE OPERACION',
+      'TIPO ANEXO', 'DESCRIPCION', 'TIPO DOCUMENTO', 'NUMERO DOCUMENTO', 'TIPO DE ORDEN', 'NUMERO ORDEN', 'PROYECTO', 'SEDE',
+      'RESPONSABLE DE REGISTRO', 'RECEPCIONADO POR', 'CODIGO SIDIGE', 'DESCRIPCION DE SKU', 'UNDIDAD DE MEDIDA', 'CATEGORIA',
+      'OBSERVACIONES', 'INGRESO', 'SALIDA'],
+    texto: ['ID', 'ID DOCUMENTO', 'VALE DE ALMACEN', 'NUMERO DOCUMENTO', 'NUMERO ORDEN', 'CODIGO SIDIGE'],
+    conDato: 'VALE DE ALMACEN',
+    filtro: function (v) { return entraDelKardex_(v); }
+  },
+  {
+    // La cabecera de cada vale (una fila por vale) con el documento que Almacén escaneó al recibir:
+    // la guía del proveedor o, a veces, la factura. DOCUMENTO y DOC VALE son rutas de la app de Almacén;
+    // el script busca esos archivos en Drive y deja su enlace.
+    destino: 'KARDEX - VALES', id: CF_KARDEX, hoja: 'DOCUMENTO',
+    clave: ['VALE DE ALMACEN', 'DOC VALE'],
+    columnas: ['ID', 'VALE DE ALMACEN', 'FECHA REGISTRO', 'FECHA OPERACION', 'TIPO DE MOVIMIENTO', 'TIPO DE OPERACION', 'TIPO ANEXO',
+      'DESCRIPCION', 'TIPO DOCUMENTO', 'NUMERO DOCUMENTO', 'TIPO DE ORDEN', 'NUMERO ORDEN', 'PROYECTO', 'SEDE',
+      'RESPONSABLE DE REGISTRO', 'RECEPCIONADO POR', 'DOCUMENTO', 'DOC VALE', 'N_PDF'],
+    texto: ['ID', 'VALE DE ALMACEN', 'NUMERO DOCUMENTO', 'NUMERO ORDEN'],
+    conDato: 'VALE DE ALMACEN',
+    filtro: function (v) { return entraDelKardex_(v); },
+    enlaces: [['DOCUMENTO', 'ENLACE DOCUMENTO'], ['DOC VALE', 'ENLACE VALE']]
   }
 ];
 
@@ -125,9 +142,10 @@ function copiarFuentes() {
     try {
       var origen = abiertos[f.id] || (abiertos[f.id] = SpreadsheetApp.openById(f.id));
       var r = leerFuente_(origen, f);
+      if (f.enlaces) r.nota = agregarEnlaces_(libro, f, r.filas);
       escribirPestana_(libro, f, r.filas);
-      estado.push([f.destino, origen.getName() + ' › ' + r.hoja, r.filas.length, r.faltan.join(', '), inicio, new Date(), 'OK']);
-      resumen.push(f.destino + ': ' + r.filas.length + ' filas' + (r.faltan.length ? ' (sin: ' + r.faltan.join(', ') + ')' : ''));
+      estado.push([f.destino, origen.getName() + ' › ' + r.hoja, r.filas.length - 1, r.faltan.join(', '), inicio, new Date(), 'OK' + (r.nota ? ' · ' + r.nota : '')]);
+      resumen.push(f.destino + ': ' + (r.filas.length - 1) + ' filas' + (r.faltan.length ? ' (sin: ' + r.faltan.join(', ') + ')' : '') + (r.nota ? ' · ' + r.nota : ''));
     } catch (e) {
       estado.push([f.destino, f.hoja, '', '', inicio, new Date(), 'ERROR: ' + String(e.message || e).slice(0, 300)]);
       resumen.push(f.destino + ': ERROR — ' + String(e.message || e).slice(0, 120) + ' (se dejó la copia anterior)');
@@ -180,7 +198,8 @@ function escribirPestana_(libro, f, filas) {
   var h = libro.getSheetByName(f.destino) || libro.insertSheet(f.destino);
   h.clear();
   if (h.getMaxRows() < filas.length) h.insertRowsAfter(h.getMaxRows(), filas.length - h.getMaxRows());
-  if (h.getMaxColumns() < f.columnas.length) h.insertColumnsAfter(h.getMaxColumns(), f.columnas.length - h.getMaxColumns());
+  var ancho = filas[0].length;
+  if (h.getMaxColumns() < ancho) h.insertColumnsAfter(h.getMaxColumns(), ancho - h.getMaxColumns());
   // Las columnas de códigos como texto, para que «0004-2026» o «T005-01027092» no se vuelvan fecha o número.
   (f.texto || []).forEach(function (nombre) {
     var j = f.columnas.indexOf(nombre);
@@ -189,9 +208,75 @@ function escribirPestana_(libro, f, filas) {
   var datos = filas.map(function (fila) {
     return fila.map(function (x, j) { return (f.texto || []).indexOf(f.columnas[j]) >= 0 && x !== '' && x != null ? String(x) : x; });
   });
-  h.getRange(1, 1, datos.length, f.columnas.length).setValues(datos);
-  h.getRange(1, 1, 1, f.columnas.length).setFontWeight('bold');
+  h.getRange(1, 1, datos.length, ancho).setValues(datos);
+  h.getRange(1, 1, 1, ancho).setFontWeight('bold');
   h.setFrozenRows(1);
+}
+
+// ── Kardex ──
+
+/**
+ * Del kardex solo entra lo que se cruza con una OC: los ingresos por compra (nacional o importada), por orden de
+ * servicio o devolución, o cualquier ingreso con número de OC; y los anulados, para ver correcciones. Las salidas
+ * (despachos a proyectos, ventas, producción) no: esa guía la emite Almacén, no es la del proveedor.
+ */
+function entraDelKardex_(v) {
+  var mov = normalizar_(v('TIPO DE MOVIMIENTO')), op = normalizar_(v('TIPO DE OPERACION'));
+  if (mov === 'ANULADO') return true;
+  if (mov !== 'INGRESO') return false;
+  return /COMPRA|DEVOLUCION|ORDEN DE SERVICIO/.test(op) || /\d{3,4}\s*-\s*20\d\d/.test(String(v('NUMERO ORDEN')));
+}
+
+/**
+ * Agrega a cada fila el enlace de Drive de los archivos que guarda la app de Almacén («DOCUMENTO_Files_/xx.pdf»,
+ * «/Files/Orders/Vale_….pdf»). Reusa los enlaces que ya están en la pestaña y solo busca los nuevos, con un tope
+ * de tiempo: lo que no alcance se completa en la siguiente corrida. Devuelve una nota para COPIA - ESTADO.
+ */
+function agregarEnlaces_(libro, f, filas) {
+  var cab = filas[0], previos = {};
+  var h = libro.getSheetByName(f.destino);
+  if (h && h.getLastRow() > 1) {
+    var v = h.getDataRange().getValues(), c = v[0];
+    f.enlaces.forEach(function (e) {
+      var i = c.indexOf(e[0]), j = c.indexOf(e[1]);
+      if (i < 0 || j < 0) return;
+      for (var r = 1; r < v.length; r++) if (v[r][i] && v[r][j]) previos[String(v[r][i])] = v[r][j];
+    });
+  }
+  // Los archivos que faltan, por carpeta: la carpeta es la parte de la ruta antes del nombre.
+  var faltan = {}, nFaltan = 0;
+  f.enlaces.forEach(function (e) {
+    var i = cab.indexOf(e[0]);
+    for (var r = 1; r < filas.length; r++) {
+      var ruta = String(filas[r][i] || '').trim();
+      if (!ruta || previos[ruta]) continue;
+      var partes = ruta.split('/').filter(String);
+      if (partes.length < 2) continue;
+      var carpeta = partes[partes.length - 2], nombre = partes[partes.length - 1];
+      (faltan[carpeta] = faltan[carpeta] || {})[nombre] = ruta;
+      nFaltan++;
+    }
+  });
+  var hallados = 0, inicio = Date.now(), corto = false;
+  Object.keys(faltan).forEach(function (carpeta) {
+    var carpetas = DriveApp.getFoldersByName(carpeta);
+    while (carpetas.hasNext() && !corto) {
+      var archivos = carpetas.next().getFiles();
+      while (archivos.hasNext()) {
+        if (Date.now() - inicio > CF_SEGUNDOS_ENLACES * 1000) { corto = true; break; }
+        var a = archivos.next(), ruta = faltan[carpeta][a.getName()];
+        if (ruta && !previos[ruta]) { previos[ruta] = a.getUrl(); hallados++; }
+      }
+    }
+  });
+  f.enlaces.forEach(function (e) {
+    var i = cab.indexOf(e[0]);
+    cab.push(e[1]);
+    for (var r = 1; r < filas.length; r++) filas[r].push(previos[String(filas[r][i] || '').trim()] || '');
+  });
+  var sinEnlace = nFaltan - hallados;
+  if (!nFaltan) return '';
+  return hallados + ' enlaces nuevos' + (sinEnlace ? ', ' + sinEnlace + ' archivos sin hallar en tu Drive' + (corto ? ' (se sigue en la próxima copia)' : '') : '');
 }
 
 // ── Apoyo ──
