@@ -73,7 +73,7 @@ var CF_FUENTES = [
   },
   {
     // El kardex ORIGINAL de Almacén (no una copia con IMPORTRANGE): si cambia, basta con poner aquí su id.
-    destino: 'KARDEX', id: '1vDEQKVvAW5SB9MeLAr0UwAy4AuIL4UspTlkvX-O0nfU', hoja: 'KARDEX',
+    destino: 'KARDEX', id: '1Itr_Y3ZYXDr61m6bFTYzKEYjEY9Qnyi6ah2N_0jiMtA', hoja: 'KARDEX',
     clave: ['VALE DE ALMACEN', 'NUMERO ORDEN'],
     columnas: ['VALE DE ALMACEN', 'FECHA REGISTRO', 'FECHA OPERACION', 'TIPO DE MOVIMIENTO', 'TIPO DE OPERACION', 'TIPO DOCUMENTO',
       'NUMERO DOCUMENTO', 'TIPO DE ORDEN', 'NUMERO ORDEN', 'PROYECTO', 'SEDE', 'RESPONSABLE DE REGISTRO', 'RECEPCIONADO POR',
