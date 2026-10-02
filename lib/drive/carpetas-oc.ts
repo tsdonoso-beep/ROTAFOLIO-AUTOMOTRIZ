@@ -111,6 +111,9 @@ type Categoria = { parece: string; frases: string[]; palabras: string[]; parecid
 // En orden: gana la primera que calce. «PAGO SWIFT» sale SWIFT y no PAGO;
 // «FACTURA OC 0123» sale factura.
 const CATEGORIAS: Categoria[] = [
+  // El cuadro de costeo de COMEX («COSTEO FINAL OC 012-2026.xlsx»): antes que
+  // la OC, que también aparece en el nombre.
+  { parece: "CUADRO DE COSTEO", frases: ["CUADRO DE COSTEO", "FORMATO DE COSTEO"], palabras: ["COSTEO", "COSTEOS"], parecidas: ["COSTEO"] },
   { parece: "NOTA DE CRÉDITO", frases: ["NOTA DE CREDITO", "NOTA CREDITO"], palabras: ["NC"] },
   { parece: "NOTA DE DÉBITO", frases: ["NOTA DE DEBITO", "NOTA DEBITO"], palabras: ["ND"] },
   // Antes que FACTURA: una «proforma invoice» o «factura proforma» no es la factura.

@@ -62,6 +62,22 @@
   .cargando-base { display: flex; align-items: center; gap: 10px; color: var(--text2); padding: 30px 4px; }
   .dia { font-family: "Sora", sans-serif; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent-texto); margin: 16px 0 6px; }
   .lat-filtros.apagado { opacity: .4; pointer-events: none; }
+  /* Detalle de una carpeta (Legajo por OC → clic en la fila) */
+  .tabla tr.fila-click { cursor: pointer; }
+  .tabla tr.fila-click:hover td, .tabla tr.fila-click.abierta td { background: var(--surface2); }
+  .tabla tr.detalle-carpeta > td { background: var(--surface2); padding: 4px 14px 18px; }
+  .det-docs { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 8px; margin: 6px 0 14px; }
+  .det-doc { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; font-size: 13px; }
+  .det-doc .det-marca { font-weight: 800; margin-right: 6px; }
+  .grilla.grilla-legajo { grid-template-columns: minmax(0, 1fr) 300px; }
+  .det-doc .m-s { color: var(--accent); } .det-doc .m-n { color: var(--danger); } .det-doc .m-x, .det-doc .m-o { color: var(--text3); }
+  .det-doc.falta { border-color: #F2C9C9; background: #FFF9F9; }
+  .det-doc .archivos { margin-top: 4px; display: flex; flex-direction: column; gap: 2px; }
+  .det-doc .archivos a { font-size: 12px; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .det-info { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px 18px; font-size: 13px; }
+  .det-info span { display: block; font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--text3); margin-bottom: 2px; }
+  .det-lista { font-size: 12.5px; margin-top: 12px; }
+  .det-lista b { display: block; font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--text3); margin-bottom: 4px; }
   .vista { display: none; }
   .vista.activa { display: block; }
   a { color: var(--azul); }
@@ -416,7 +432,7 @@
           <input class="buscador" id="lBuscar" type="search" placeholder="OC, proveedor, proyecto o lo que falta (guía, DAM…)">
         </div>
         <div class="kpis" id="lKpis"></div>
-        <div class="grilla">
+        <div class="grilla grilla-legajo">
           <div class="tarjeta">
             <div class="tarjeta-cab"><h2>Carpetas de OC</h2><span class="nota" id="lNota"></span></div>
             <div id="lTabla"></div>
@@ -560,7 +576,12 @@
 
   // ══ Compras y legajo: directo de la base (datosDeLaBaseVista) ══
   var BASE = null;
-  var L = { area: '', estado: 'INC', comprador: '', texto: '', cuantos: 50 };
+  var L = { area: '', estado: 'INC', comprador: '', texto: '', cuantos: 50, abierta: -1 };
+  var DETALLES = {};   // el detalle de cada carpeta ya pedido, por su ID de Drive
+  // Los 12 documentos del legajo, en orden. solo: I = solo importaciones.
+  var DOCS_LEGAJO = [['FACTURA', 'Factura'], ['OC', 'OC'], ['SWIFT', 'SWIFT', 'I'], ['GUIA', 'Guía de remisión'], ['DAM', 'DAM', 'I'],
+    ['COSTEO', 'Cuadro de costeo', 'I'], ['REQ', 'Requerimiento'], ['CONTRATO', 'Contrato'], ['COTIZACION', 'Cotización'],
+    ['PROFORMA', 'Proforma'], ['CORREO', 'Correos'], ['ACTA', 'Acta de conformidad']];
   var S = { senal: 'ALTA', area: '', texto: '', cuantos: 50 };
   var C = { tipo: '', area: '', texto: '' };
   var pad = function (n) { return (n < 10 ? '0' : '') + n; };
@@ -598,6 +619,14 @@
     segmento('lEstado', function (v) { L.estado = v; L.cuantos = 50; pintarLegajo(); });
     var t1; document.getElementById('lBuscar').oninput = function () { var v = this.value; clearTimeout(t1); t1 = setTimeout(function () { L.texto = v; L.cuantos = 50; pintarLegajo(); }, 150); };
     document.getElementById('lMas').onclick = function () { L.cuantos += 50; pintarLegajo(); };
+    BASE.carpetas.forEach(function (x, i) { x.i = i; });
+    document.getElementById('lTabla').onclick = function (e) {
+      if (e.target.closest('a')) return;
+      var f = e.target.closest('tr.fila-click'); if (!f) return;
+      var i = Number(f.getAttribute('data-i'));
+      L.abierta = L.abierta === i ? -1 : i;
+      pintarLegajo();
+    };
     document.getElementById('lRanking').onclick = function (e) {
       var f = e.target.closest('[data-comprador]'); if (!f) return;
       L.comprador = f.getAttribute('data-comprador'); sel.value = L.comprador; L.cuantos = 50; pintarLegajo();
@@ -640,7 +669,7 @@
       kpi('Carpetas de OC', miles(delArea.length), '<div class="kpi-extra">' + miles(new Set(delArea.map(function (x) { return x[5]; })).size) + ' OC distintas</div>') +
       kpi('Legajo completo', '<div class="kpi-anillo">' + anillo(pct(ok, delArea.length), '#00A298') + '<div class="kpi-extra" style="margin:0">' + miles(ok) + ' de ' + miles(delArea.length) + '<br>con todo lo que le corresponde</div></div>') +
       kpi('Les falta la guía', miles(cuenta(/Guía/)), '<div class="kpi-extra">guía de remisión (bienes)</div>', 'kpi-riesgo') +
-      kpi('Les falta la factura', miles(cuenta(/Factura/)), '<div class="kpi-extra">acta: ' + miles(cuenta(/Acta/)) + ' · DAM: ' + miles(cuenta(/DAM/)) + '</div>') +
+      kpi('Les falta la factura', miles(cuenta(/Factura/)), '<div class="kpi-extra">acta: ' + miles(cuenta(/Acta/)) + ' · DAM: ' + miles(cuenta(/DAM/)) + ' · costeo: ' + miles(cuenta(/costeo/)) + '</div>') +
       kpi('Sin factura de SUNAT', miles(delArea.filter(function (x) { return !x[13]; }).length), '<div class="kpi-extra">carpetas sin ninguna factura unida</div>');
     document.getElementById('lNota').textContent = miles(lista.length) + ' carpetas · lectura del robot: ' + fechaHora(BASE.carpetas.reduce(function (m, x) { return x[17] > m ? x[17] : m; }, ''));
     var chip = function (x) {
@@ -649,11 +678,12 @@
     };
     document.getElementById('lTabla').innerHTML = lista.length ? '<table class="tabla"><thead><tr><th>OC</th><th>Proveedor</th><th>Comprador</th><th>Legajo</th><th class="num">Facturas SUNAT</th><th></th></tr></thead><tbody>' +
       lista.slice(0, L.cuantos).map(function (x) {
-        return '<tr><td><b>' + esc(x[5]) + '</b><div class="sub">' + esc(x[7]) + '</div></td>' +
+        return '<tr class="fila-click' + (L.abierta === x.i ? ' abierta' : '') + '" data-i="' + x.i + '" title="Clic para ver sus documentos"><td><b>' + esc(x[5]) + '</b><div class="sub">' + esc(x[7]) + '</div></td>' +
           '<td>' + esc(x[6]) + '<div class="sub" title="' + esc(x[12]) + '">' + esc(x[12]) + '</div></td>' +
           '<td>' + (x[2] ? esc(x[2]) : '<span class="nota">por identificar</span>') + '<div class="sub">' + esc(x[1]) + (x[3] ? ' · ' + esc(x[3]) : '') + '</div></td>' +
           '<td>' + chip(x) + (x[15] ? '<div class="sub">' + esc(fechaHora(x[16])) + ' · ' + esc(x[15]) + '</div>' : '') + '</td>' +
-          '<td class="num">' + (x[13] || '—') + '</td><td>' + enlaceCarpeta(x[9]) + '</td></tr>';
+          '<td class="num">' + (x[13] || '—') + '</td><td>' + enlaceCarpeta(x[9]) + '</td></tr>' +
+          (L.abierta === x.i ? '<tr class="detalle-carpeta"><td colspan="6" id="detalleCarpeta">' + detalleCarpeta(x) + '</td></tr>' : '');
       }).join('') + '</tbody></table>' : '<p class="vacio">Ninguna carpeta con este filtro.</p>';
     document.getElementById('lMas').style.display = lista.length > L.cuantos ? '' : 'none';
     // Ranking por comprador (con el filtro de área).
@@ -669,6 +699,64 @@
         '<div class="fb-cab"><span class="fb-etq">' + (k === '-' ? 'Por identificar' : esc(k)) + '</span><span class="fb-cifras"><b>' + p + '%</b> · ' + c.ok + ' de ' + c.n + '</span></div>' +
         '<div class="fb-pista"><span style="width:' + Math.max(2, p) + '%;background:' + (p >= 80 ? 'var(--ok)' : p >= 50 ? 'var(--accent)' : 'var(--warn)') + '"></span></div></div>';
     }).join('');
+  }
+
+  // ── El detalle de una carpeta ──
+  function detalleCarpeta(x) {
+    var id = x[9];
+    if (!id) return '<p class="vacio">Sin enlace de carpeta.</p>';
+    var r = DETALLES[id];
+    if (!r) {
+      DETALLES[id] = 'pidiendo';
+      google.script.run.withSuccessHandler(function (res) { DETALLES[id] = res; if (L.abierta === x.i) pintarLegajo(); })
+        .withFailureHandler(function (e) { DETALLES[id] = { error: e && e.message ? e.message : String(e) }; if (L.abierta === x.i) pintarLegajo(); })
+        .detalleDeCarpetaVista(id);
+      r = 'pidiendo';
+    }
+    if (r === 'pidiendo') return '<div class="cargando-base"><span class="giro"></span> Leyendo los archivos de la carpeta…</div>';
+    if (r.error) return '<p class="vacio">No se pudo leer el detalle: ' + esc(r.error) + '</p>';
+    var d = r.d, c = d.carpeta || {}, lg = d.legajo || {}, impo = c.procedencia === 'Importación';
+    var falta = String(c.le_falta || '');
+    var otros = d.archivos.filter(function (a) { return !a.docs.length; });
+    var docs = DOCS_LEGAJO.map(function (k) {
+      var suyos = d.archivos.filter(function (a) { return a.docs.indexOf(k[0]) >= 0; });
+      var marca, clase = '';
+      if (suyos.length) marca = 's';
+      else if (k[2] === 'I' && !impo) marca = 'x';
+      else if (falta.indexOf(k[1]) >= 0) { marca = 'n'; clase = ' falta'; }
+      else marca = 'o';
+      var icono = { s: '✓', n: '✗', x: '—', o: '○' }[marca];
+      var titulo = { s: 'lo tiene', n: 'falta', x: 'no le corresponde (solo importaciones)', o: 'no está (no se exige)' }[marca];
+      return '<div class="det-doc' + clase + '" title="' + titulo + '"><span class="det-marca m-' + marca + '">' + icono + '</span>' + esc(k[1]) +
+        (suyos.length > 1 ? ' <span class="nota">(' + suyos.length + ')</span>' : '') +
+        (suyos.length ? '<div class="archivos">' + suyos.slice(0, 4).map(function (a) {
+          return '<a href="' + esc(a.url) + '" target="_blank" rel="noopener" title="' + esc(a.nombre) + '">↗ ' + esc(a.serie || a.nombre) + '</a>';
+        }).join('') + (suyos.length > 4 ? '<span class="nota">… y ' + (suyos.length - 4) + ' más</span>' : '') + '</div>' : '') + '</div>';
+    }).join('');
+    var dato = function (rot, v) { return v ? '<div><span>' + rot + '</span>' + esc(v) + '</div>' : ''; };
+    var facturas = d.facturas.map(function (f) {
+      return f.archivo_url ? '<a href="' + esc(f.archivo_url) + '" target="_blank" rel="noopener">' + esc(f.comprobante) + '</a> <span class="nota">(' + esc(f.ruc) + ' · ' + esc(f.fuente || '') + ')</span>'
+        : esc(f.comprobante) + ' <span class="nota">(' + esc(f.ruc) + ')</span>';
+    });
+    return '<div class="det-docs">' + docs + '</div>' +
+      '<div class="det-info">' +
+        dato('Proyecto (carpeta)', c.proyecto) + dato('Centro de costo', (c.cc_codigo && c.cc_codigo !== '-' ? c.cc_codigo + ' ' : '') + (c.cc_nombre || '')) +
+        dato('Centro de costo según', c.cc_segun) + dato('Comprador', lg.comprador || x[2]) + dato('Área', lg.area || x[1]) +
+        dato('Fecha OC', lg.fecha_oc) + dato('Monto en soles', lg.monto_soles ? montoCod(Number(lg.monto_soles), 'PEN') : '') +
+        dato('Situación del pago', lg.situacion_pago) + dato('Forma de pago', lg.forma_pago) + dato('Estatus en el cuadro', [lg.estatus, lg.estado_aprobacion].filter(Boolean).join(' · ')) +
+        dato('Tipo', c.tipo === 'OS' ? 'Servicio (OS)' : 'Bien (OC)') + dato('Leída por el robot', fechaHora(c.leida)) +
+      '</div>' +
+      '<div class="det-lista"><b>Facturas de SUNAT unidas</b>' + (facturas.length ? facturas.join(' · ') : '<span class="nota">ninguna todavía</span>') + '</div>' +
+      (otros.length ? '<div class="det-lista"><b>Otros archivos de la carpeta</b>' + otros.map(function (a) {
+        return '<a href="' + esc(a.url) + '" target="_blank" rel="noopener">' + esc(a.nombre) + '</a>';
+      }).join(' · ') + '</div>' : '') +
+      (d.cambios.length ? '<div class="det-lista"><b>Últimos cambios</b>' + d.cambios.slice(0, 6).map(function (k) {
+        return '<span class="nota">' + esc(fechaHora(k.fecha)) + '</span> ' + esc(k.tipo) + (k.detalle ? ': ' + esc(k.detalle) : '');
+      }).join('<br>') + '</div>' : '') +
+      (d.otras.length ? '<div class="det-lista"><b>La misma OC en otra carpeta</b>' + d.otras.map(function (o) {
+        return '<a href="' + esc(o.url) + '" target="_blank" rel="noopener">' + esc((o.proyecto ? o.proyecto + ' / ' : '') + o.nombre) + '</a>';
+      }).join(' · ') + '</div>' : '') +
+      '<div style="margin-top:14px"><a class="boton boton-accent" href="https://drive.google.com/drive/folders/' + esc(id) + '" target="_blank" rel="noopener">Abrir la carpeta de la OC ↗</a></div>';
   }
 
   // ── Facturas sin OC ──

@@ -391,6 +391,8 @@
     if (d.error) return fallo({ message: d.error });
     D = d;
     D.ocs.forEach(prepararOc);
+    // Un identificador por fila: el mismo número de OC puede ser dos OC distintas (152-2026 Amazon y DHL).
+    D.ocs.forEach(function (o, i) { o.k = 'f' + i; });
     document.getElementById('pagina').style.display = '';
     document.getElementById('enlaceHoja').href = d.urlHoja;
     if (d.titulo) document.getElementById('subtitulo').textContent = 'Contabilidad · ' + d.titulo;
@@ -737,7 +739,7 @@
     var html = '<table class="tabla resultados"><thead><tr><th>OC</th><th>Proveedor</th><th class="ocultable">Área</th><th>Pago</th>' +
       '<th title="Los 11 documentos, en orden">Documentos 1–11</th><th>Le falta</th><th class="th-num ocultable">Monto S/</th></tr></thead><tbody>';
     lista.slice(0, mostrar).forEach(function (o) {
-      var id = o.un + '|' + o.oc;
+      var id = o.k;
       html += '<tr class="fila-click" data-oc="' + esc(id) + '">' +
         '<td><b>' + esc(o.oc) + '</b><div class="td-sub">' + esc(o.un) + (o.fe ? ' · ' + esc(o.fe) : '') + '</div></td>' +
         '<td>' + esc(o.pv) + '<div class="td-sub">' + esc(o.cp || '') + (o.py ? ' · ' + esc(o.py) : '') + '</div></td>' +

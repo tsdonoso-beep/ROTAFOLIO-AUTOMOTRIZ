@@ -46,7 +46,7 @@ test("lo corregido a mano manda sobre la regla automática", () => {
     ocs: [{ clave: "a", oc: "032-2026", tipo: "OC", proyectoCarpeta: "MEDRANO", archivos: [{ claves: ["FACTURA", "GUIA"] }] }],
   });
   assert.deepEqual(porOc.get("a")!.cc, { codigo: "X-1", nombre: "OTRO CENTRO", fuente: "MANUAL" });
-  assert.deepEqual(porOc.get("a")!.docs.leFalta, ["DAM"]);   // importación: también la DAM
+  assert.deepEqual(porOc.get("a")!.docs.leFalta, ["DAM", "Cuadro de costeo"]);   // importación: también la DAM y el costeo
   assert.equal(proyectos[0].manual, true);
 });
 

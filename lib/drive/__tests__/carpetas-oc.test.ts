@@ -58,6 +58,10 @@ test("la serie del comprobante en el nombre del archivo", () => {
 
 test("qué parece cada archivo", () => {
   assert.equal(clasificarArchivo("20603268467-01-F001-260.pdf").parece, "FACTURA");
+  // El cuadro de costeo de COMEX, aunque el nombre traiga la OC.
+  assert.equal(clasificarArchivo("COSTEO FINAL OC 012-2026.xlsx").parece, "CUADRO DE COSTEO");
+  assert.equal(clasificarArchivo("FORMATO DE COSTEO DOLAR Y EURO GIANFRANCO (11).xlsx").parece, "CUADRO DE COSTEO");
+  assert.equal(clasificarArchivo("COSTEO PARCIAL 111-2026 (I).xlsx").parece, "CUADRO DE COSTEO");
   assert.equal(clasificarArchivo("20603268467-09-T001-260 (1).pdf").parece, "GUÍA");
   assert.equal(clasificarArchivo("20603268467-01-F001-260.xml").parece, "XML");
   assert.equal(clasificarArchivo("R-20603268467-01-F001-260.zip").parece, "CDR (constancia SUNAT)");

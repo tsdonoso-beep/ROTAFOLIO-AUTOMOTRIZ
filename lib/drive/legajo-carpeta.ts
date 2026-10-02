@@ -2,7 +2,7 @@
  * Lo que se deduce de una carpeta de OC más allá de sus comprobantes:
  *   · qué documentos tiene y cuál le FALTA (la misma regla que el legajo de
  *     `LegajoPorOC.gs`: factura siempre; guía si es un bien; acta si es un
- *     servicio; DAM si es importación);
+ *     servicio; DAM y cuadro de costeo si es importación);
  *   · el centro de costo de cada carpeta de proyecto, para las OC que no
  *     están en la base de Control de Gestión.
  */
@@ -18,6 +18,8 @@ export const DOCUMENTOS: Array<{ clave: string; nombre: string }> = [
   { clave: "SWIFT", nombre: "SWIFT" },
   { clave: "GUIA", nombre: "Guía de remisión" },
   { clave: "DAM", nombre: "DAM" },
+  // Solo importaciones: el cuadro de costeo que arma COMEX (pedido de Contabilidad, 02/10/2026).
+  { clave: "COSTEO", nombre: "Cuadro de costeo" },
   { clave: "REQ", nombre: "Requerimiento" },
   { clave: "CONTRATO", nombre: "Contrato" },
   { clave: "COTIZACION", nombre: "Cotización" },
@@ -29,7 +31,7 @@ export const DOCUMENTOS: Array<{ clave: string; nombre: string }> = [
 const POR_PARECE: Record<string, string> = {
   "ORDEN DE COMPRA/SERVICIO": "OC", "SWIFT": "SWIFT", "GUÍA": "GUIA", "DAM": "DAM", "REQUERIMIENTO": "REQ",
   "CONTRATO": "CONTRATO", "COTIZACIÓN": "COTIZACION", "PROFORMA": "PROFORMA", "CORREO / CAPTURA": "CORREO",
-  "ACTA DE CONFORMIDAD": "ACTA", "DOCUMENTO DE IMPORTACIÓN": "DAM",
+  "ACTA DE CONFORMIDAD": "ACTA", "DOCUMENTO DE IMPORTACIÓN": "DAM", "CUADRO DE COSTEO": "COSTEO",
 };
 
 /**
@@ -68,7 +70,7 @@ export function documentosDeOC(
   // no se pide la otra (0242-2026: carpeta «OC» con acta de un servicio).
   const nombreDe = (clave: string) => DOCUMENTOS.find(d => d.clave === clave)!.nombre;
   const segundo = cuenta[nombreDe("GUIA")] || cuenta[nombreDe("ACTA")] ? [] : [o.servicio ? "ACTA" : "GUIA"];
-  const requeridos = ["FACTURA", ...segundo, ...(o.importacion ? ["DAM"] : [])];
+  const requeridos = ["FACTURA", ...segundo, ...(o.importacion ? ["DAM", "COSTEO"] : [])];
   const leFalta = requeridos.map(nombreDe).filter(n => !cuenta[n]);
   const estado = archivos.length === 0 ? "VACÍA" : leFalta.length ? "INCOMPLETA" : "OK";
   return { cuenta, leFalta, estado };

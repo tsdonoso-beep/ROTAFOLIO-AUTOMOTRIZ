@@ -579,7 +579,13 @@ Bajo **Compras y legajo**, tres secciones que leen directo de la base (no
 de la hoja), con la cuenta ROBOT: **Legajo por OC** (las carpetas de las
 carpetas madre, filtro por área, estado, comprador y texto, y el % completo
 por comprador), **Facturas sin OC** (ALTA y MEDIA, con el área y comprador
-probables) y **Cambios del robot** (lo que cambió en cada lectura). Necesitan
+probables) y **Cambios del robot** (lo que cambió en cada lectura). En **Legajo
+por OC**, un clic en la fila despliega su detalle (`detalle_de_carpeta()`,
+migración 055): los 12 documentos con el enlace a CADA archivo —factura, OC,
+SWIFT, guía, DAM, **cuadro de costeo** (solo COMEX, migración 056),
+requerimiento, contrato, cotización, proforma, correos, acta—, los datos de la
+OC (comprador, fecha, monto, pago, estatus), las facturas de SUNAT unidas, los
+otros archivos, los últimos cambios y las otras carpetas con el mismo número. Necesitan
 en el proyecto de la vista las Propiedades del script `SUPABASE_URL`,
 `SUPABASE_ANON_KEY`, `ROBOT_CORREO` y `ROBOT_CLAVE` (las de `CarpetaMadre.gs`);
 sin ellas avisan qué falta y el resto de la vista funciona igual.

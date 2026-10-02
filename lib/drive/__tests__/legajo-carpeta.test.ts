@@ -11,6 +11,7 @@ test("qué documento del legajo es cada archivo", () => {
   assert.deepEqual(clavesDeArchivo("GUÍA (por la carpeta)"), ["GUIA"]);
   assert.deepEqual(clavesDeArchivo("ORDEN DE COMPRA/SERVICIO"), ["OC"]);
   assert.deepEqual(clavesDeArchivo("COTIZACIÓN"), ["COTIZACION"]);
+  assert.deepEqual(clavesDeArchivo("CUADRO DE COSTEO"), ["COSTEO"]);
   assert.deepEqual(clavesDeArchivo("FICHA TÉCNICA"), []);
   // Un «scan001.pdf» leído por dentro que trae factura y guía cuenta como las dos.
   assert.deepEqual(clavesDeArchivo("OTRO", ["FACTURA", "GUIA"]).sort(), ["FACTURA", "GUIA"]);
@@ -27,8 +28,11 @@ test("lo que le falta a una OC, como en el legajo", () => {
   const servicio = documentosDeOC([a("FACTURA"), a("ACTA")], { servicio: true, importacion: false });
   assert.deepEqual(servicio.leFalta, []);
   assert.equal(servicio.estado, "OK");
-  // Una importación: además la DAM.
-  assert.deepEqual(documentosDeOC([a("FACTURA"), a("GUIA")], { servicio: false, importacion: true }).leFalta, ["DAM"]);
+  // Una importación: además la DAM y el cuadro de costeo.
+  assert.deepEqual(documentosDeOC([a("FACTURA"), a("GUIA")], { servicio: false, importacion: true }).leFalta, ["DAM", "Cuadro de costeo"]);
+  assert.deepEqual(documentosDeOC([a("FACTURA"), a("GUIA"), a("DAM"), a("COSTEO")], { servicio: false, importacion: true }).leFalta, []);
+  // En nacionales el costeo no se pide.
+  assert.deepEqual(documentosDeOC([a("FACTURA"), a("GUIA")], { servicio: false, importacion: false }).leFalta, []);
   assert.equal(textoDeDocumentos(documentosDeOC([a("GUIA")], { servicio: false, importacion: false }).cuenta), "Guía de remisión 1");
   assert.equal(documentosDeOC([], { servicio: false, importacion: false }).estado, "VACÍA");
 });

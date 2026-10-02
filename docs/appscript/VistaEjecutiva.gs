@@ -303,6 +303,22 @@ function datosDeLaBaseVista() {
   }
 }
 
+/**
+ * El detalle de UNA carpeta de OC (al abrir una fila de «Legajo por OC»): sus
+ * archivos con el documento que es cada uno, los datos de la OC, las facturas
+ * de SUNAT unidas, los cambios y las otras carpetas con el mismo número.
+ */
+function detalleDeCarpetaVista(idCarpeta) {
+  try {
+    var cfg = configuracionBaseVista_();
+    if (!cfg.url || !cfg.anon || !cfg.correo || !cfg.clave) return { error: 'Faltan las Propiedades del script de la base.' };
+    var d = pedirBaseVista_(cfg, sesionBaseVista_(cfg), 'post', 'rpc/detalle_de_carpeta', { p_carpeta: String(idCarpeta || '') });
+    return d ? { error: null, d: d } : { error: 'La base no tiene esa carpeta.' };
+  } catch (e) {
+    return { error: String(e.message || e) };
+  }
+}
+
 function configuracionBaseVista_() {
   var p = PropertiesService.getScriptProperties();
   var limpio = function (k) { return String(p.getProperty(k) || '').trim().replace(/^["'«“]+|["'»”]+$/g, '').trim(); };
