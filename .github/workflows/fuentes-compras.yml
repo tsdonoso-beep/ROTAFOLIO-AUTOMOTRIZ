@@ -1,0 +1,65 @@
+# Leer la hoja privada de Contabilidad (Compras, COMEX y Almacén) y subirla a la base
+#
+# La hoja la llena CopiarFuentes.gs (Apps Script de Contabilidad) a las 00:45
+# y 11:15 desde la base de compras nacionales, el STATUS DE CARGAS de COMEX y
+# el kardex de Almacén; está compartida como Lector solo con la cuenta de
+# servicio. Este paso ya corre dentro de «Carpetas de OC» dos veces al día:
+# esto es para correrlo solo, sin esperar ni releer las carpetas (por ejemplo,
+# después de copiar a mano con Fuentes → Copiar ahora). Ver scripts/fuentes-compras.mts.
+
+name: Fuentes de Compras, COMEX y Almacén
+
+on:
+  workflow_dispatch:
+    inputs:
+      debug:
+        description: "Solo leer y mostrar el resumen, sin subir a la base."
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  group: fuentes-compras
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  leer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Leer la hoja privada y subirla a la base
+        env:
+          GOOGLE_SA_EMAIL: ${{ secrets.GOOGLE_SA_EMAIL }}
+          GOOGLE_SA_PRIVATE_KEY: ${{ secrets.GOOGLE_SA_PRIVATE_KEY }}
+          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          PROJECT_URL: ${{ secrets.PROJECT_URL }}
+          ANON_KEY: ${{ secrets.ANON_KEY }}
+          ROBOT_CORREO: ${{ secrets.ROBOT_CORREO }}
+          ROBOT_CLAVE: ${{ secrets.ROBOT_CLAVE }}
+          DEBUG: ${{ inputs.debug && '1' || '0' }}
+        run: node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/local/comun/con-bitacora.mts scripts/fuentes-compras.mts
+
+      - name: Subir el resumen
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuentes-compras
+          path: |
+            salida/fuentes-compras/
+            logs/
+          if-no-files-found: ignore
+          retention-days: 14

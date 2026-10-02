@@ -19,6 +19,7 @@
     "format:check": "prettier --check scripts/local",
     "padron:local": "node --env-file-if-exists=.env.local --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/local/comun/con-bitacora.mts scripts/consultar-padron-ruc.mts",
     "carpetas:local": "node --env-file-if-exists=.env.local --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/local/comun/con-bitacora.mts scripts/carpetas-oc.mts",
+    "fuentes:local": "node --env-file-if-exists=.env.local --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/local/comun/con-bitacora.mts scripts/fuentes-compras.mts",
     "hojas:detalle": "node --env-file-if-exists=.env.local --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/local/publicar-detalle.mts"
   },
   "dependencies": {

@@ -16,6 +16,10 @@
 # las corridas completas anota qué cambió desde la anterior (pestaña CAMBIOS).
 # Al final republica la hoja DETALLE, que lee la vista ejecutiva.
 #
+# Antes de las carpetas lee la hoja privada de Contabilidad con Compras,
+# COMEX y Almacén (scripts/fuentes-compras.mts; también sola en
+# fuentes-compras.yml).
+#
 # Disparo manual: arranca en depuración (no toca la base ni la hoja); se
 # elige nacionales, importaciones o ambas, y nacionales se puede limitar a un
 # proyecto («TALLERES»). La lectura pesada también corre en una computadora:
@@ -87,6 +91,24 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq poppler-utils tesseract-ocr tesseract-ocr-spa tesseract-ocr-eng
+
+      # Compras, COMEX y Almacén: la hoja privada de Contabilidad que copia
+      # CopiarFuentes.gs (00:45 y 11:15). Antes de las carpetas, para que el
+      # legajo ya sepa qué existe en otro lado. Si falla, las carpetas se leen igual.
+      - name: Leer las fuentes de Compras, COMEX y Almacén
+        if: github.event_name == 'schedule' || !inputs.debug
+        continue-on-error: true
+        env:
+          GOOGLE_SA_EMAIL: ${{ secrets.GOOGLE_SA_EMAIL }}
+          GOOGLE_SA_PRIVATE_KEY: ${{ secrets.GOOGLE_SA_PRIVATE_KEY }}
+          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          PROJECT_URL: ${{ secrets.PROJECT_URL }}
+          ANON_KEY: ${{ secrets.ANON_KEY }}
+          ROBOT_CORREO: ${{ secrets.ROBOT_CORREO }}
+          ROBOT_CLAVE: ${{ secrets.ROBOT_CLAVE }}
+        run: node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/local/comun/con-bitacora.mts scripts/fuentes-compras.mts
 
       - name: Leer la carpeta de compras nacionales
         # La de cada noche no trae inputs: corre (vacío ≠ importaciones).
