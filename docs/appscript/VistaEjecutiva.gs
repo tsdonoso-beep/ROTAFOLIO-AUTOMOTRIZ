@@ -71,7 +71,10 @@ var VISTA_MAX_PRODUCTOS = 7000; // lo que viaja al navegador para el buscador (l
  * Lee la pestaña de detalle una vez y devuelve:
  *   docs      una fila por COMPROBANTE (la hoja trae una por ítem):
  *             [período, origen, proveedor, tipo, moneda, neto, detracción, oc, centro de costo, ¿importación?,
- *              serie-número, fecha de emisión, id del PDF, id del XML]
+ *              serie-número, fecha de emisión, id del PDF, id del XML,
+ *              neto en soles, base gravada, IGV, no gravado, detracción a revisar, tipo de cambio]
+ *             (los cuatro montos con la nota de crédito restando; base, IGV y no gravado
+ *              en la moneda del comprobante; vacíos —null— si la hoja no los trae)
  *             (origen 0 recibido / 1 emitido / 2 otro; tipo F B C D O; neto con la nota de crédito restando)
  *   productos una fila por producto comprado:
  *             [descripción, unidad, moneda, proveedor, veces, gasto, [[período, precio], …], id del PDF de la última compra]
@@ -96,8 +99,13 @@ function datosCompactosVista_() {
     precio: opc('Precio unitario'), importe: opc('Importe'), pdf: opc('PDF'), xml: opc('XML'),
     fecha: opc('Fecha de emisión'), carpeta: opc('Carpeta de la OC'),
     oc: opc('OC (carpeta)'), cc: opc('Centro de costo (CG)'), area: opc('Área que completa el legajo'),
-    legajo: opc('Legajo de la OC'), situacion: opc('Situación del pago (OC)')
+    legajo: opc('Legajo de la OC'), situacion: opc('Situación del pago (OC)'),
+    // Desde la migración 053: el IGV desglosado, el total en soles y la detracción a revisar.
+    soles: opc('Total en soles'), baseGravada: opc('Base gravada'), igv: opc('IGV del comprobante'),
+    noGravado: opc('No gravado (inafecto / exonerado)'), detRevisar: opc('Detracción: revisar'), tc: opc('Tipo de cambio')
   };
+  // Un número de la hoja, o null si la columna no está o la celda está vacía.
+  var numOpc = function (f, i) { return i >= 0 && f[i] !== '' && f[i] != null ? Number(f[i]) : null; };
   var txt = function (f, i) { return i >= 0 ? String(f[i] == null ? '' : f[i]).trim() : ''; };
 
   // Diccionarios: cada texto repetido viaja una vez y las filas llevan su número.
@@ -155,7 +163,14 @@ function datosCompactosVista_() {
       txt(f, c.serie).toUpperCase() + '-' + (txt(f, c.numero).replace(/^0+(?=\d)/, '')),
       fechaTexto_(c.fecha >= 0 ? f[c.fecha] : ''),
       idDrive_(txt(f, c.pdf)),
-      idDrive_(txt(f, c.xml))
+      idDrive_(txt(f, c.xml)),
+      // Todo en soles, el IGV desglosado y la detracción a revisar:
+      conSigno_(esNota, moneda === 'PEN' ? Number(f[c.total]) : numOpc(f, c.soles)),
+      conSigno_(esNota, numOpc(f, c.baseGravada)),
+      conSigno_(esNota, numOpc(f, c.igv)),
+      conSigno_(esNota, numOpc(f, c.noGravado)),
+      txt(f, c.detRevisar),
+      moneda === 'PEN' ? 1 : numOpc(f, c.tc)
     ]);
   }
 
@@ -236,4 +251,6 @@ function idDrive_(url) {
 }
 
 function redondear2_(n) { return Math.round(n * 100) / 100; }
+/** Un monto con la nota de crédito restando; null sigue siendo null (dato que no hay). */
+function conSigno_(esNota, n) { return n == null || isNaN(n) ? null : redondear2_((esNota ? -1 : 1) * Math.abs(n)); }
 function redondear4_(n) { return Math.round(n * 10000) / 10000; }

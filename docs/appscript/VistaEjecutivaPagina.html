@@ -268,6 +268,11 @@
 
   <section class="kpis" id="kpis"></section>
 
+  <section class="tarjeta tarjeta-ancha" id="detCaja" style="display:none">
+    <div class="tarjeta-cab"><h2>Detracciones a revisar</h2><span class="nota">El % aplicado no es el que lleva su código de bien o servicio (anexos de la R.S. 183-2004/SUNAT)</span></div>
+    <div id="detLista"></div>
+  </section>
+
   <section class="grilla">
     <div class="tarjeta">
       <div class="tarjeta-cab"><h2 id="tituloMeses">Compras por mes</h2><span class="nota">Clic en un mes para filtrar · notas de crédito restadas</span></div>
@@ -379,7 +384,9 @@
     sel.onchange = function () { F.mes = this.value; pintar(); };
     var monedas = d.dic.moneda.map(function (m, i) { return { i: i, n: d.docs.filter(function (x) { return x[4] === i; }).length }; }).sort(function (a, b) { return b.n - a.n; });
     F.moneda = monedas.length ? monedas[0].i : 0;
-    document.getElementById('fMoneda').innerHTML = monedas.map(function (m) { return '<button data-v="' + m.i + '"' + (m.i === F.moneda ? ' class="activo"' : '') + '>' + esc(simbolo(m.i)) + '</button>'; }).join('');
+    document.getElementById('fMoneda').innerHTML = monedas.map(function (m) { return '<button data-v="' + m.i + '"' + (m.i === F.moneda ? ' class="activo"' : '') + '>' + esc(simbolo(m.i)) + '</button>'; }).join('') +
+      // Todo junto en soles, con el tipo de cambio de cada comprobante (si la hoja lo trae).
+      (d.docs.some(function (x) { return x[14] != null && x[4] !== idxPen(); }) ? '<button data-v="-1" title="Soles, dólares y euros juntos, con el tipo de cambio de cada comprobante">Todo en S/</button>' : '');
     segmento('fOrigen', function (v) { F.origen = Number(v); pintar(); });
     segmento('fMoneda', function (v) { F.moneda = Number(v); pintar(); });
     segmento('bModo', function (v) { B.modo = v; B.cuantos = 25; pintarBuscador(); });
@@ -408,15 +415,31 @@
   function marcar(id, v) { Array.prototype.forEach.call(document.getElementById(id).children, function (b) { b.classList.toggle('activo', b.getAttribute('data-v') === String(v)); }); }
 
   // ── Filtros ──
-  function base() { return D.docs.filter(function (x) { return x[1] === F.origen && x[4] === F.moneda; }); }
+  function idxPen() { var i = D.dic.moneda.indexOf('PEN'); return i; }
+  // «Todo en S/» (F.moneda = -1): cada comprobante con su monto en soles en el
+  // lugar del de su moneda, y la base, el IGV y lo no gravado por su tipo de cambio.
+  function enSoles(x) {
+    if (x[14] == null) return null;
+    var y = x.slice(), tc = x[19] || 1;
+    y[5] = x[14];
+    [15, 16, 17].forEach(function (i) { y[i] = x[i] == null ? null : Math.round(x[i] * tc * 100) / 100; });
+    return y;
+  }
+  function base() {
+    if (F.moneda === -1) return D.docs.filter(function (x) { return x[1] === F.origen; }).map(enSoles).filter(Boolean);
+    return D.docs.filter(function (x) { return x[1] === F.origen && x[4] === F.moneda; });
+  }
   function delMes(lista) { return F.mes ? lista.filter(function (x) { return x[0] === F.mes; }) : lista; }
   var suma = function (l, i) { return l.reduce(function (a, x) { return a + x[i]; }, 0); };
 
   function pintar() {
     var todos = base(), docs = delMes(todos), compras = F.origen === 0;
-    document.getElementById('fResumen').textContent = (compras ? 'Compras' : 'Ventas') + ' en ' + simbolo(F.moneda) + ' · ' + (F.mes ? etqMes(F.mes) : 'todo el año') + ' · ' + miles(docs.length) + ' comprobantes';
+    var sinTc = F.moneda === -1 ? D.docs.filter(function (x) { return x[1] === F.origen && x[14] == null && (!F.mes || x[0] === F.mes); }).length : 0;
+    document.getElementById('fResumen').textContent = (compras ? 'Compras' : 'Ventas') + ' en ' + (F.moneda === -1 ? 'S/ (todas las monedas)' : simbolo(F.moneda)) + ' · ' + (F.mes ? etqMes(F.mes) : 'todo el año') + ' · ' + miles(docs.length) + ' comprobantes' +
+      (sinTc ? ' · ' + sinTc + ' sin tipo de cambio, no sumados' : '');
     document.getElementById('tituloMeses').textContent = (compras ? 'Compras' : 'Ventas') + ' por mes';
     pintarKpis(todos, docs);
+    pintarDetracciones(docs);
     pintarMeses(todos);
     pintarDona(docs);
     pintarCalor(todos);
@@ -464,11 +487,45 @@
       kpi(compras ? 'Compras' : 'Ventas', dinero(neto), '<div class="kpi-extra">' + miles(docs.length) + ' comprobantes' + varTxt + '</div>' + chispa(porMes, 220, 34, '#00A298')) +
       kpi(compras ? 'Proveedores' : 'Clientes', miles(provs), '<div class="kpi-extra">' + (docs.length ? dinero(neto / Math.max(provs, 1), null, true) + ' en promedio' : '') + '</div>') +
       kpi('Notas de crédito', dinero(suma(notas, 5)), '<div class="kpi-extra">' + notas.length + ' notas · ya restadas del total</div>', notas.length ? 'kpi-riesgo' : '') +
-      kpi('Detracción', dinero(suma(det, 6)), '<div class="kpi-extra">' + det.length + ' comprobantes con detracción</div>') +
+      kpiIgv(docs) +
+      kpi('Detracción', dinero(suma(det, 6), idxPen()), '<div class="kpi-extra">' + det.length + ' comprobantes con detracción' +
+        (docs.filter(function (x) { return x[18]; }).length ? ' · <span class="variacion sube">' + docs.filter(function (x) { return x[18]; }).length + ' a revisar</span>' : '') + '</div>',
+        docs.some(function (x) { return x[18]; }) ? 'kpi-riesgo' : '') +
       (compras ? kpi('Unidos a su OC', '<div class="kpi-anillo">' + anillo(pct(conOc, docs.length), '#00A298') + '<div class="kpi-extra" style="margin:0">' + miles(conOc) + ' de ' + miles(docs.length) + '<br>con su orden de compra</div></div>') : '') +
       (compras ? kpi('Con centro de costo', '<div class="kpi-anillo">' + anillo(pct(conCc, docs.length), '#006DB1') + '<div class="kpi-extra" style="margin:0">' + miles(conCc) + ' de ' + miles(docs.length) + '<br>listos para CONCAR</div></div>') : '') +
       (compras ? kpi('Importaciones', dinero(suma(docs.filter(function (x) { return x[9]; }), 5)), '<div class="kpi-extra">gastos en Perú unidos a OC de importación</div>') : '') +
       (compras ? kpi('Productos distintos', miles(D.totalProductos), '<div class="kpi-extra">en el buscador, con su precio</div>') : '');
+  }
+
+  /**
+   * El IGV y la base gravada, para cuadrar: base × 18% debería dar el IGV.
+   * Si la tasa sale menor, hay compras al 10% (restaurantes y hoteles MYPE) o
+   * comprobantes sin desglose. Lo no gravado (inafecto, exonerado) va aparte.
+   */
+  function kpiIgv(docs) {
+    var con = docs.filter(function (x) { return x[16] != null; });
+    if (!con.length) return '';
+    var igv = suma(con, 16), baseG = suma(con, 15), noGrav = con.reduce(function (a, x) { return a + (x[17] || 0); }, 0);
+    var tasa = baseG ? Math.round(1000 * igv / baseG) / 10 : 0;
+    var falta = docs.length - con.length;
+    return kpi('IGV', dinero(igv), '<div class="kpi-extra">Base gravada ' + dinero(baseG, null, true) + ' · IGV ÷ base = <b>' + tasa + '%</b>' +
+        (tasa && tasa < 17.9 ? ' <span class="nota">(hay compras al 10%: restaurantes y hoteles MYPE)</span>' : '') + '</div>' +
+        (falta ? '<div class="kpi-extra">' + falta + ' comprobantes sin desglose</div>' : '')) +
+      kpi('No gravado', dinero(noGrav), '<div class="kpi-extra">inafecto, exonerado y otros tributos · ' + pct(noGrav, Math.abs(baseG + igv + noGrav)) + '% del total</div>');
+  }
+
+  // ── Detracciones a revisar ──
+  function pintarDetracciones(docs) {
+    var lista = docs.filter(function (x) { return x[18]; });
+    var caja = document.getElementById('detCaja');
+    caja.style.display = lista.length ? '' : 'none';
+    if (!lista.length) return;
+    document.getElementById('detLista').innerHTML = '<table class="tabla"><thead><tr><th>Fecha</th><th>Proveedor</th><th>Comprobante</th><th>Qué pasa</th><th class="num">Detracción</th></tr></thead><tbody>' +
+      lista.map(function (x) {
+        var p = D.dic.prov[x[2]] || ['', ''];
+        var comp = x[12] ? '<a href="https://drive.google.com/file/d/' + esc(x[12]) + '/view" target="_blank" rel="noopener">' + esc(x[10]) + '</a>' : esc(x[10]);
+        return '<tr><td>' + esc(x[11]) + '</td><td title="' + esc(p[0]) + '">' + esc(p[1] || p[0]) + '</td><td>' + comp + '</td><td>' + esc(x[18]) + '</td><td class="num">' + dinero(x[6], idxPen()) + '</td></tr>';
+      }).join('') + '</tbody></table>';
   }
 
   // ── Meses ──
@@ -553,7 +610,7 @@
         oc = oc.trim(); if (!oc) return;
         var o = g[oc] || (g[oc] = { oc: oc, legajo: info[1], sit: info[2], docs: 0, montos: {}, prov: {}, soles: 0 });
         o.docs++; o.montos[x[4]] = (o.montos[x[4]] || 0) + x[5]; o.prov[(D.dic.prov[x[2]] || ['', ''])[1]] = 1;
-        if (x[4] === F.moneda) o.soles += x[5];
+        if (F.moneda === -1 ? x[14] != null : x[4] === F.moneda) o.soles += F.moneda === -1 ? x[14] : x[5];
       });
     });
     var lista = Object.keys(g).map(function (k) { return g[k]; }).sort(function (a, b) { return b.soles - a.soles; });

@@ -67,6 +67,14 @@ export interface FilaDetalleCpe {
   proyectoOc?: string | null;
   centroCostoSegun?: string | null;
   documentosOc?: string | null;
+  /** Del comprobante (SIRE, o XML si no está en el SIRE): el IGV desglosado, el total en soles y la detracción a revisar. */
+  baseGravada?: number | null;
+  igvComprobante?: number | null;
+  noGravado?: number | null;
+  desgloseSegun?: string | null;
+  tipoCambio?: number | null;
+  totalSoles?: number | null;
+  detraccionRevisar?: string | null;
 }
 
 // El orden importa: lo que se busca primero —de qué comprobante es, qué se
@@ -86,6 +94,8 @@ export const CABECERAS_ITEMS = [
   "Situación del pago (OC)", "Comprador (OC)", "Área que completa el legajo",
   "Legajo de la OC", "Carpeta de la OC",
   "Proyecto de la OC", "Centro de costo según", "Documentos de la OC",
+  "Base gravada", "IGV del comprobante", "No gravado (inafecto / exonerado)", "Desglose según",
+  "Tipo de cambio", "Total en soles", "Detracción: revisar",
 ];
 
 export const TIPOS_ITEMS: TipoColumna[] = [
@@ -130,6 +140,13 @@ export const TIPOS_ITEMS: TipoColumna[] = [
   "texto",  // Proyecto de la OC
   "texto",  // Centro de costo según
   "texto",  // Documentos de la OC
+  "numero", // Base gravada
+  "numero", // IGV del comprobante
+  "numero", // No gravado (inafecto / exonerado)
+  "texto",  // Desglose según
+  "numero", // Tipo de cambio
+  "numero", // Total en soles
+  "texto",  // Detracción: revisar
 ];
 
 /** Lo mínimo de un `SupabaseClient` que hace falta para paginar un RPC. */
@@ -142,8 +159,9 @@ interface ClienteConRpc {
 const TAMANO_PAGINA_DETALLE = 1000;
 
 /**
- * Trae TODO el detalle, paginando. Sale de `detalle_cpe_carpeta`: el mismo
- * `detalle_cpe` con lo que dice la carpeta madre de cada OC al final.
+ * Trae TODO el detalle, paginando. Sale de `detalle_cpe_hoja`: el mismo
+ * `detalle_cpe` con lo que dice la carpeta madre de cada OC, el IGV
+ * desglosado, el total en soles y la detracción a revisar, al final.
  *
  * Supabase corta cada respuesta de su API en 1000 filas por omisión si no se
  * pide un rango explícito — un solo `.rpc(...)` sin `.range()` se queda
@@ -158,7 +176,7 @@ export async function detalleCpeCompleto(
 ): Promise<Record<string, unknown>[]> {
   const filas: Record<string, unknown>[] = [];
   for (let desde = 0; ; desde += TAMANO_PAGINA_DETALLE) {
-    const { data, error } = await sb.rpc("detalle_cpe_carpeta", { p_periodo: periodo })
+    const { data, error } = await sb.rpc("detalle_cpe_hoja", { p_periodo: periodo })
       .range(desde, desde + TAMANO_PAGINA_DETALLE - 1);
     if (error) throw new Error(error.message);
     const pagina = Array.isArray(data) ? (data as Record<string, unknown>[]) : [];
@@ -220,6 +238,13 @@ export function filaDetalleDesdeRpc(d: Record<string, unknown>): FilaDetalleCpe 
     proyectoOc: (d.proyecto_oc as string) ?? null,
     centroCostoSegun: (d.centro_costo_segun as string) ?? null,
     documentosOc: (d.documentos_oc as string) ?? null,
+    baseGravada: aNum(d.base_gravada),
+    igvComprobante: aNum(d.igv_comprobante),
+    noGravado: aNum(d.no_gravado),
+    desgloseSegun: (d.desglose_segun as string) ?? null,
+    tipoCambio: aNum(d.tipo_cambio),
+    totalSoles: aNum(d.total_soles),
+    detraccionRevisar: (d.detraccion_revisar as string) ?? null,
   };
 }
 
@@ -276,6 +301,13 @@ export function filasItemsSunat(filas: FilaDetalleCpe[]): string[][] {
       (f.proyectoOc ?? "").trim(),
       f.centroCostoSegun ?? "",
       f.documentosOc ?? "",
+      num(f.baseGravada ?? null, 2),
+      num(f.igvComprobante ?? null, 2),
+      num(f.noGravado ?? null, 2),
+      f.desgloseSegun ?? "",
+      num(f.tipoCambio ?? null, 3),
+      num(f.totalSoles ?? null, 2),
+      f.detraccionRevisar ?? "",
     ]),
   ];
 }

@@ -71,7 +71,25 @@ describe("filasItemsSunat", () => {
   });
 
   test("sin OC vinculada, esas trece columnas quedan vacías", () => {
-    assert.deepEqual(filasItemsSunat([fila()])[1].slice(28), ["", "", "", "", "", "", "", "", "", "", "", "", ""]);
+    assert.deepEqual(filasItemsSunat([fila()])[1].slice(28, 41), ["", "", "", "", "", "", "", "", "", "", "", "", ""]);
+  });
+
+  test("al final, el IGV desglosado, el total en soles y la detracción a revisar", () => {
+    const f = filaDetalleDesdeRpc({
+      base_gravada: "1000", igv_comprobante: "180", no_gravado: "50.5", desglose_segun: "SIRE",
+      tipo_cambio: "3.368", total_soles: "4140.03", detraccion_revisar: "Se aplicó 4% y el código 022 (Otros servicios empresariales) lleva 12%",
+    });
+    const r = filasItemsSunat([fila(f)])[1];
+    assert.deepEqual(r.slice(41), [
+      "1000.00", "180.00", "50.50", "SIRE", "3.368", "4140.03",
+      "Se aplicó 4% y el código 022 (Otros servicios empresariales) lleva 12%",
+    ]);
+    assert.deepEqual(CABECERAS_ITEMS.slice(41), [
+      "Base gravada", "IGV del comprobante", "No gravado (inafecto / exonerado)", "Desglose según",
+      "Tipo de cambio", "Total en soles", "Detracción: revisar",
+    ]);
+    // Sin desglose (un comprobante que no está en el SIRE ni trae XML): vacío, no cero.
+    assert.deepEqual(filasItemsSunat([fila()])[1].slice(41), ["", "", "", "", "", "", ""]);
   });
 
   test("lo de la carpeta madre (proyecto, de dónde sale el centro de costo, documentos) va al final", () => {
@@ -80,10 +98,10 @@ describe("filasItemsSunat", () => {
       centro_costo_segun: "Su carpeta de proyecto (las demás OC, según CG)", documentos_oc: "Factura 1 · OC 1",
     });
     const r = filasItemsSunat([fila(f)])[1];
-    assert.deepEqual(r.slice(38), [
+    assert.deepEqual(r.slice(38, 41), [
       "01) TALLERES ESPECIALIZADOS", "Su carpeta de proyecto (las demás OC, según CG)", "Factura 1 · OC 1",
     ]);
-    assert.deepEqual(CABECERAS_ITEMS.slice(36), [
+    assert.deepEqual(CABECERAS_ITEMS.slice(36, 41), [
       "Legajo de la OC", "Carpeta de la OC", "Proyecto de la OC", "Centro de costo según", "Documentos de la OC",
     ]);
   });

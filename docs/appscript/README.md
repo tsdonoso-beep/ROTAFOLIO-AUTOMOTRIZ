@@ -560,6 +560,26 @@ importación) y «Alertas» avisa si la OC está anulada en el cuadro.
 4. Desde ahí se sube solo cada noche, cuando los revisores terminan. Las
    columnas aparecen con la siguiente publicación diaria de las hojas.
 
+## IGV, todo en soles y detracciones en la vista ejecutiva
+
+Desde la migración 053 el DETALLE trae, al final, la **base gravada**, el
+**IGV**, lo **no gravado** (inafecto, exonerado y otros tributos) de cada
+comprobante —del SIRE, o del XML si no está en el SIRE—, su **tipo de
+cambio**, el **total en soles** y **«Detracción: revisar»**: si el % aplicado
+no es el de su código de bien o servicio (anexos de la R.S. 183-2004/SUNAT).
+
+La vista ejecutiva (`VistaEjecutiva.gs` + `VistaEjecutivaPagina.html`) los usa:
+
+- botón **«Todo en S/»** junto a S/ y US$: suma todas las monedas con el tipo
+  de cambio de cada comprobante;
+- indicadores **IGV** (con la base gravada y «IGV ÷ base», que debería dar
+  18%; si da menos hay compras al 10% —restaurantes y hoteles MYPE—) y **No
+  gravado**;
+- tarjeta **«Detracciones a revisar»**, con el enlace al PDF de cada una.
+
+Con una hoja publicada antes de la 053 la vista funciona igual, solo sin
+estas partes.
+
 ## La carpeta madre en GENERAL
 
 `CarpetaMadre.gs` va en el proyecto de Apps Script de la hoja **GENERAL**.

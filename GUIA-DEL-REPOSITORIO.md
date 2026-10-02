@@ -336,6 +336,8 @@ Apps Script entran como el usuario robot; la app, como la persona.
 | `detalle_cpe(p_periodo)` | Filas de la hoja **COMPROBANTES SUNAT - DETALLE** | 032 a 036, 039, 041, 042 |
 | `detalle_cpe_carpeta(p_periodo)` | `detalle_cpe` + proyecto, de dónde sale el centro de costo y documentos de la carpeta madre (lo que publica el DETALLE) | 051 |
 | `legajo_de_carpetas(p_empresa_ruc)` | Una fila por carpeta de OC de las carpetas madre, para la pestaña CARPETA MADRE de GENERAL (`CarpetaMadre.gs`) | 051 |
+| `detalle_cpe_hoja(p_periodo)` | Lo que publica la hoja **DETALLE**: `detalle_cpe_carpeta` + base gravada, IGV, no gravado (del SIRE o del XML), tipo de cambio, total en soles y detracción a revisar | 053 |
+| `porcentaje_detraccion(p_codigo)` | El % de detracción de cada código de bien o servicio (anexos de la R.S. 183-2004/SUNAT) | 053 |
 | `carpetas_madre(p_empresa_ruc)` | `legajo_de_carpetas` + área responsable (por la carpeta madre), comprador, situación y forma de pago (del legajo por OC). La usa `CarpetaMadre.gs` | 052 |
 | `facturas_sin_oc(p_empresa_ruc, p_desde)` | Facturas recibidas sin OC unida, con señal ALTA (el proveedor trabaja con OC) o MEDIA (monto alto, no es gasto típico sin OC). Pestaña FACTURAS SIN OC de GENERAL | 052 |
 | `vinculos_oc()` | Cruza comprobantes con archivos de las carpetas de OC | 039, 040, 042, 045, 046, 048, 049, 050 |
