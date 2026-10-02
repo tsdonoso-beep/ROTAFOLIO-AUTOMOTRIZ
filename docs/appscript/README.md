@@ -575,6 +575,15 @@ Precios, Proveedores, OC y centros de costo—, una a la vez y a todo el ancho
 de la pantalla. Recuerda la última sección vista; en el celular el menú pasa
 arriba. «Impuestos» lleva en rojo cuántas detracciones hay a revisar.
 
+Bajo **Compras y legajo**, tres secciones que leen directo de la base (no
+de la hoja), con la cuenta ROBOT: **Legajo por OC** (las carpetas de las
+carpetas madre, filtro por área, estado, comprador y texto, y el % completo
+por comprador), **Facturas sin OC** (ALTA y MEDIA, con el área y comprador
+probables) y **Cambios del robot** (lo que cambió en cada lectura). Necesitan
+en el proyecto de la vista las Propiedades del script `SUPABASE_URL`,
+`SUPABASE_ANON_KEY`, `ROBOT_CORREO` y `ROBOT_CLAVE` (las de `CarpetaMadre.gs`);
+sin ellas avisan qué falta y el resto de la vista funciona igual.
+
 Usa las columnas nuevas así:
 
 - botón **«Todo en S/»** junto a S/ y US$: suma todas las monedas con el tipo

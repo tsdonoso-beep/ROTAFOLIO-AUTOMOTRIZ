@@ -41,6 +41,11 @@
  * 7. Cada vez que cambies el código hay que volver a «Gestionar
  *    implementaciones» → el lápiz → Versión «Nueva» → Implementar: una
  *    implementación ya publicada no se actualiza sola con el código nuevo.
+ * 8. Para las secciones de compras y legajo (Legajo por OC, Facturas sin OC,
+ *    Cambios del robot), que leen directo de la base: engranaje
+ *    (Configuración del proyecto) → Propiedades del script → SUPABASE_URL,
+ *    SUPABASE_ANON_KEY, ROBOT_CORREO y ROBOT_CLAVE, los mismos de
+ *    CarpetaMadre.gs. Sin ellas, el resto de la vista funciona igual.
  */
 
 var HOJA_ID_VISTA = '1Kp5RS_7_dIwQDziSsK-vKbuYyCUxtG7VYktk5XkWj_A';
@@ -254,3 +259,80 @@ function redondear2_(n) { return Math.round(n * 100) / 100; }
 /** Un monto con la nota de crédito restando; null sigue siendo null (dato que no hay). */
 function conSigno_(esNota, n) { return n == null || isNaN(n) ? null : redondear2_((esNota ? -1 : 1) * Math.abs(n)); }
 function redondear4_(n) { return Math.round(n * 10000) / 10000; }
+
+// ── Compras y legajo: directo de la base ──
+//
+// Lo mismo que la hoja GENERAL trae con CarpetaMadre.gs, pero para la vista:
+// cada carpeta de OC de las carpetas madre (carpetas_madre), las facturas de
+// SUNAT que aparentan no tener OC (facturas_sin_oc) y lo que cambió en las
+// carpetas (carpeta_cambio). La página lo pide aparte, después de pintar lo
+// de SUNAT, para no demorar la primera carga.
+
+var VISTA_RUC = '20512201611';
+
+function datosDeLaBaseVista() {
+  try {
+    var cfg = configuracionBaseVista_();
+    var faltan = ['url', 'anon', 'correo', 'clave'].filter(function (k) { return !cfg[k]; });
+    if (faltan.length) {
+      return { error: 'Faltan las Propiedades del script de esta vista: SUPABASE_URL, SUPABASE_ANON_KEY, ROBOT_CORREO y ROBOT_CLAVE ' +
+        '(Apps Script → engranaje → Propiedades del script; los mismos valores de CarpetaMadre.gs).' };
+    }
+    var token = sesionBaseVista_(cfg);
+    var idCarpeta = function (u) { var m = /folders\/([\w-]{10,})/.exec(u || ''); return m ? m[1] : ''; };
+    var carpetas = paginasBaseVista_(cfg, token, 'rpc/carpetas_madre', { p_empresa_ruc: VISTA_RUC }, 'order=procedencia.desc,oc,carpeta_url')
+      .map(function (f) {
+        return [f.procedencia === 'Importación' ? 1 : 0, f.area_responsable || '', f.comprador || '', f.situacion_pago || '', f.forma_pago || '',
+          f.oc, f.proveedor || '', String(f.proyecto_carpeta || '').trim(), f.carpeta_nombre || '', idCarpeta(f.carpeta_url),
+          f.estado || '', f.le_falta || '', f.documentos || '', f.facturas_sunat_n || 0, f.cc_nombre || '',
+          f.ultimo_cambio || '', f.ultimo_cambio_fecha || '', f.cargado_en || ''];
+      });
+    var sinOc = paginasBaseVista_(cfg, token, 'rpc/facturas_sin_oc', { p_empresa_ruc: VISTA_RUC },
+      'senal=in.(ALTA,MEDIA)&order=senal,total.desc,proveedor_ruc,serie,numero')
+      .map(function (f) {
+        return [f.senal, f.razon || '', f.area_probable || '', f.comprador_probable || '', f.fecha_emision || '', f.proveedor_ruc,
+          f.proveedor_nombre || '', f.serie + '-' + f.numero, f.moneda || 'PEN', Number(f.total) || 0, f.ocs_del_proveedor || '',
+          idDrive_(f.enlace_pdf || '')];
+      });
+    var cambios = pedirBaseVista_(cfg, token, 'get', 'carpeta_cambio?select=fecha,procedencia,oc,tipo,detalle,carpeta_url' +
+      '&empresa_ruc=eq.' + VISTA_RUC + '&order=fecha.desc,id.desc&limit=500')
+      .map(function (f) { return [f.fecha, f.procedencia === 'Importación' ? 1 : 0, f.oc, f.tipo, f.detalle || '', idCarpeta(f.carpeta_url)]; });
+    return { error: null, carpetas: carpetas, sinOc: sinOc, cambios: cambios };
+  } catch (e) {
+    return { error: String(e.message || e) };
+  }
+}
+
+function configuracionBaseVista_() {
+  var p = PropertiesService.getScriptProperties();
+  var limpio = function (k) { return String(p.getProperty(k) || '').trim().replace(/^["'«“]+|["'»”]+$/g, '').trim(); };
+  return { url: limpio('SUPABASE_URL').replace(/\/+$/, ''), anon: limpio('SUPABASE_ANON_KEY'),
+           correo: limpio('ROBOT_CORREO'), clave: limpio('ROBOT_CLAVE') };
+}
+
+function sesionBaseVista_(cfg) {
+  var r = UrlFetchApp.fetch(cfg.url + '/auth/v1/token?grant_type=password', {
+    method: 'post', contentType: 'application/json', headers: { apikey: cfg.anon },
+    payload: JSON.stringify({ email: cfg.correo, password: cfg.clave }), muteHttpExceptions: true
+  });
+  if (r.getResponseCode() >= 300) throw new Error('La base rechazó la cuenta ROBOT (error ' + r.getResponseCode() + '): revisa las Propiedades del script.');
+  return JSON.parse(r.getContentText()).access_token;
+}
+
+function pedirBaseVista_(cfg, token, metodo, ruta, cuerpo) {
+  var o = { method: metodo, headers: { apikey: cfg.anon, Authorization: 'Bearer ' + token }, muteHttpExceptions: true };
+  if (cuerpo) { o.contentType = 'application/json'; o.payload = JSON.stringify(cuerpo); }
+  var r = UrlFetchApp.fetch(cfg.url + '/rest/v1/' + ruta, o);
+  if (r.getResponseCode() >= 300) throw new Error(ruta.split('?')[0] + ' falló: ' + r.getContentText().slice(0, 200));
+  return JSON.parse(r.getContentText());
+}
+
+/** La base entrega como mucho 1000 filas por consulta: se piden por páginas. */
+function paginasBaseVista_(cfg, token, ruta, args, consulta) {
+  var todo = [];
+  for (var desde = 0; ; desde += 1000) {
+    var parte = pedirBaseVista_(cfg, token, 'post', ruta + '?' + consulta + '&limit=1000&offset=' + desde, args);
+    todo = todo.concat(parte);
+    if (parte.length < 1000) return todo;
+  }
+}

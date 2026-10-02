@@ -51,6 +51,17 @@
   .encabezado { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
   .encabezado h1 { font-family: "Sora", sans-serif; font-size: 21px; font-weight: 800; margin: 0; }
   .encabezado .filtro-activo { margin: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px; }
+  .nav .insignia-gris { background: var(--surface3); color: var(--text2); }
+  .nav .insignia-verde { background: var(--accent); }
+  .barra-filtros { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+  .barra-filtros select { background: var(--surface); border: 1px solid var(--border2); border-radius: 9px; padding: 8px 10px; color: var(--text); }
+  .barra-filtros .buscador { flex: 1; min-width: 220px; padding-top: 9px; padding-bottom: 9px; }
+  .chip-rojo { background: var(--danger-suave); color: var(--danger); }
+  .tabla td .chip { white-space: normal; }
+  .tabla a.abrir { font-size: 12.5px; font-weight: 600; text-decoration: none; padding: 4px 9px; border-radius: 7px; background: var(--azul-suave); color: var(--azul); white-space: nowrap; }
+  .cargando-base { display: flex; align-items: center; gap: 10px; color: var(--text2); padding: 30px 4px; }
+  .dia { font-family: "Sora", sans-serif; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent-texto); margin: 16px 0 6px; }
+  .lat-filtros.apagado { opacity: .4; pointer-events: none; }
   .vista { display: none; }
   .vista.activa { display: block; }
   a { color: var(--azul); }
@@ -299,6 +310,15 @@
       </nav>
     </div>
 
+    <div class="lat-bloque">
+      <div class="lat-rotulo">Compras y legajo</div>
+      <nav class="nav" id="nav2">
+      <button data-vista="legajo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="m9 14 2 2 4-4"/></svg><span>Legajo por OC</span><span class="insignia insignia-gris" id="insigniaLegajo" style="display:none"></span></button>
+      <button data-vista="sinoc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6"/><path d="M12 12v3"/><path d="M12 18h.01"/></svg><span>Facturas sin OC</span><span class="insignia" id="insigniaSinOc" style="display:none"></span></button>
+      <button data-vista="cambios"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg><span>Cambios del robot</span><span class="insignia insignia-verde" id="insigniaCambios" style="display:none"></span></button>
+      </nav>
+    </div>
+
     <div class="lat-pie">
       <span class="chip chip-ok" style="align-self:flex-start"><span class="punto"></span>Se actualiza sola</span>
       <div class="grande" id="estadoDocs">—</div>
@@ -386,6 +406,62 @@
       </div>
     </section>
 
+    <section class="vista" data-vista="legajo">
+      <div class="base-estado" data-base></div>
+      <div data-con-base style="display:none">
+        <div class="barra-filtros">
+          <div class="segmento" id="lArea"><button data-v="" class="activo">Todas</button><button data-v="0">Nacionales</button><button data-v="1">COMEX</button></div>
+          <div class="segmento" id="lEstado"><button data-v="INC" class="activo">Incompletas</button><button data-v="OK">Completas</button><button data-v="VACÍA">Vacías</button><button data-v="">Todas</button></div>
+          <select id="lComprador"></select>
+          <input class="buscador" id="lBuscar" type="search" placeholder="OC, proveedor, proyecto o lo que falta (guía, DAM…)">
+        </div>
+        <div class="kpis" id="lKpis"></div>
+        <div class="grilla">
+          <div class="tarjeta">
+            <div class="tarjeta-cab"><h2>Carpetas de OC</h2><span class="nota" id="lNota"></span></div>
+            <div id="lTabla"></div>
+            <button class="limpiar mas" id="lMas" style="display:none">Ver más</button>
+          </div>
+          <div class="tarjeta">
+            <div class="tarjeta-cab"><h2>Por comprador</h2><span class="nota">% de sus carpetas con el legajo completo</span></div>
+            <div id="lRanking"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="vista" data-vista="sinoc">
+      <div class="base-estado" data-base></div>
+      <div data-con-base style="display:none">
+        <div class="barra-filtros">
+          <div class="segmento" id="sSenal"><button data-v="ALTA" class="activo">ALTA</button><button data-v="MEDIA">MEDIA</button><button data-v="">Todas</button></div>
+          <div class="segmento" id="sArea"><button data-v="" class="activo">Todas</button><button data-v="Compras nacionales">Nacionales</button><button data-v="COMEX (importaciones)">COMEX</button><button data-v="-">Por identificar</button></div>
+          <input class="buscador" id="sBuscar" type="search" placeholder="Proveedor, RUC, comprobante o comprador">
+        </div>
+        <div class="kpis" id="sKpis"></div>
+        <div class="tarjeta tarjeta-ancha">
+          <div class="tarjeta-cab"><h2>Facturas de SUNAT que aparentan no tener OC</h2><span class="nota">ALTA: el proveedor trabaja con OC · MEDIA: S/ 2 000 o más y no es un gasto típico sin OC (bancos, seguros, pasajes, comida…)</span></div>
+          <div id="sTabla"></div>
+          <button class="limpiar mas" id="sMas" style="display:none">Ver más</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="vista" data-vista="cambios">
+      <div class="base-estado" data-base></div>
+      <div data-con-base style="display:none">
+        <div class="barra-filtros">
+          <div class="segmento" id="cTipo"><button data-v="" class="activo">Todos</button><button data-v="COMPL">Completó</button><button data-v="FALTA">Ahora le falta</button><button data-v="NUEV">Nuevos</button><button data-v="ELIM">Eliminados</button></div>
+          <div class="segmento" id="cArea"><button data-v="" class="activo">Todas</button><button data-v="0">Nacionales</button><button data-v="1">COMEX</button></div>
+          <input class="buscador" id="cBuscar" type="search" placeholder="OC o archivo">
+        </div>
+        <div class="tarjeta tarjeta-ancha">
+          <div class="tarjeta-cab"><h2>Lo que cambió en las carpetas</h2><span class="nota">Lo anota el robot en cada lectura (dos veces al día) · los últimos 500 cambios</span></div>
+          <div id="cLista"></div>
+        </div>
+      </div>
+    </section>
+
     <footer class="pie">
       <span id="pie"></span>
       <a class="boton boton-accent" id="enlaceHoja2" href="#" target="_blank" rel="noopener">Ver el detalle completo ↗</a>
@@ -445,9 +521,12 @@
     document.getElementById('estadoHora').textContent = d.generadoEl.replace(/ de \d{4},/, ',');
     document.getElementById('pie').textContent = 'Generado el ' + d.generadoEl + ' · a partir de «COMPROBANTES SUNAT - DETALLE»';
     // El menú lateral: una sección a la vez; se recuerda la última vista.
-    document.getElementById('nav').onclick = function (e) {
-      var b = e.target.closest('button[data-vista]'); if (b) mostrarSeccion(b.getAttribute('data-vista'));
-    };
+    ['nav', 'nav2'].forEach(function (id) {
+      document.getElementById(id).onclick = function (e) {
+        var b = e.target.closest('button[data-vista]'); if (b) mostrarSeccion(b.getAttribute('data-vista'));
+      };
+    });
+    cargarBase();
     var guardada = null;
     try { guardada = localStorage.getItem('vistaSunatSeccion'); } catch (e) { /* sin almacenamiento: se empieza por el resumen */ }
     mostrarSeccion(guardada && document.querySelector('.vista[data-vista="' + guardada + '"]') ? guardada : 'resumen');
@@ -479,17 +558,184 @@
     buscarFacturas('');
   }
 
+  // ══ Compras y legajo: directo de la base (datosDeLaBaseVista) ══
+  var BASE = null;
+  var L = { area: '', estado: 'INC', comprador: '', texto: '', cuantos: 50 };
+  var S = { senal: 'ALTA', area: '', texto: '', cuantos: 50 };
+  var C = { tipo: '', area: '', texto: '' };
+  var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+  function fechaHora(iso) { if (!iso) return ''; var d = new Date(iso); return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+  function fechaIso(t) { var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t || ''); return m ? m[3] + '/' + m[2] + '/' + m[1] : (t || ''); }
+  function montoCod(n, cod) {
+    var s = cod === 'USD' ? 'US$' : cod === 'EUR' ? '€' : 'S/', p = Math.abs(n).toFixed(2).split('.');
+    return (n < 0 ? '-' : '') + s + ' ' + p[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '.' + p[1];
+  }
+  var enlaceCarpeta = function (id) { return id ? '<a class="abrir" href="https://drive.google.com/drive/folders/' + esc(id) + '" target="_blank" rel="noopener">Carpeta ↗</a>' : ''; };
+  function estadoBase(html) { Array.prototype.forEach.call(document.querySelectorAll('[data-base]'), function (e) { e.innerHTML = html; }); }
+
+  function cargarBase() {
+    estadoBase('<div class="cargando-base"><span class="giro"></span> Leyendo las carpetas de OC de la base…</div>');
+    google.script.run.withSuccessHandler(arrancarBase).withFailureHandler(function (e) {
+      estadoBase('<div class="tarjeta"><h2>No se pudo leer la base</h2><p class="linea">' + esc(e && e.message ? e.message : String(e)) + '</p></div>');
+    }).datosDeLaBaseVista();
+  }
+
+  function arrancarBase(d) {
+    if (!d || d.error) {
+      estadoBase('<div class="tarjeta"><h2>Falta conectar la base</h2><p class="linea">' + esc(d && d.error ? d.error : 'Sin respuesta.') + '</p></div>');
+      return;
+    }
+    BASE = d;
+    estadoBase('');
+    Array.prototype.forEach.call(document.querySelectorAll('[data-con-base]'), function (e) { e.style.display = ''; });
+    // Compradores conocidos, para el filtro.
+    var compradores = Array.from(new Set(d.carpetas.map(function (x) { return x[2]; }).filter(Boolean))).sort();
+    var sel = document.getElementById('lComprador');
+    sel.innerHTML = '<option value="">Todos los compradores</option>' + compradores.map(function (c) { return '<option>' + esc(c) + '</option>'; }).join('') +
+      '<option value="-">Comprador por identificar</option>';
+    sel.onchange = function () { L.comprador = this.value; L.cuantos = 50; pintarLegajo(); };
+    segmento('lArea', function (v) { L.area = v; L.cuantos = 50; pintarLegajo(); });
+    segmento('lEstado', function (v) { L.estado = v; L.cuantos = 50; pintarLegajo(); });
+    var t1; document.getElementById('lBuscar').oninput = function () { var v = this.value; clearTimeout(t1); t1 = setTimeout(function () { L.texto = v; L.cuantos = 50; pintarLegajo(); }, 150); };
+    document.getElementById('lMas').onclick = function () { L.cuantos += 50; pintarLegajo(); };
+    document.getElementById('lRanking').onclick = function (e) {
+      var f = e.target.closest('[data-comprador]'); if (!f) return;
+      L.comprador = f.getAttribute('data-comprador'); sel.value = L.comprador; L.cuantos = 50; pintarLegajo();
+    };
+    segmento('sSenal', function (v) { S.senal = v; S.cuantos = 50; pintarSinOc(); });
+    segmento('sArea', function (v) { S.area = v; S.cuantos = 50; pintarSinOc(); });
+    var t2; document.getElementById('sBuscar').oninput = function () { var v = this.value; clearTimeout(t2); t2 = setTimeout(function () { S.texto = v; S.cuantos = 50; pintarSinOc(); }, 150); };
+    document.getElementById('sMas').onclick = function () { S.cuantos += 50; pintarSinOc(); };
+    segmento('cTipo', function (v) { C.tipo = v; pintarCambios(); });
+    segmento('cArea', function (v) { C.area = v; pintarCambios(); });
+    var t3; document.getElementById('cBuscar').oninput = function () { var v = this.value; clearTimeout(t3); t3 = setTimeout(function () { C.texto = v; pintarCambios(); }, 150); };
+    // Contadores del menú.
+    var inc = d.carpetas.filter(function (x) { return x[10] !== 'OK'; }).length;
+    var alta = d.sinOc.filter(function (x) { return x[0] === 'ALTA'; }).length;
+    var ultima = d.cambios.length ? new Date(d.cambios[0][0]).getTime() : 0;
+    var recientes = d.cambios.filter(function (x) { return ultima - new Date(x[0]).getTime() < 6 * 3600e3; }).length;
+    var insignia = function (id, n, titulo) { var e = document.getElementById(id); e.textContent = miles(n); e.title = titulo; e.style.display = n ? '' : 'none'; };
+    insignia('insigniaLegajo', inc, inc + ' carpetas con el legajo incompleto');
+    insignia('insigniaSinOc', alta, alta + ' facturas que aparentan no tener OC (ALTA)');
+    insignia('insigniaCambios', recientes, recientes + ' cambios en la última lectura del robot');
+    pintarLegajo(); pintarSinOc(); pintarCambios();
+  }
+
+  // ── Legajo por OC ──
+  function pintarLegajo() {
+    var palabras = plano(L.texto).split(/\s+/).filter(function (w) { return w.length > 1; });
+    var delArea = BASE.carpetas.filter(function (x) {
+      return (L.area === '' || String(x[0]) === L.area) &&
+        (L.comprador === '' || (L.comprador === '-' ? !x[2] : x[2] === L.comprador));
+    });
+    var lista = delArea.filter(function (x) {
+      if (L.estado === 'INC' ? x[10] !== 'INCOMPLETA' : L.estado && x[10] !== L.estado) return false;
+      if (!palabras.length) return true;
+      var t = plano([x[5], x[6], x[7], x[8], x[2], x[11], x[12]].join(' '));
+      return palabras.every(function (w) { return t.indexOf(w) !== -1; });
+    });
+    var ok = delArea.filter(function (x) { return x[10] === 'OK'; }).length;
+    var cuenta = function (re) { return delArea.filter(function (x) { return re.test(x[11]); }).length; };
+    document.getElementById('lKpis').innerHTML =
+      kpi('Carpetas de OC', miles(delArea.length), '<div class="kpi-extra">' + miles(new Set(delArea.map(function (x) { return x[5]; })).size) + ' OC distintas</div>') +
+      kpi('Legajo completo', '<div class="kpi-anillo">' + anillo(pct(ok, delArea.length), '#00A298') + '<div class="kpi-extra" style="margin:0">' + miles(ok) + ' de ' + miles(delArea.length) + '<br>con todo lo que le corresponde</div></div>') +
+      kpi('Les falta la guía', miles(cuenta(/Guía/)), '<div class="kpi-extra">guía de remisión (bienes)</div>', 'kpi-riesgo') +
+      kpi('Les falta la factura', miles(cuenta(/Factura/)), '<div class="kpi-extra">acta: ' + miles(cuenta(/Acta/)) + ' · DAM: ' + miles(cuenta(/DAM/)) + '</div>') +
+      kpi('Sin factura de SUNAT', miles(delArea.filter(function (x) { return !x[13]; }).length), '<div class="kpi-extra">carpetas sin ninguna factura unida</div>');
+    document.getElementById('lNota').textContent = miles(lista.length) + ' carpetas · lectura del robot: ' + fechaHora(BASE.carpetas.reduce(function (m, x) { return x[17] > m ? x[17] : m; }, ''));
+    var chip = function (x) {
+      return x[10] === 'OK' ? '<span class="chip chip-ok">Completo</span>' : x[10] === 'VACÍA' ? '<span class="chip chip-gris">Carpeta vacía</span>'
+        : '<span class="chip chip-warn">Falta: ' + esc(x[11]) + '</span>';
+    };
+    document.getElementById('lTabla').innerHTML = lista.length ? '<table class="tabla"><thead><tr><th>OC</th><th>Proveedor</th><th>Comprador</th><th>Legajo</th><th class="num">Facturas SUNAT</th><th></th></tr></thead><tbody>' +
+      lista.slice(0, L.cuantos).map(function (x) {
+        return '<tr><td><b>' + esc(x[5]) + '</b><div class="sub">' + esc(x[7]) + '</div></td>' +
+          '<td>' + esc(x[6]) + '<div class="sub" title="' + esc(x[12]) + '">' + esc(x[12]) + '</div></td>' +
+          '<td>' + (x[2] ? esc(x[2]) : '<span class="nota">por identificar</span>') + '<div class="sub">' + esc(x[1]) + (x[3] ? ' · ' + esc(x[3]) : '') + '</div></td>' +
+          '<td>' + chip(x) + (x[15] ? '<div class="sub">' + esc(fechaHora(x[16])) + ' · ' + esc(x[15]) + '</div>' : '') + '</td>' +
+          '<td class="num">' + (x[13] || '—') + '</td><td>' + enlaceCarpeta(x[9]) + '</td></tr>';
+      }).join('') + '</tbody></table>' : '<p class="vacio">Ninguna carpeta con este filtro.</p>';
+    document.getElementById('lMas').style.display = lista.length > L.cuantos ? '' : 'none';
+    // Ranking por comprador (con el filtro de área).
+    var g = {};
+    BASE.carpetas.forEach(function (x) {
+      if (L.area !== '' && String(x[0]) !== L.area) return;
+      var k = x[2] || '-'; var c = g[k] || (g[k] = { n: 0, ok: 0, area: x[1] }); c.n++; if (x[10] === 'OK') c.ok++;
+    });
+    var claves = Object.keys(g).sort(function (a, b) { return a === '-' ? 1 : b === '-' ? -1 : g[b].ok / g[b].n - g[a].ok / g[a].n || g[b].n - g[a].n; });
+    document.getElementById('lRanking').innerHTML = claves.map(function (k) {
+      var c = g[k], p = pct(c.ok, c.n);
+      return '<div class="fila-barra" data-comprador="' + esc(k) + '" style="cursor:pointer' + (L.comprador === k ? ';background:var(--accent-suave)' : '') + '" title="Ver sus carpetas">' +
+        '<div class="fb-cab"><span class="fb-etq">' + (k === '-' ? 'Por identificar' : esc(k)) + '</span><span class="fb-cifras"><b>' + p + '%</b> · ' + c.ok + ' de ' + c.n + '</span></div>' +
+        '<div class="fb-pista"><span style="width:' + Math.max(2, p) + '%;background:' + (p >= 80 ? 'var(--ok)' : p >= 50 ? 'var(--accent)' : 'var(--warn)') + '"></span></div></div>';
+    }).join('');
+  }
+
+  // ── Facturas sin OC ──
+  function pintarSinOc() {
+    var palabras = plano(S.texto).split(/\s+/).filter(function (w) { return w.length > 1; });
+    var delArea = BASE.sinOc.filter(function (x) { return S.area === '' || (S.area === '-' ? !x[2] : x[2] === S.area); });
+    var lista = delArea.filter(function (x) {
+      if (S.senal && x[0] !== S.senal) return false;
+      if (!palabras.length) return true;
+      var t = plano([x[5], x[6], x[7], x[3], x[2]].join(' '));
+      return palabras.every(function (w) { return t.indexOf(w) !== -1; });
+    });
+    var soles = function (l) { return l.reduce(function (a, x) { return a + x[9] * (x[8] === 'USD' ? 3.75 : 1); }, 0); };
+    var alta = delArea.filter(function (x) { return x[0] === 'ALTA'; }), media = delArea.filter(function (x) { return x[0] === 'MEDIA'; });
+    document.getElementById('sKpis').innerHTML =
+      kpi('ALTA: el proveedor trabaja con OC', miles(alta.length), '<div class="kpi-extra">≈ ' + montoCod(soles(alta), 'PEN') + ' (dólares × 3,75)</div>', alta.length ? 'kpi-riesgo' : '') +
+      kpi('MEDIA: monto alto', miles(media.length), '<div class="kpi-extra">≈ ' + montoCod(soles(media), 'PEN') + '</div>') +
+      kpi('Proveedores', miles(new Set(delArea.map(function (x) { return x[5]; })).size), '<div class="kpi-extra">con alguna factura sin OC</div>');
+    document.getElementById('sTabla').innerHTML = lista.length ? '<table class="tabla"><thead><tr><th>Señal</th><th>Fecha</th><th>Proveedor</th><th>Comprobante</th><th class="num">Total</th><th>A quién le toca</th><th>Por qué</th></tr></thead><tbody>' +
+      lista.slice(0, S.cuantos).map(function (x) {
+        var comp = x[11] ? '<a href="https://drive.google.com/file/d/' + esc(x[11]) + '/view" target="_blank" rel="noopener">' + esc(x[7]) + '</a>' : esc(x[7]);
+        return '<tr><td><span class="chip ' + (x[0] === 'ALTA' ? 'chip-rojo' : 'chip-warn') + '">' + esc(x[0]) + '</span></td>' +
+          '<td>' + esc(fechaIso(x[4])) + '</td><td>' + esc(x[6]) + '<div class="sub">' + esc(x[5]) + '</div></td><td>' + comp + '</td>' +
+          '<td class="num"><b>' + montoCod(x[9], x[8]) + '</b></td>' +
+          '<td>' + (x[3] ? esc(x[3]) : '<span class="nota">por identificar</span>') + '<div class="sub">' + esc(x[2] || '') + '</div></td>' +
+          '<td><div class="sub" style="margin:0">' + esc(x[1]) + (x[10] ? '<br>OC del proveedor: ' + esc(x[10].split(', ').slice(0, 4).join(', ')) + (x[10].split(', ').length > 4 ? '…' : '') : '') + '</div></td></tr>';
+      }).join('') + '</tbody></table>' : '<p class="vacio">Ninguna factura con este filtro.</p>';
+    document.getElementById('sMas').style.display = lista.length > S.cuantos ? '' : 'none';
+  }
+
+  // ── Cambios del robot ──
+  function pintarCambios() {
+    var re = { COMPL: /COMPLET/, FALTA: /FALTA/, NUEV: /NUEV/, ELIM: /ELIMIN|YA NO/ }[C.tipo];
+    var palabras = plano(C.texto).split(/\s+/).filter(function (w) { return w.length > 1; });
+    var lista = BASE.cambios.filter(function (x) {
+      if (re && !re.test(x[3])) return false;
+      if (C.area !== '' && String(x[1]) !== C.area) return false;
+      var t = plano(x[2] + ' ' + x[4]);
+      return palabras.every(function (w) { return t.indexOf(w) !== -1; });
+    });
+    var color = function (t) { return /COMPLET/.test(t) ? 'chip-ok' : /FALTA/.test(t) ? 'chip-rojo' : /NUEV/.test(t) ? 'chip-azul' : /ELIMIN|YA NO/.test(t) ? 'chip-warn' : 'chip-gris'; };
+    var html = '', dia = '';
+    lista.forEach(function (x) {
+      var d = new Date(x[0]), k = pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear();
+      if (k !== dia) { html += (dia ? '</tbody></table>' : '') + '<div class="dia">' + k + '</div><table class="tabla"><tbody>'; dia = k; }
+      html += '<tr><td style="width:60px" class="nota">' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + '</td><td style="width:170px"><span class="chip ' + color(x[3]) + '">' + esc(x[3]) + '</span></td>' +
+        '<td style="width:110px"><b>' + esc(x[2]) + '</b><div class="sub">' + (x[1] ? 'COMEX' : 'Nacional') + '</div></td><td>' + esc(x[4]) + '</td><td style="width:90px">' + enlaceCarpeta(x[5]) + '</td></tr>';
+    });
+    document.getElementById('cLista').innerHTML = lista.length ? html + '</tbody></table>' : '<p class="vacio">Sin cambios con este filtro. El robot los anota desde el 02/10/2026.</p>';
+  }
+
   function mostrarSeccion(k) {
     Array.prototype.forEach.call(document.querySelectorAll('.vista'), function (v) { v.classList.toggle('activa', v.getAttribute('data-vista') === k); });
     var titulo = '';
-    Array.prototype.forEach.call(document.querySelectorAll('#nav button'), function (b) {
+    Array.prototype.forEach.call(document.querySelectorAll('.nav button'), function (b) {
       var es = b.getAttribute('data-vista') === k;
       b.classList.toggle('activo', es);
       if (es) titulo = b.querySelector('span').textContent;
     });
     document.getElementById('tituloSeccion').textContent = titulo;
-    // El buscador de facturas no usa los filtros: el resumen de filtros no aplica ahí.
-    document.getElementById('fResumen').style.visibility = k === 'factura' ? 'hidden' : '';
+    // El buscador de facturas y las secciones de compras y legajo no usan los
+    // filtros de SUNAT: el resumen de filtros no aplica ahí.
+    var propios = ['factura', 'legajo', 'sinoc', 'cambios'].indexOf(k) >= 0;
+    document.getElementById('fResumen').style.visibility = propios ? 'hidden' : '';
+    var filtros = document.querySelector('.lat-filtros');
+    filtros.classList.toggle('apagado', propios);
+    filtros.title = propios ? 'Los filtros de SUNAT no aplican a esta sección: tiene los suyos arriba' : '';
     try { localStorage.setItem('vistaSunatSeccion', k); } catch (e) { /* sin almacenamiento */ }
     window.scrollTo(0, 0);
   }
