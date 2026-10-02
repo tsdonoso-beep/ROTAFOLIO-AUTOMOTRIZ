@@ -72,6 +72,7 @@ var CF_FUENTES = [
     conDato: 'DUA'
   },
   {
+    // El kardex ORIGINAL de Almacén (no una copia con IMPORTRANGE): si cambia, basta con poner aquí su id.
     destino: 'KARDEX', id: '1vDEQKVvAW5SB9MeLAr0UwAy4AuIL4UspTlkvX-O0nfU', hoja: 'KARDEX',
     clave: ['VALE DE ALMACEN', 'NUMERO ORDEN'],
     columnas: ['VALE DE ALMACEN', 'FECHA REGISTRO', 'FECHA OPERACION', 'TIPO DE MOVIMIENTO', 'TIPO DE OPERACION', 'TIPO DOCUMENTO',
@@ -144,15 +145,10 @@ function copiarFuentes() {
 
 /** Lee una fuente: busca su fila de encabezados y se queda con las columnas pedidas (o sus bloques). */
 function leerFuente_(origen, f) {
-  var hoja = origen.getSheetByName(f.hoja) || buscarHoja_(origen, f.hoja);
-  if (!hoja) throw new Error('No está la pestaña «' + f.hoja + '».');
+  var hoja = origen.getSheetByName(f.hoja) || buscarHoja_(origen, f.hoja, f.clave);
+  if (!hoja) throw new Error('No hay una pestaña «' + f.hoja + '» ni otra con las columnas ' + f.clave.join(' / ') + '.');
   var valores = hoja.getDataRange().getValues();
-  // La fila de encabezados: la primera (de las 15 primeras) que tiene las columnas clave.
-  var fc = -1;
-  for (var i = 0; i < Math.min(15, valores.length) && fc < 0; i++) {
-    var cab = valores[i].map(normalizar_);
-    if (f.clave.every(function (c) { return cab.indexOf(normalizar_(c)) >= 0; })) fc = i;
-  }
+  var fc = filaDeEncabezados_(valores, f.clave);
   if (fc < 0) throw new Error('No encontré los encabezados ' + f.clave.join(' / ') + ' en «' + hoja.getName() + '».');
   var cab = valores[fc].map(normalizar_);
   // Cada bloque empieza donde aparece la primera columna clave (DUAS-SUNAT tiene dos).
@@ -214,9 +210,23 @@ function buscarColumna_(cab, nombre, desde, hasta) {
   return -1;
 }
 
-function buscarHoja_(libro, nombre) {
+/** La fila de encabezados: la primera (de las 15 primeras) que tiene las columnas clave; -1 si ninguna. */
+function filaDeEncabezados_(valores, clave) {
+  for (var i = 0; i < Math.min(15, valores.length); i++) {
+    var cab = valores[i].map(normalizar_);
+    if (clave.every(function (c) { return cab.indexOf(normalizar_(c)) >= 0; })) return i;
+  }
+  return -1;
+}
+
+/** La pestaña por su nombre (sin importar mayúsculas ni espacios) o, si se llama distinto, la que tiene las columnas clave. */
+function buscarHoja_(libro, nombre, clave) {
   var n = normalizar_(nombre);
   var hojas = libro.getSheets();
   for (var i = 0; i < hojas.length; i++) if (normalizar_(hojas[i].getName()) === n) return hojas[i];
+  for (var k = 0; k < hojas.length; k++) {
+    var filas = Math.min(15, hojas[k].getLastRow()), cols = hojas[k].getLastColumn();
+    if (filas > 0 && cols > 0 && filaDeEncabezados_(hojas[k].getRange(1, 1, filas, cols).getValues(), clave) >= 0) return hojas[k];
+  }
   return null;
 }
