@@ -36,6 +36,7 @@ test("la DAM limpia, aunque venga con comillas o dos en una celda", () => {
   assert.deepEqual(limpiarDam('"03819266'), ["03819266"]);
   assert.deepEqual(limpiarDam("023467 // 023468"), ["023467", "023468"]);
   assert.deepEqual(limpiarDam("DUA 118-2026-10-151461"), ["118-2026-10-151461"]);
+  assert.deepEqual(limpiarDam("*03480820"), ["03480820"]);
   assert.deepEqual(limpiarDam("PENDIENTE"), []);
 });
 

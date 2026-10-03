@@ -263,7 +263,8 @@ function redondear4_(n) { return Math.round(n * 10000) / 10000; }
 // ── Compras y legajo: directo de la base ──
 //
 // Lo mismo que la hoja GENERAL trae con CarpetaMadre.gs, pero para la vista:
-// cada carpeta de OC de las carpetas madre (carpetas_madre), las facturas de
+// cada carpeta de OC de las carpetas madre, con lo que dicen Compras, COMEX y
+// Almacén (carpetas_madre_fuentes), las facturas de
 // SUNAT que aparentan no tener OC (facturas_sin_oc) y lo que cambió en las
 // carpetas (carpeta_cambio). La página lo pide aparte, después de pintar lo
 // de SUNAT, para no demorar la primera carga.
@@ -280,12 +281,17 @@ function datosDeLaBaseVista() {
     }
     var token = sesionBaseVista_(cfg);
     var idCarpeta = function (u) { var m = /folders\/([\w-]{10,})/.exec(u || ''); return m ? m[1] : ''; };
-    var carpetas = paginasBaseVista_(cfg, token, 'rpc/carpetas_madre', { p_empresa_ruc: VISTA_RUC }, 'order=procedencia.desc,oc,carpeta_url')
+    // carpetas_madre_fuentes: las carpetas madre con lo que dicen Compras, COMEX y Almacén (la hoja privada de Contabilidad).
+    var carpetas = paginasBaseVista_(cfg, token, 'rpc/carpetas_madre_fuentes', { p_empresa_ruc: VISTA_RUC }, 'order=procedencia.desc,oc,carpeta_url')
       .map(function (f) {
         return [f.procedencia === 'Importación' ? 1 : 0, f.area_responsable || '', f.comprador || '', f.situacion_pago || '', f.forma_pago || '',
           f.oc, f.proveedor || '', String(f.proyecto_carpeta || '').trim(), f.carpeta_nombre || '', idCarpeta(f.carpeta_url),
           f.estado || '', f.le_falta || '', f.documentos || '', f.facturas_sunat_n || 0, f.cc_nombre || '',
-          f.ultimo_cambio || '', f.ultimo_cambio_fecha || '', f.cargado_en || ''];
+          f.ultimo_cambio || '', f.ultimo_cambio_fecha || '', f.cargado_en || '',
+          // 18…: el estado con «Por subir», lo que existe en otro lado, lo que falta sin rastro y los datos de la OC.
+          f.estado_detalle || '', f.por_subir || '', f.falta_sin_rastro || '', f.comprador_segun || '', f.fecha_oc || '',
+          f.monto_soles == null ? null : Number(f.monto_soles), f.ingreso_almacen || '', f.estado_comex || '', f.llegada_planta || '',
+          f.cambios_fuentes || 0];
       });
     var sinOc = paginasBaseVista_(cfg, token, 'rpc/facturas_sin_oc', { p_empresa_ruc: VISTA_RUC },
       'senal=in.(ALTA,MEDIA)&order=senal,total.desc,proveedor_ruc,serie,numero')
@@ -297,7 +303,12 @@ function datosDeLaBaseVista() {
     var cambios = pedirBaseVista_(cfg, token, 'get', 'carpeta_cambio?select=fecha,procedencia,oc,tipo,detalle,carpeta_url' +
       '&empresa_ruc=eq.' + VISTA_RUC + '&order=fecha.desc,id.desc&limit=500')
       .map(function (f) { return [f.fecha, f.procedencia === 'Importación' ? 1 : 0, f.oc, f.tipo, f.detalle || '', idCarpeta(f.carpeta_url)]; });
-    return { error: null, carpetas: carpetas, sinOc: sinOc, cambios: cambios };
+    // Cuándo leyó el robot la hoja de Compras, COMEX y Almacén (y cuándo se copió).
+    var copia = [];
+    try {
+      copia = pedirBaseVista_(cfg, token, 'get', 'fuente_copia?select=pestana,filas,fin,resultado,leido_en&empresa_ruc=eq.' + VISTA_RUC + '&order=pestana');
+    } catch (e) { copia = []; }
+    return { error: null, carpetas: carpetas, sinOc: sinOc, cambios: cambios, copia: copia };
   } catch (e) {
     return { error: String(e.message || e) };
   }

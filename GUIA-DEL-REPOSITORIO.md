@@ -101,7 +101,8 @@ que es la evidencia para diagnosticar cuando algo falla.
 
 | Hora | Workflow | Qué hace |
 |---|---|---|
-| 02:00 | **Carpetas de OC (nacionales e importaciones)** | Lee los nombres de las carpetas madre de compras nacionales e importaciones (OC y comprobantes) |
+| 00:45 y 11:15 | *(Apps Script de Contabilidad)* `CopiarFuentes.gs` | Copia a una hoja privada la base de Compras, el STATUS de COMEX y el kardex de Almacén |
+| 01:17 y 11:47 | **Carpetas de OC (nacionales e importaciones)** | Primero lee esa hoja privada (Compras, COMEX, Almacén); luego los nombres de las carpetas madre de compras nacionales e importaciones (OC y comprobantes) |
 | 08:00 | **SUNAT diario** | Pide al SIRE la lista de compras (mes actual y anterior) |
 | 08:00 | **SUNAT descargar XML** | Baja XML/PDF de serie **E001** de ayer y hoy |
 | 08:30 | **SUNAT CPE por API** | Baja XML y PDF de los **no-E001** directo de la API de SUNAT (mes anterior + actual, todos los pendientes) |
@@ -239,6 +240,27 @@ que es la evidencia para diagnosticar cuando algo falla.
   artefacto `carpetas-oc`. Solo una corrida completa y sin fallas reemplaza
   lo anterior; una parcial solo suma.
 
+#### Fuentes de Compras, COMEX y Almacén — `fuentes-compras.yml` → `scripts/fuentes-compras.mts`
+- **Qué hace:** lee la hoja privada de Contabilidad (`1sJhaKxa…`, compartida
+  como Lector solo con la cuenta de servicio) que llena `CopiarFuentes.gs`
+  a las 00:45 y 11:15: la base de compras nacionales, la de importaciones,
+  el STATUS y las DUA de COMEX y los ingresos del kardex de Almacén (con el
+  escaneo de cada vale). Lo junta por OC y por vale
+  (`lib/drive/fuentes-compras.ts`) y lo sube con `cargar_fuentes_compras`
+  (migración 057), que anota en `fuente_cambio` lo que cambió desde la
+  lectura anterior (un monto, una DAM, un vale corregido, anulado o
+  eliminado). Si una pestaña llega con menos de la mitad de filas, no borra
+  nada.
+- **Cuándo:** como primer paso de «Carpetas de OC» (01:17 y 11:47; si falla,
+  las carpetas se leen igual) y a mano solo, sin releer las carpetas.
+- **Para qué:** `carpetas_madre_fuentes()` dice, de lo que le falta a cada
+  carpeta, qué ya existe en otro lado y solo falta subir («◐ Por subir»: la
+  guía que registró Almacén, la DAM o el costeo de COMEX, la factura que ya
+  está en SUNAT) y completa comprador, fecha y monto de la OC. Sigue
+  contando como incompleta hasta que el documento esté en la carpeta.
+- **Local:** `npm run fuentes:local` (con `FUENTES_JSON=archivo.json` lee
+  las pestañas de un archivo en vez de la hoja; `DEBUG=1` no sube nada).
+
 #### Otros scripts
 - `scripts/sire.mts`: prueba la cadena del SIRE **desde una máquina local**
   (`token`, `propuesta 202607`). No lo usa ningún workflow.
@@ -329,6 +351,11 @@ Apps Script entran como el usuario robot; la app, como la persona.
 | `lectura_archivo` | — | Lo leído por dentro de cada archivo (XML, PDF, OCR), para no leerlo dos veces | `carpetas-oc` |
 | `proyecto_centro_costo` | — | Centro de costo de cada carpeta de proyecto (para OC que no están en CG); `MANUAL` no se pisa | `carpetas-oc`, Contabilidad |
 | `carpeta_cambio` | — | Qué cambió en las carpetas madre entre dos corridas completas | `carpetas-oc` |
+| `fuente_compra_oc` | — | Una fila por OC de la base de Compras (nacional e importación): fecha, monto, quién la hizo, forma de pago | `fuentes-compras` |
+| `fuente_comex_oc` | — | Una fila por OC del STATUS de COMEX: llegada, agente, DAM, costeo y sus DUA | `fuentes-compras` |
+| `kardex_vale` | — | Una fila por vale de Almacén (ingresos por compra, servicio o devolución y anulados), con la guía o factura y su escaneo | `fuentes-compras` |
+| `fuente_cambio` | — | Qué cambió en Compras, COMEX o Almacén de una lectura a otra | `fuentes-compras` |
+| `fuente_copia` | — | Cuándo copió `CopiarFuentes.gs` cada pestaña | `fuentes-compras` |
 | `proveedor_sin_oc` | — | Proveedores que Contabilidad marca como «nunca llevan OC»: sus facturas no se alertan | a mano |
 | `equivalencia_centro_costo` | 2 | Centro de costo → código CONCAR, **solo lo confirmado** | a mano |
 
@@ -343,7 +370,10 @@ Apps Script entran como el usuario robot; la app, como la persona.
 | `legajo_de_carpetas(p_empresa_ruc)` | Una fila por carpeta de OC de las carpetas madre, para la pestaña CARPETA MADRE de GENERAL (`CarpetaMadre.gs`) | 051 |
 | `detalle_cpe_hoja(p_periodo)` | Lo que publica la hoja **DETALLE**: `detalle_cpe_carpeta` + base gravada, IGV, no gravado (del SIRE o del XML), tipo de cambio, total en soles y detracción a revisar | 053 |
 | `porcentaje_detraccion(p_codigo)` | El % de detracción de cada código de bien o servicio (anexos de la R.S. 183-2004/SUNAT) | 053 |
-| `detalle_de_carpeta(p_carpeta)` | El detalle de una carpeta de OC (archivos con su documento, datos de la OC, facturas unidas, cambios) para la vista | 055, 056 |
+| `detalle_de_carpeta(p_carpeta)` | El detalle de una carpeta de OC (archivos con su documento, datos de la OC, facturas unidas, cambios y lo que dicen Compras, COMEX y Almacén) para la vista | 055, 056, 057 |
+| `evidencias_de_fuentes(p_empresa_ruc)` | Por OC, los documentos que ya existen en otro lado: guía (Almacén), DAM y costeo (COMEX) | 057 |
+| `carpetas_madre_fuentes(p_empresa_ruc)` | `carpetas_madre` + estado con «Por subir», lo que falta sin rastro, lo que existe en otro lado, fecha y monto de la OC, ingreso a Almacén, estado y llegada en COMEX. La usan `CarpetaMadre.gs` y la vista | 057 |
+| `cargar_fuentes_compras(p_empresa_ruc, p_fuente, p_filas)` | Carga COMPRAS, COMEX, ALMACEN o COPIA y anota los cambios | 057 |
 | `carpetas_madre(p_empresa_ruc)` | `legajo_de_carpetas` + área responsable (por la carpeta madre), comprador, situación y forma de pago (del legajo por OC). La usa `CarpetaMadre.gs` | 052 |
 | `facturas_sin_oc(p_empresa_ruc, p_desde)` | Facturas recibidas sin OC unida, con señal ALTA (el proveedor trabaja con OC) o MEDIA (monto alto, no es gasto típico sin OC). Pestaña FACTURAS SIN OC de GENERAL | 052 |
 | `vinculos_oc()` | Cruza comprobantes con archivos de las carpetas de OC | 039, 040, 042, 045, 046, 048, 049, 050 |
@@ -430,6 +460,9 @@ Google**. Instalación de cada uno en `docs/appscript/README.md`.
 | `LecturaFacturas.gs` | Lee por OCR las facturas sin número en el nombre |
 | `SubirCapturaOC.gs` | Sube la captura de OC a la base (`cargar_captura_oc`) |
 | `LegajoPorOC.gs`, `SubirLegajo.gs`, `VistaLegajo.gs` + `TableroLegajo.html` | Legajo por OC y su tablero |
+| `CarpetaMadre.gs` | Pestañas CARPETA MADRE, FACTURAS SIN OC y su resumen en GENERAL (de `carpetas_madre_fuentes`) |
+| `CopiarFuentes.gs` | Va en la hoja **privada** de Contabilidad: copia de los originales la base de Compras, el STATUS de COMEX y el kardex de Almacén (00:45 y 11:15), sin contactos ni bancos, para que el robot los lea |
+| `AlertasLegajo.gs` | Avisos por correo a cada comprador (en pausa hasta validar la información) |
 
 **Cómo funciona el cruce con las OC:** la captura lista los archivos de cada
 carpeta de OC (con su enlace); la lectura saca RUC y serie-número del PDF

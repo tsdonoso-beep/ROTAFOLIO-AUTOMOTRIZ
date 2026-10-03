@@ -74,6 +74,17 @@
   .det-doc.falta { border-color: #F2C9C9; background: #FFF9F9; }
   .det-doc .archivos { margin-top: 4px; display: flex; flex-direction: column; gap: 2px; }
   .det-doc .archivos a { font-size: 12px; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .det-doc.porsubir { border-color: #EED3A6; background: #FFFAF1; }
+  .det-doc .m-p { color: var(--warn); }
+  .det-doc .evidencia { margin-top: 4px; font-size: 12px; color: var(--warn); line-height: 1.35; }
+  .det-doc .evidencia a { color: var(--warn); }
+  .det-fuentes { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 12px; margin-top: 14px; }
+  .det-fuente { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--surface); min-width: 0; }
+  .det-fuente h4 { margin: 0 0 8px; font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--text2); }
+  .det-fuente .det-info { grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)); gap: 8px 12px; }
+  .det-fuente .vale { font-size: 12.5px; padding: 6px 0; border-top: 1px dashed var(--border); }
+  .det-fuente .vale:first-of-type { border-top: 0; }
+  .det-fuente .vale.anulado { text-decoration: line-through; color: var(--text3); }
   .det-info { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px 18px; font-size: 13px; }
   .det-info span { display: block; font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--text3); margin-bottom: 2px; }
   .det-lista { font-size: 12.5px; margin-top: 12px; }
@@ -123,7 +134,7 @@
   .filtros label { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--text3); margin-right: -4px; }
   .filtros select { background: var(--surface); border: 1px solid var(--border2); border-radius: 9px; padding: 8px 10px; color: var(--text); }
   .segmento { display: inline-flex; background: var(--surface); border: 1px solid var(--border2); border-radius: 9px; padding: 3px; }
-  .segmento button { background: none; border: 0; padding: 6px 12px; border-radius: 7px; cursor: pointer; color: var(--text2); font-weight: 600; font-size: 12.5px; }
+  .segmento button { white-space: nowrap; background: none; border: 0; padding: 6px 12px; border-radius: 7px; cursor: pointer; color: var(--text2); font-weight: 600; font-size: 12.5px; }
   .segmento button.activo { background: var(--tinta); color: #fff; }
   .limpiar { background: none; border: 0; color: var(--azul); cursor: pointer; font-weight: 600; font-size: 12.5px; padding: 6px 4px; }
   .filtro-activo { font-size: 12px; color: var(--text2); margin-left: auto; }
@@ -263,7 +274,7 @@
     .factura { grid-template-columns: minmax(0, 1fr) auto; row-gap: 4px; }
     .factura > :nth-child(1), .factura > :nth-child(5) { display: none; }
   }
-  @media (max-width: 560px) { .kpis { grid-template-columns: 1fr; } }
+  @media (max-width: 560px) { .kpis { grid-template-columns: 1fr; } .barra-filtros .segmento { max-width: 100%; overflow-x: auto; } }
 </style>
 </head>
 <body>
@@ -427,7 +438,7 @@
       <div data-con-base style="display:none">
         <div class="barra-filtros">
           <div class="segmento" id="lArea"><button data-v="" class="activo">Todas</button><button data-v="0">Nacionales</button><button data-v="1">COMEX</button></div>
-          <div class="segmento" id="lEstado"><button data-v="INC" class="activo">Incompletas</button><button data-v="OK">Completas</button><button data-v="VACÍA">Vacías</button><button data-v="">Todas</button></div>
+          <div class="segmento" id="lEstado"><button data-v="INC" class="activo">Incompletas</button><button data-v="SUBIR" title="El documento existe en Almacén, COMEX o SUNAT, pero no está en la carpeta">◐ Por subir</button><button data-v="OK">Completas</button><button data-v="VACÍA">Vacías</button><button data-v="">Todas</button></div>
           <select id="lComprador"></select>
           <input class="buscador" id="lBuscar" type="search" placeholder="OC, proveedor, proyecto o lo que falta (guía, DAM…)">
         </div>
@@ -658,29 +669,50 @@
         (L.comprador === '' || (L.comprador === '-' ? !x[2] : x[2] === L.comprador));
     });
     var lista = delArea.filter(function (x) {
-      if (L.estado === 'INC' ? x[10] !== 'INCOMPLETA' : L.estado && x[10] !== L.estado) return false;
+      if (L.estado === 'SUBIR' ? !x[19] : L.estado === 'INC' ? x[10] !== 'INCOMPLETA' : L.estado && x[10] !== L.estado) return false;
       if (!palabras.length) return true;
-      var t = plano([x[5], x[6], x[7], x[8], x[2], x[11], x[12]].join(' '));
+      var t = plano([x[5], x[6], x[7], x[8], x[2], x[11], x[12], x[19]].join(' '));
       return palabras.every(function (w) { return t.indexOf(w) !== -1; });
     });
     var ok = delArea.filter(function (x) { return x[10] === 'OK'; }).length;
     var cuenta = function (re) { return delArea.filter(function (x) { return re.test(x[11]); }).length; };
+    // Lo que falta sin rastro en ningún lado (x[20]) y lo que existe en otro lado y solo falta subir (x[19]).
+    var sinRastro = function (re) { return delArea.filter(function (x) { return re.test(x[20] || ''); }).length; };
+    var porSubir = function (re) { return delArea.filter(function (x) { return re.test(x[19] || ''); }).length; };
+    var conFuentes = delArea.some(function (x) { return x[18]; });
     document.getElementById('lKpis').innerHTML =
       kpi('Carpetas de OC', miles(delArea.length), '<div class="kpi-extra">' + miles(new Set(delArea.map(function (x) { return x[5]; })).size) + ' OC distintas</div>') +
       kpi('Legajo completo', '<div class="kpi-anillo">' + anillo(pct(ok, delArea.length), '#00A298') + '<div class="kpi-extra" style="margin:0">' + miles(ok) + ' de ' + miles(delArea.length) + '<br>con todo lo que le corresponde</div></div>') +
-      kpi('Les falta la guía', miles(cuenta(/Guía/)), '<div class="kpi-extra">guía de remisión (bienes)</div>', 'kpi-riesgo') +
-      kpi('Les falta la factura', miles(cuenta(/Factura/)), '<div class="kpi-extra">acta: ' + miles(cuenta(/Acta/)) + ' · DAM: ' + miles(cuenta(/DAM/)) + ' · costeo: ' + miles(cuenta(/costeo/)) + '</div>') +
+      (conFuentes
+        ? kpi('Falta y no está en ningún lado', miles(delArea.filter(function (x) { return x[20]; }).length),
+            '<div class="kpi-extra">guía: ' + miles(sinRastro(/Guía/)) + ' · factura: ' + miles(sinRastro(/Factura/)) + ' · acta: ' + miles(sinRastro(/Acta/)) +
+            ' · DAM: ' + miles(sinRastro(/DAM/)) + ' · costeo: ' + miles(sinRastro(/costeo/)) + '</div>', 'kpi-riesgo') +
+          kpi('◐ Existe, falta subirla', miles(delArea.filter(function (x) { return x[19]; }).length),
+            '<div class="kpi-extra">guía en Almacén: ' + miles(porSubir(/Guía de remisión \(Almacén/)) + ' · DAM / costeo en COMEX: ' +
+            miles(porSubir(/(DAM|costeo) \(COMEX/)) + ' · factura en SUNAT: ' + miles(porSubir(/Factura \(SUNAT/)) + '<br>sigue incompleta hasta que esté en la carpeta</div>')
+        : kpi('Les falta la guía', miles(cuenta(/Guía/)), '<div class="kpi-extra">guía de remisión (bienes)</div>', 'kpi-riesgo') +
+          kpi('Les falta la factura', miles(cuenta(/Factura/)), '<div class="kpi-extra">acta: ' + miles(cuenta(/Acta/)) + ' · DAM: ' + miles(cuenta(/DAM/)) + ' · costeo: ' + miles(cuenta(/costeo/)) + '</div>')) +
       kpi('Sin factura de SUNAT', miles(delArea.filter(function (x) { return !x[13]; }).length), '<div class="kpi-extra">carpetas sin ninguna factura unida</div>');
-    document.getElementById('lNota').textContent = miles(lista.length) + ' carpetas · lectura del robot: ' + fechaHora(BASE.carpetas.reduce(function (m, x) { return x[17] > m ? x[17] : m; }, ''));
+    var fuentesLeidas = (BASE.copia || []).reduce(function (m, c) { return c.leido_en > m ? c.leido_en : m; }, '');
+    document.getElementById('lNota').textContent = miles(lista.length) + ' carpetas · lectura del robot: ' + fechaHora(BASE.carpetas.reduce(function (m, x) { return x[17] > m ? x[17] : m; }, '')) +
+      (fuentesLeidas ? ' · Compras, COMEX y Almacén: ' + fechaHora(fuentesLeidas) : '');
     var chip = function (x) {
-      return x[10] === 'OK' ? '<span class="chip chip-ok">Completo</span>' : x[10] === 'VACÍA' ? '<span class="chip chip-gris">Carpeta vacía</span>'
-        : '<span class="chip chip-warn">Falta: ' + esc(x[11]) + '</span>';
+      if (x[10] === 'OK') return '<span class="chip chip-ok">Completo</span>';
+      if (x[10] === 'VACÍA') return '<span class="chip chip-gris">Carpeta vacía</span>';
+      if (!x[19] && !x[20]) return '<span class="chip chip-rojo">Falta: ' + esc(x[11]) + '</span>';
+      // Rojo: no está en ningún lado. Ámbar ◐: existe (Almacén, COMEX o SUNAT), falta subirla a la carpeta.
+      var nombres = String(x[19] || '').split(' | ').filter(Boolean).map(function (t) { return t.replace(/ \(.*$/, ''); }).join(', ');
+      return (x[20] ? '<span class="chip chip-rojo">Falta: ' + esc(x[20]) + '</span> ' : '') +
+        (x[19] ? '<span class="chip chip-warn" title="' + esc(x[19].split(' | ').join('\n')) + '">◐ Por subir: ' + esc(nombres) + '</span>' : '');
     };
+    var fechaIso = function (t) { var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t || ''); return m ? m[3] + '/' + m[2] + '/' + m[1] : (t || ''); };
     document.getElementById('lTabla').innerHTML = lista.length ? '<table class="tabla"><thead><tr><th>OC</th><th>Proveedor</th><th>Comprador</th><th>Legajo</th><th class="num">Facturas SUNAT</th><th></th></tr></thead><tbody>' +
       lista.slice(0, L.cuantos).map(function (x) {
-        return '<tr class="fila-click' + (L.abierta === x.i ? ' abierta' : '') + '" data-i="' + x.i + '" title="Clic para ver sus documentos"><td><b>' + esc(x[5]) + '</b><div class="sub">' + esc(x[7]) + '</div></td>' +
+        return '<tr class="fila-click' + (L.abierta === x.i ? ' abierta' : '') + '" data-i="' + x.i + '" title="Clic para ver sus documentos"><td><b>' + esc(x[5]) + '</b><div class="sub">' + esc(x[7]) + '</div>' +
+            (x[22] || x[23] != null ? '<div class="sub" style="white-space:nowrap">' + esc(fechaIso(x[22])) + (x[23] != null ? ' · ' + montoCod(x[23], 'PEN') : '') + '</div>' : '') + '</td>' +
           '<td>' + esc(x[6]) + '<div class="sub" title="' + esc(x[12]) + '">' + esc(x[12]) + '</div></td>' +
-          '<td>' + (x[2] ? esc(x[2]) : '<span class="nota">por identificar</span>') + '<div class="sub">' + esc(x[1]) + (x[3] ? ' · ' + esc(x[3]) : '') + '</div></td>' +
+          '<td' + (x[21] ? ' title="Comprador según ' + esc(x[21]) + '"' : '') + '>' + (x[2] ? esc(x[2]) : '<span class="nota">por identificar</span>') +
+            '<div class="sub">' + esc(x[1]) + (x[3] ? ' · ' + esc(x[3]) : '') + '</div></td>' +
           '<td>' + chip(x) + (x[15] ? '<div class="sub">' + esc(fechaHora(x[16])) + ' · ' + esc(x[15]) + '</div>' : '') + '</td>' +
           '<td class="num">' + (x[13] || '—') + '</td><td>' + enlaceCarpeta(x[9]) + '</td></tr>' +
           (L.abierta === x.i ? '<tr class="detalle-carpeta"><td colspan="6" id="detalleCarpeta">' + detalleCarpeta(x) + '</td></tr>' : '');
@@ -717,17 +749,27 @@
     if (r.error) return '<p class="vacio">No se pudo leer el detalle: ' + esc(r.error) + '</p>';
     var d = r.d, c = d.carpeta || {}, lg = d.legajo || {}, impo = c.procedencia === 'Importación';
     var falta = String(c.le_falta || '');
+    // Lo que Compras, COMEX y Almacén dicen de esta OC; y, de cada documento, si ya existe en otro lado.
+    var fu = d.fuentes || {}, fc = fu.compras || {}, fx = fu.comex, vales = fu.almacen || [];
+    var existe = {};
+    (fu.por_subir || []).forEach(function (e) { existe[e.doc] = e; });
+    if (d.facturas.length) existe.FACTURA = { evidencia: 'SUNAT: ' + d.facturas.map(function (f) { return f.comprobante; }).join(', ') };
+    var fIso = function (t) { var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t || ''); return m ? m[3] + '/' + m[2] + '/' + m[1] : (t || ''); };
     var otros = d.archivos.filter(function (a) { return !a.docs.length; });
     var docs = DOCS_LEGAJO.map(function (k) {
       var suyos = d.archivos.filter(function (a) { return a.docs.indexOf(k[0]) >= 0; });
       var marca, clase = '';
       if (suyos.length) marca = 's';
       else if (k[2] === 'I' && !impo) marca = 'x';
+      else if (falta.indexOf(k[1]) >= 0 && existe[k[0]]) { marca = 'p'; clase = ' porsubir'; }
       else if (falta.indexOf(k[1]) >= 0) { marca = 'n'; clase = ' falta'; }
       else marca = 'o';
-      var icono = { s: '✓', n: '✗', x: '—', o: '○' }[marca];
-      var titulo = { s: 'lo tiene', n: 'falta', x: 'no le corresponde (solo importaciones)', o: 'no está (no se exige)' }[marca];
+      var icono = { s: '✓', n: '✗', p: '◐', x: '—', o: '○' }[marca];
+      var titulo = { s: 'lo tiene', n: 'falta y no está en ningún lado', p: 'existe en otro lado: falta subirla a la carpeta',
+        x: 'no le corresponde (solo importaciones)', o: 'no está (no se exige)' }[marca];
+      var ev = marca === 'p' ? existe[k[0]] : null;
       return '<div class="det-doc' + clase + '" title="' + titulo + '"><span class="det-marca m-' + marca + '">' + icono + '</span>' + esc(k[1]) +
+        (ev ? '<div class="evidencia">' + esc(ev.evidencia) + (ev.enlace ? ' · <a href="' + esc(ev.enlace) + '" target="_blank" rel="noopener">ver ↗</a>' : '') + '</div>' : '') +
         (suyos.length > 1 ? ' <span class="nota">(' + suyos.length + ')</span>' : '') +
         (suyos.length ? '<div class="archivos">' + suyos.slice(0, 4).map(function (a) {
           return '<a href="' + esc(a.url) + '" target="_blank" rel="noopener" title="' + esc(a.nombre) + '">↗ ' + esc(a.serie || a.nombre) + '</a>';
@@ -741,11 +783,14 @@
     return '<div class="det-docs">' + docs + '</div>' +
       '<div class="det-info">' +
         dato('Proyecto (carpeta)', c.proyecto) + dato('Centro de costo', (c.cc_codigo && c.cc_codigo !== '-' ? c.cc_codigo + ' ' : '') + (c.cc_nombre || '')) +
-        dato('Centro de costo según', c.cc_segun) + dato('Comprador', lg.comprador || x[2]) + dato('Área', lg.area || x[1]) +
-        dato('Fecha OC', lg.fecha_oc) + dato('Monto en soles', lg.monto_soles ? montoCod(Number(lg.monto_soles), 'PEN') : '') +
-        dato('Situación del pago', lg.situacion_pago) + dato('Forma de pago', lg.forma_pago) + dato('Estatus en el cuadro', [lg.estatus, lg.estado_aprobacion].filter(Boolean).join(' · ')) +
+        dato('Centro de costo según', c.cc_segun) + dato('Comprador', (lg.comprador || x[2]) + (!lg.comprador && x[21] ? ' (según ' + x[21] + ')' : '')) + dato('Área', lg.area || x[1]) +
+        dato('Fecha OC', lg.fecha_oc || fIso(fc.fecha)) +
+        dato('Monto en soles', lg.monto_soles ? montoCod(Number(lg.monto_soles), 'PEN') : fc.total_soles != null ? montoCod(Number(fc.total_soles), 'PEN') : '') +
+        dato('Situación del pago', lg.situacion_pago) + dato('Forma de pago', lg.forma_pago || [fc.forma_pago, fc.condicion_pago].filter(Boolean).join(' · ')) +
+        dato('Estatus en el cuadro', [lg.estatus, lg.estado_aprobacion].filter(Boolean).join(' · ')) +
         dato('Tipo', c.tipo === 'OS' ? 'Servicio (OS)' : 'Bien (OC)') + dato('Leída por el robot', fechaHora(c.leida)) +
       '</div>' +
+      bloqueFuentes(fu, fc, fx, vales, impo, c.tipo === 'OS', fIso, dato) +
       '<div class="det-lista"><b>Facturas de SUNAT unidas</b>' + (facturas.length ? facturas.join(' · ') : '<span class="nota">ninguna todavía</span>') + '</div>' +
       (otros.length ? '<div class="det-lista"><b>Otros archivos de la carpeta</b>' + otros.map(function (a) {
         return '<a href="' + esc(a.url) + '" target="_blank" rel="noopener">' + esc(a.nombre) + '</a>';
@@ -757,6 +802,69 @@
         return '<a href="' + esc(o.url) + '" target="_blank" rel="noopener">' + esc((o.proyecto ? o.proyecto + ' / ' : '') + o.nombre) + '</a>';
       }).join(' · ') + '</div>' : '') +
       '<div style="margin-top:14px"><a class="boton boton-accent" href="https://drive.google.com/drive/folders/' + esc(id) + '" target="_blank" rel="noopener">Abrir la carpeta de la OC ↗</a></div>';
+  }
+
+  /**
+   * Compras, COMEX y Almacén para una OC: la base de Compras (quién, cuánto,
+   * cómo se paga), el STATUS de COMEX (llegada, DAM, costeo) y los vales de
+   * Almacén (el ingreso con la guía o factura del proveedor). Más lo que
+   * cambió en esas fuentes. Lo copia la hoja privada de Contabilidad dos veces
+   * al día y lo sube el robot.
+   */
+  function bloqueFuentes(fu, fc, fx, vales, impo, servicio, fIso, dato) {
+    if (!fu || (!fu.compras && !fu.comex && !vales.length && !(fu.cambios || []).length)) {
+      return fu && fu.copia ? '<div class="det-lista"><b>Compras, COMEX y Almacén</b><span class="nota">Esta OC no aparece en la base de Compras, el STATUS de COMEX ni el kardex.</span></div>' : '';
+    }
+    var cajas = [];
+    if (fu.compras) {
+      cajas.push('<div class="det-fuente"><h4>Base de Compras' + (impo ? ' (importaciones)' : '') + '</h4><div class="det-info">' +
+        dato('Fecha', fIso(fc.fecha)) + dato('Elaborada por', fc.elaborado) + dato('Solicitado por', fc.solicitado) +
+        dato('Requerimiento', fc.requerimiento) +
+        dato('Total', fc.total != null ? (fc.moneda ? fc.moneda + ' ' : '') + Number(fc.total).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '') +
+        dato('Total en soles', fc.total_soles != null ? montoCod(Number(fc.total_soles), 'PEN') : '') +
+        dato('Forma de pago', [fc.forma_pago, fc.condicion_pago].filter(Boolean).join(' · ')) +
+        dato('Concepto', fc.concepto) + dato('Ítems', fc.items ? String(fc.items) : '') +
+        (impo ? dato('País', fc.pais) + dato('Incoterm', fc.incoterm) : dato('RUC', fc.proveedor_ruc) + dato('Entrega', fc.lugar_entrega)) +
+        '</div></div>');
+    } else {
+      cajas.push('<div class="det-fuente"><h4>Base de Compras</h4><span class="nota">La OC no está en la base de Compras.</span></div>');
+    }
+    if (impo) {
+      if (fx) {
+        var duas = (fx.duas || []).map(function (u) {
+          return esc(u.dua) + (u.fecha ? ' <span class="nota">(' + esc(fIso(u.fecha)) + (u.subio_oc ? ' · ¿subió OC? ' + esc(u.subio_oc) : '') + ')</span>' : '');
+        }).join('<br>');
+        cajas.push('<div class="det-fuente"><h4>STATUS de COMEX</h4><div class="det-info">' +
+          dato('Estado', fx.estado_compra) + dato('Comprador', fx.comprador) +
+          dato('Envío', [fx.modalidad, fx.operador].filter(Boolean).join(' · ')) + dato('ETA', fIso(fx.eta)) + dato('ATA', fIso(fx.ata)) +
+          dato('En planta', fIso(fx.fecha_real_planta) || (fx.fecha_aprox_planta ? 'aprox. ' + fIso(fx.fecha_aprox_planta) : '')) +
+          dato('Agente de aduanas', fx.agente_aduanas) + dato('DAM', fx.dam) + dato('Costeo', fx.costeo) +
+          (duas ? '<div><span>DUA (DUAS-SUNAT)</span>' + duas + '</div>' : '') +
+          dato('Observaciones', fx.observaciones) +
+          '</div></div>');
+      } else {
+        cajas.push('<div class="det-fuente"><h4>STATUS de COMEX</h4><span class="nota">La OC no está en el STATUS de COMEX.</span></div>');
+      }
+    }
+    var lineaVale = function (v) {
+      var doc = (v.tipo_documento ? v.tipo_documento.toLowerCase().replace('guia remision', 'guía') + ' ' : '') + (v.numero_documento || '');
+      return '<div class="vale' + (v.movimiento === 'ANULADO' ? ' anulado' : '') + '"><b>Vale ' + esc(v.vale) + '</b> · ' + esc(fIso(v.fecha)) +
+        (v.movimiento !== 'INGRESO' ? ' · ' + esc(v.movimiento) : '') + (doc.trim() ? ' · ' + esc(doc) : '') +
+        (v.items ? ' · ' + v.items + (v.items === 1 ? ' producto' : ' productos') + (v.cantidad ? ', ' + Number(v.cantidad).toLocaleString('es-PE') + ' und.' : '') : '') +
+        (v.recepcionado ? '<div class="nota">recibió ' + esc(v.recepcionado) + (v.registrado && v.registrado !== v.fecha ? ' · registrado el ' + esc(fIso(v.registrado)) : '') + '</div>' : '') +
+        (v.documento_url ? '<a href="' + esc(v.documento_url) + '" target="_blank" rel="noopener">ver el escaneo ↗</a>'
+          : v.tiene_escaneo ? '<span class="nota">escaneo en la app de Almacén</span>' : '') + '</div>';
+    };
+    cajas.push('<div class="det-fuente"><h4>Almacén (kardex)</h4>' + (vales.length ? vales.map(lineaVale).join('')
+      : '<span class="nota">' + (servicio ? 'Sin ingresos en Almacén (es un servicio).' : 'Almacén no registra ingresos con esta OC.') + '</span>') + '</div>');
+    var cambios = (fu.cambios || []).slice(0, 8).map(function (k) {
+      var campo = k.campo === 'NUEVO' ? 'nuevo ingreso' : k.campo === 'ELIMINADO' ? 'eliminado' : String(k.campo).replace(/_/g, ' ');
+      return '<span class="nota">' + esc(fechaHora(k.fecha)) + ' · ' + esc(k.fuente === 'ALMACEN' ? 'Almacén' : k.fuente === 'COMEX' ? 'COMEX' : 'Compras') + '</span> ' +
+        esc(campo) + ': ' + (k.antes ? esc(k.antes) + ' → ' : '') + esc(k.despues || '—');
+    });
+    return '<div class="det-fuentes">' + cajas.join('') + '</div>' +
+      (cambios.length ? '<div class="det-lista"><b>Cambios en Compras, COMEX y Almacén</b>' + cambios.join('<br>') + '</div>' : '') +
+      (fu.copia ? '<div class="nota" style="margin-top:6px">Compras, COMEX y Almacén: leído por el robot el ' + esc(fechaHora(fu.copia)) + '</div>' : '');
   }
 
   // ── Facturas sin OC ──

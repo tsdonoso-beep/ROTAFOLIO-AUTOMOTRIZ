@@ -198,7 +198,7 @@ export function comprasPorOc(filas: Celda[][] | undefined, procedencia: Proceden
 
 /** Una DAM o DUA como número limpio: «"03819266» → «03819266»; «DUA 235-2025-10-186036» → «235-2025-10-186036». */
 export function limpiarDam(t: Celda): string[] {
-  return texto(t).replace(/["'`]/g, "").replace(/^DUA\s*/i, "")
+  return texto(t).replace(/["'`*]/g, "").replace(/^DUA\s*/i, "")
     .split(/\s*(?:\/\/|\/|;|,|\sY\s)\s*/i).map(x => x.trim()).filter(x => /\d{3,}/.test(x));
 }
 

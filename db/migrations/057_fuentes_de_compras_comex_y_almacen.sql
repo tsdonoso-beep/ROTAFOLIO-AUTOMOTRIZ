@@ -124,13 +124,14 @@ begin
   if p_fuente = 'COMPRAS' then
     select count(*) into antes from fuente_compra_oc where empresa_ruc = p_empresa_ruc;
     borrar := antes = 0 or llegan >= antes / 2;
-    create temp table nuevo on commit drop as
+    -- Una tabla de paso por fuente (cada carga va en su propia transacción).
+    create temp table nuevo_compras on commit drop as
       select distinct on (x.procedencia, x.oc) x.* from jsonb_populate_recordset(null::fuente_compra_oc, p_filas) x
        where nullif(x.oc, '') is not null and x.procedencia in ('Nacional', 'Importación');
     if antes > 0 then
       insert into fuente_cambio (empresa_ruc, fuente, clave, oc, procedencia, campo, antes, despues)
       select p_empresa_ruc, 'COMPRAS', o.oc, o.oc, o.procedencia, c, to_jsonb(o)->>c, to_jsonb(x)->>c
-        from nuevo x join fuente_compra_oc o on o.empresa_ruc = p_empresa_ruc and o.procedencia = x.procedencia and o.oc = x.oc
+        from nuevo_compras x join fuente_compra_oc o on o.empresa_ruc = p_empresa_ruc and o.procedencia = x.procedencia and o.oc = x.oc
        cross join unnest(array['total_soles', 'moneda', 'proveedor_ruc', 'proveedor', 'forma_pago', 'elaborado', 'items']) c
        where coalesce(to_jsonb(o)->>c, '') is distinct from coalesce(to_jsonb(x)->>c, '')
          and not (c = 'total_soles' and abs(coalesce(o.total_soles, 0) - coalesce(x.total_soles, 0)) < 0.5);
@@ -139,13 +140,13 @@ begin
         insert into fuente_cambio (empresa_ruc, fuente, clave, oc, procedencia, campo, antes, despues)
         select p_empresa_ruc, 'COMPRAS', o.oc, o.oc, o.procedencia, 'ELIMINADO', o.proveedor || ' · S/ ' || coalesce(o.total_soles::text, '—'), null
           from fuente_compra_oc o
-         where o.empresa_ruc = p_empresa_ruc and not exists (select 1 from nuevo x where x.procedencia = o.procedencia and x.oc = o.oc);
+         where o.empresa_ruc = p_empresa_ruc and not exists (select 1 from nuevo_compras x where x.procedencia = o.procedencia and x.oc = o.oc);
         get diagnostics n = row_count; cambios := cambios + n;
       end if;
     end if;
     if borrar then
       delete from fuente_compra_oc o where o.empresa_ruc = p_empresa_ruc
-         and not exists (select 1 from nuevo x where x.procedencia = o.procedencia and x.oc = o.oc);
+         and not exists (select 1 from nuevo_compras x where x.procedencia = o.procedencia and x.oc = o.oc);
     end if;
     insert into fuente_compra_oc (empresa_ruc, procedencia, oc, oc_original, empresa, tipo_documento, fecha, requerimiento,
            proveedor_ruc, proveedor, pais, proyecto, concepto, moneda, total, total_soles, forma_pago, condicion_pago, incoterm,
@@ -153,7 +154,7 @@ begin
     select p_empresa_ruc, x.procedencia, x.oc, x.oc_original, x.empresa, x.tipo_documento, x.fecha, x.requerimiento,
            x.proveedor_ruc, x.proveedor, x.pais, x.proyecto, x.concepto, x.moneda, x.total, x.total_soles, x.forma_pago,
            x.condicion_pago, x.incoterm, x.lugar_entrega, x.tiempo_entrega, x.solicitado, x.elaborado, x.items, now()
-      from nuevo x
+      from nuevo_compras x
     on conflict (empresa_ruc, procedencia, oc) do update set
       oc_original = excluded.oc_original, empresa = excluded.empresa, tipo_documento = excluded.tipo_documento,
       fecha = excluded.fecha, requerimiento = excluded.requerimiento, proveedor_ruc = excluded.proveedor_ruc,
@@ -167,7 +168,8 @@ begin
   elsif p_fuente = 'COMEX' then
     select count(*) into antes from fuente_comex_oc where empresa_ruc = p_empresa_ruc;
     borrar := antes = 0 or llegan >= antes / 2;
-    create temp table nuevo on commit drop as
+    -- Una tabla de paso por fuente (cada carga va en su propia transacción).
+    create temp table nuevo_comex on commit drop as
       select distinct on (x.oc) x.* from jsonb_populate_recordset(null::fuente_comex_oc, p_filas) x
        where nullif(x.oc, '') is not null;
     if antes > 0 then
@@ -175,7 +177,7 @@ begin
       select p_empresa_ruc, 'COMEX', o.oc, o.oc, 'Importación', c,
              case c when 'duas' then (select string_agg(d->>'dua', ' / ') from jsonb_array_elements(o.duas) d) else to_jsonb(o)->>c end,
              case c when 'duas' then (select string_agg(d->>'dua', ' / ') from jsonb_array_elements(coalesce(x.duas, '[]')) d) else to_jsonb(x)->>c end
-        from nuevo x join fuente_comex_oc o on o.empresa_ruc = p_empresa_ruc and o.oc = x.oc
+        from nuevo_comex x join fuente_comex_oc o on o.empresa_ruc = p_empresa_ruc and o.oc = x.oc
        cross join unnest(array['estado_compra', 'fecha_real_planta', 'agente_aduanas', 'dam', 'costeo', 'comprador', 'duas']) c
        where case c when 'duas' then (select coalesce(string_agg(d->>'dua', ' / '), '') from jsonb_array_elements(o.duas) d)
                                is distinct from (select coalesce(string_agg(d->>'dua', ' / '), '') from jsonb_array_elements(coalesce(x.duas, '[]')) d)
@@ -183,7 +185,7 @@ begin
       get diagnostics n = row_count; cambios := cambios + n;
     end if;
     if borrar then
-      delete from fuente_comex_oc o where o.empresa_ruc = p_empresa_ruc and not exists (select 1 from nuevo x where x.oc = o.oc);
+      delete from fuente_comex_oc o where o.empresa_ruc = p_empresa_ruc and not exists (select 1 from nuevo_comex x where x.oc = o.oc);
     end if;
     insert into fuente_comex_oc (empresa_ruc, oc, oc_original, empresa, comprador, estado_compra, fecha_oc, proveedor, origen,
            incoterm, modalidad, operador, awb_bl, etd, eta, ata, fecha_aprox_planta, fecha_real_planta, documentos_enviados,
@@ -191,7 +193,7 @@ begin
     select p_empresa_ruc, x.oc, x.oc_original, x.empresa, x.comprador, x.estado_compra, x.fecha_oc, x.proveedor, x.origen,
            x.incoterm, x.modalidad, x.operador, x.awb_bl, x.etd, x.eta, x.ata, x.fecha_aprox_planta, x.fecha_real_planta,
            x.documentos_enviados, x.agente_aduanas, x.dam, x.costeo, x.observaciones, x.embarques, coalesce(x.duas, '[]'), now()
-      from nuevo x
+      from nuevo_comex x
     on conflict (empresa_ruc, oc) do update set
       oc_original = excluded.oc_original, empresa = excluded.empresa, comprador = excluded.comprador,
       estado_compra = excluded.estado_compra, fecha_oc = excluded.fecha_oc, proveedor = excluded.proveedor,
@@ -206,7 +208,8 @@ begin
   elsif p_fuente = 'ALMACEN' then
     select count(*) into antes from kardex_vale where empresa_ruc = p_empresa_ruc;
     borrar := antes = 0 or llegan >= antes / 2;
-    create temp table nuevo on commit drop as
+    -- Una tabla de paso por fuente (cada carga va en su propia transacción).
+    create temp table nuevo_almacen on commit drop as
       select distinct on (x.id) x.* from jsonb_populate_recordset(null::kardex_vale, p_filas) x
        where nullif(x.id, '') is not null;
     if antes > 0 then
@@ -214,7 +217,7 @@ begin
       insert into fuente_cambio (empresa_ruc, fuente, clave, oc, procedencia, campo, antes, despues)
       select p_empresa_ruc, 'ALMACEN', o.id, coalesce(nullif(x.oc, ''), o.oc), coalesce(nullif(x.procedencia, ''), o.procedencia),
              c, to_jsonb(o)->>c, to_jsonb(x)->>c
-        from nuevo x join kardex_vale o on o.empresa_ruc = p_empresa_ruc and o.id = x.id
+        from nuevo_almacen x join kardex_vale o on o.empresa_ruc = p_empresa_ruc and o.id = x.id
        cross join unnest(array['movimiento', 'operacion', 'tipo_documento', 'numero_documento', 'numero_orden', 'fecha_operacion',
                                'items', 'cantidad', 'documento_ruta']) c
        where coalesce(to_jsonb(o)->>c, '') is distinct from coalesce(to_jsonb(x)->>c, '');
@@ -223,7 +226,7 @@ begin
       insert into fuente_cambio (empresa_ruc, fuente, clave, oc, procedencia, campo, antes, despues)
       select p_empresa_ruc, 'ALMACEN', x.id, x.oc, x.procedencia, 'NUEVO', null,
              'Vale ' || x.vale || ' · ' || coalesce(nullif(x.tipo_documento, ''), 'documento') || ' ' || coalesce(x.numero_documento, '')
-        from nuevo x
+        from nuevo_almacen x
        where nullif(x.oc, '') is not null and not exists (select 1 from kardex_vale o where o.empresa_ruc = p_empresa_ruc and o.id = x.id);
       get diagnostics n = row_count; cambios := cambios + n;
       if borrar then
@@ -231,12 +234,12 @@ begin
         select p_empresa_ruc, 'ALMACEN', o.id, o.oc, o.procedencia, 'ELIMINADO',
                'Vale ' || o.vale || ' · ' || coalesce(nullif(o.tipo_documento, ''), 'documento') || ' ' || coalesce(o.numero_documento, ''), null
           from kardex_vale o
-         where o.empresa_ruc = p_empresa_ruc and not exists (select 1 from nuevo x where x.id = o.id);
+         where o.empresa_ruc = p_empresa_ruc and not exists (select 1 from nuevo_almacen x where x.id = o.id);
         get diagnostics n = row_count; cambios := cambios + n;
       end if;
     end if;
     if borrar then
-      delete from kardex_vale o where o.empresa_ruc = p_empresa_ruc and not exists (select 1 from nuevo x where x.id = o.id);
+      delete from kardex_vale o where o.empresa_ruc = p_empresa_ruc and not exists (select 1 from nuevo_almacen x where x.id = o.id);
     end if;
     insert into kardex_vale (empresa_ruc, id, vale, fecha_registro, fecha_operacion, movimiento, operacion, proveedor,
            tipo_documento, numero_documento, tipo_orden, numero_orden, oc, procedencia, proyecto, sede, responsable,
@@ -245,7 +248,7 @@ begin
            x.tipo_documento, x.numero_documento, x.tipo_orden, x.numero_orden, nullif(x.oc, ''), nullif(x.procedencia, ''),
            x.proyecto, x.sede, x.responsable, x.recepcionado, x.documento_ruta, x.documento_url, x.vale_url, x.items,
            x.cantidad, now()
-      from nuevo x
+      from nuevo_almacen x
     on conflict (empresa_ruc, id) do update set
       vale = excluded.vale, fecha_registro = excluded.fecha_registro, fecha_operacion = excluded.fecha_operacion,
       movimiento = excluded.movimiento, operacion = excluded.operacion, proveedor = excluded.proveedor,

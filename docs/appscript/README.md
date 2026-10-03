@@ -605,8 +605,8 @@ estas partes.
 ## La carpeta madre en GENERAL
 
 `CarpetaMadre.gs` va en el proyecto de Apps Script de la hoja **GENERAL**.
-Trae de la base (`legajo_de_carpetas()`, migración 051) lo que el robot de
-las 02:00 (`carpetas-oc`) leyó de las dos carpetas madre de compras, y deja
+Trae de la base (`carpetas_madre_fuentes()`, migraciones 051, 052 y 057) lo que el robot de
+las 01:17 y 11:47 (`carpetas-oc`) leyó de las dos carpetas madre de compras, y deja
 dos pestañas que reemplaza cada vez:
 
 - **CARPETA MADRE**: una fila por carpeta de OC (nacionales e importaciones)
@@ -650,6 +650,49 @@ puede seguir figurando como pendiente.
 El DETALLE de SUNAT suma, al final, «Proyecto de la OC», «Centro de costo
 según» y «Documentos de la OC», de la misma carpeta madre
 (`detalle_cpe_carpeta()`, migración 051).
+
+Desde la migración 057 trae `carpetas_madre_fuentes()`: además, de lo que
+le falta a cada carpeta, qué **ya existe en otro lado** y solo falta subir
+(columna «Existe, falta subirla»: la guía que registró Almacén, la DAM o el
+costeo de COMEX, la factura que ya está en SUNAT; en ámbar) y qué falta sin
+rastro en ningún lado (en rojo); fecha y monto de la OC según la base de
+Compras, comprador si el legajo no lo sabe, ingreso a Almacén y llegada a
+planta según COMEX. Sale de la hoja privada de Contabilidad (abajo).
+
+## Las fuentes de Compras, COMEX y Almacén (hoja privada)
+
+`CopiarFuentes.gs` va en una hoja **de la unidad de Contabilidad, no
+compartida con el equipo** (es información sensible). Con los permisos de
+quien la instala, copia dos veces al día (00:45 y 11:15, antes de que el
+robot lea a las 01:17 y 11:47) solo las columnas que se usan de:
+
+- la base de datos **nacionales** de Compras (BD-2026);
+- el **STATUS DE CARGAS** de COMEX: STATUS, BASE DE DATOS IMPORTACIONES y
+  DUAS-SUNAT (sus dos tablas, una debajo de la otra);
+- la base **original** del kardex de Almacén (BASE DE DATOS INROPRIN, no una
+  copia con IMPORTRANGE): KARDEX y DOCUMENTO (una fila por vale, con la guía
+  o factura que Almacén escaneó al recibir). Solo ingresos por compra,
+  servicio o devolución y anulados; las salidas no.
+
+Quedan fuera contactos, teléfonos, correos, direcciones, bancos y TAX ID.
+Copia valores (no fórmulas): si una fuente falla, su pestaña se queda con la
+copia anterior y el error queda en **COPIA - ESTADO**. Busca además en el
+Drive de quien la instala los PDF escaneados de Almacén (carpeta
+`DOCUMENTO_Files_` de su app) para dejar su enlace; si no tiene acceso, el
+enlace queda vacío.
+
+### Cómo se instala
+
+1. En la hoja privada → **Extensiones → Apps Script** → archivo
+   «CopiarFuentes» → pega y guarda.
+2. **instalarCopiaFuentes → Ejecutar** → acepta los permisos (leer las hojas
+   de origen, escribir en esta y ver tu Drive para hallar los escaneos). Copia
+   en ese momento y la deja programada. Menú **Fuentes → Copiar ahora**.
+3. Comparte la hoja como **Lector solo** con la cuenta de servicio del robot.
+
+El robot la lee en `scripts/fuentes-compras.mts` (paso «Leer las fuentes de
+Compras, COMEX y Almacén» de `carpetas-oc.yml`, o solo con
+`fuentes-compras.yml`).
 
 ## Si algo falla
 

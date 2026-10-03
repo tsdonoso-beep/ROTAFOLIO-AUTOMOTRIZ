@@ -2,14 +2,20 @@
  * La carpeta madre de compras, en la hoja GENERAL
  * --------------------------------------------------------------------------
  *
- * Trae de la base (función carpetas_madre) lo que el robot de cada noche
+ * Trae de la base (función carpetas_madre_fuentes) lo que el robot de cada noche
  * (`scripts/carpetas-oc.mts`, 02:00) leyó de las dos carpetas madre de
  * compras: «5. Ordenes de Compra» (nacionales) e importaciones. Una fila por
  * carpeta de OC:
  *   · a quién le toca completarlo: el área (nacionales → Compras
  *     nacionales; importaciones → COMEX) y, si el legajo por OC lo sabe, el
  *     comprador, la situación del pago y la forma de pago;
- *   · su legajo: qué documentos tiene, qué le falta y su estado;
+ *   · su legajo: qué documentos tiene, qué le falta y su estado; y, de lo que
+ *     le falta, qué ya existe en otro lado y solo falta subir a la carpeta
+ *     (la guía que Almacén registró, la DAM o el costeo de COMEX, la factura
+ *     que ya está en SUNAT): «Por subir». Sigue contando como incompleta;
+ *   · los datos de la OC según la base de Compras y COMEX (fecha, monto,
+ *     comprador si el legajo no lo sabe, llegada a planta, ingreso a Almacén),
+ *     que la hoja privada de Contabilidad copia dos veces al día;
  *   · su centro de costo y de dónde salió (CG, cuadro, su carpeta de
  *     proyecto, el nombre de la carpeta o el área administrativa);
  *   · las facturas de SUNAT que ya quedaron unidas a la OC;
@@ -64,19 +70,29 @@ var CM_COLUMNAS = [
   ['OC', 'oc'],
   ['Área responsable', 'area_responsable'],
   ['Comprador', 'comprador'],
+  ['Comprador según', 'comprador_segun'],
   ['Situación del pago', 'situacion_pago'],
   ['Forma de pago', 'forma_pago'],
+  ['Fecha OC', 'fecha_oc'],
+  ['Monto OC (S/)', 'monto_soles'],
   ['Tipo', 'tipo'],
   ['Proveedor', 'proveedor'],
   ['Proyecto (carpeta)', 'proyecto_carpeta'],
   ['Carpeta de la OC', 'carpeta_nombre'],
   ['Legajo', 'estado'],
+  ['Estado del legajo', 'estado_detalle'],
   ['Le falta', 'le_falta'],
+  ['Falta y no está en ningún lado', 'falta_sin_rastro'],
+  ['Existe, falta subirla (dónde está)', 'por_subir'],
   ['Documentos en la carpeta', 'documentos'],
   ['Archivos', 'archivos'],
   ['Comprobantes en la carpeta', 'series'],
   ['Facturas SUNAT unidas', 'facturas_sunat'],
   ['N.º facturas SUNAT', 'facturas_sunat_n'],
+  ['Ingreso a Almacén', 'ingreso_almacen'],
+  ['Estado en COMEX', 'estado_comex'],
+  ['Llegada a planta (COMEX)', 'llegada_planta'],
+  ['Cambios en Compras, COMEX o Almacén (30 días)', 'cambios_fuentes'],
   ['Centro de costo (código)', 'cc_codigo'],
   ['Centro de costo', 'cc_nombre'],
   ['Centro de costo según', 'centro_costo_segun'],
@@ -170,7 +186,8 @@ function traerCarpetaMadre_(siNoEs) {
     var token = sesionCarpetaMadre_(cfg);
     var filas = [];
     for (var desde = 0; ; desde += CM_PAGINA) {
-      var parte = rpcCarpetaMadre_(cfg, token, 'carpetas_madre', { p_empresa_ruc: CM_RUC },
+      // Las carpetas con lo que dicen Compras, COMEX y Almacén (la hoja privada de Contabilidad).
+      var parte = rpcCarpetaMadre_(cfg, token, 'carpetas_madre_fuentes', { p_empresa_ruc: CM_RUC },
         '?order=procedencia.desc,oc,carpeta_url&limit=' + CM_PAGINA + '&offset=' + desde);
       filas = filas.concat(parte);
       if (parte.length < CM_PAGINA) break;
@@ -211,15 +228,21 @@ function escribirDetalleCarpetaMadre_(libro, filas) {
       if (c[1] === 'en_cg') return f.procedencia === 'Importación' ? 'No aplica (cuadro)' : v ? 'Sí' : 'No';
       if (c[1] === 'comprador' && !v) return 'Por identificar';
       if (c[1] === 'ultimo_cambio_fecha' || c[1] === 'cargado_en') return Utilities.formatDate(new Date(v), zona, 'dd/MM/yyyy HH:mm');
+      if ((c[1] === 'fecha_oc' || c[1] === 'ingreso_almacen' || c[1] === 'llegada_planta') && /^\d{4}-\d{2}-\d{2}/.test(v)) {
+        return String(v).replace(/^(\d{4})-(\d{2})-(\d{2}).*/, '$3/$2/$1');
+      }
+      if (c[1] === 'por_subir') return String(v).split(' | ').join('\n');
+      if (c[1] === 'monto_soles') return Number(v);
       if (typeof v === 'string') return v.trim();
       return v;
     });
   }));
   // Todo como texto (que «0001-2026» no se vuelva fecha), menos los números.
   hoja.getRange(1, 1, valores.length, CM_COLUMNAS.length).setNumberFormat('@');
-  [cmCol_('archivos'), cmCol_('facturas_sunat_n')].forEach(function (c) {
+  [cmCol_('archivos'), cmCol_('facturas_sunat_n'), cmCol_('cambios_fuentes')].forEach(function (c) {
     hoja.getRange(2, c, Math.max(valores.length - 1, 1), 1).setNumberFormat('0');
   });
+  hoja.getRange(2, cmCol_('monto_soles'), Math.max(valores.length - 1, 1), 1).setNumberFormat('#,##0.00');
   hoja.getRange(1, 1, valores.length, CM_COLUMNAS.length).setValues(valores);
 
   // El nombre de la carpeta, con su enlace.
@@ -233,10 +256,12 @@ function escribirDetalleCarpetaMadre_(libro, filas) {
   hoja.getRange(2, cCarpeta, enlaces.length, 1).setRichTextValues(enlaces);
 
   // Colores del legajo, como en la vista del legajo.
-  var cEstado = cmCol_('estado');
+  // Rojo claro: falta y no está en ningún lado. Ámbar: existe en Almacén, COMEX o SUNAT y solo falta subirla.
+  var cEstado = cmCol_('estado'), cDetalle = cmCol_('estado_detalle');
   var fondos = filas.map(function (f) {
     var color = f.estado === 'OK' ? '#d9ead3' : f.estado === 'VACÍA' ? '#efefef' : '#fce5cd';
-    return CM_COLUMNAS.map(function (_, i) { return i + 1 === cEstado ? color : null; });
+    var detalle = f.estado_detalle === 'Por subir' ? '#fff2cc' : f.estado_detalle === 'Falta y por subir' ? '#fce5cd' : color;
+    return CM_COLUMNAS.map(function (_, i) { return i + 1 === cEstado ? color : i + 1 === cDetalle ? detalle : null; });
   });
   hoja.getRange(2, 1, fondos.length, CM_COLUMNAS.length).setBackgrounds(fondos);
 
@@ -245,7 +270,7 @@ function escribirDetalleCarpetaMadre_(libro, filas) {
   hoja.setFrozenColumns(2);
   hoja.getRange(1, 1, valores.length, CM_COLUMNAS.length).createFilter();
   hoja.autoResizeColumns(1, 4);
-  ['proyecto_carpeta', 'carpeta_nombre', 'le_falta', 'documentos', 'series', 'facturas_sunat', 'cc_nombre',
+  ['proyecto_carpeta', 'carpeta_nombre', 'le_falta', 'falta_sin_rastro', 'por_subir', 'documentos', 'series', 'facturas_sunat', 'cc_nombre',
     'centro_costo_segun', 'ultimo_cambio', 'misma_oc_en_otra_carpeta'].forEach(function (k) { hoja.setColumnWidth(cmCol_(k), 220); });
 }
 
@@ -282,7 +307,7 @@ function escribirResumenCarpetaMadre_(libro, filas, sinOc) {
   var cuenta = {};
   grupos.forEach(function (g) {
     cuenta[g] = { carpetas: 0, ocs: {}, ok: 0, incompletas: 0, vacias: 0, conFactura: 0, enCg: 0,
-      factura: 0, guia: 0, acta: 0, dam: 0, sinCc: 0, fuentes: {} };
+      factura: 0, guia: 0, acta: 0, dam: 0, sinCc: 0, fuentes: {}, porSubir: 0, sinRastro: 0, guiaAlmacen: 0 };
   });
   filas.forEach(function (f) {
     [f.procedencia, 'Total'].forEach(function (g) {
@@ -298,6 +323,9 @@ function escribirResumenCarpetaMadre_(libro, filas, sinOc) {
       if (/Guía/.test(falta)) c.guia++;
       if (/Acta/.test(falta)) c.acta++;
       if (/DAM/.test(falta)) c.dam++;
+      if (f.por_subir) c.porSubir++;
+      if (f.falta_sin_rastro) c.sinRastro++;
+      if (/Guía de remisión \(Almacén/.test(f.por_subir || '')) c.guiaAlmacen++;
       if (!f.cc_nombre) c.sinCc++;
       var s = f.centro_costo_segun || 'Sin asignar';
       c.fuentes[s] = (c.fuentes[s] || 0) + 1;
@@ -318,6 +346,9 @@ function escribirResumenCarpetaMadre_(libro, filas, sinOc) {
     fila('Carpeta vacía', function (c) { return c.vacias; }),
     fila('   … les falta la factura', function (c) { return c.factura; }),
     fila('   … les falta la guía de remisión', function (c) { return c.guia; }),
+    fila('   … de ellas, Almacén ya registró la guía (falta subirla)', function (c) { return c.guiaAlmacen; }),
+    fila('   … ◐ algo de lo que falta ya existe en otro lado (por subir)', function (c) { return c.porSubir; }),
+    fila('   … falta algo que no está en ningún lado', function (c) { return c.sinRastro; }),
     fila('   … les falta el acta de conformidad', function (c) { return c.acta; }),
     fila('   … les falta la DAM', function (c) { return c.dam; }),
     fila('Con factura de SUNAT unida', function (c) { return c.conFactura; }),
