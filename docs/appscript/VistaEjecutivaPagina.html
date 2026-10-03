@@ -34,9 +34,6 @@
   .lat-sub { font-size: 12px; color: var(--text3); margin-top: 2px; }
   .lat-bloque { display: flex; flex-direction: column; gap: 8px; }
   .lat-rotulo { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--text3); }
-  .lat-bloque select { width: 100%; background: var(--surface); border: 1px solid var(--border2); border-radius: 9px; padding: 8px 10px; color: var(--text); }
-  .lat-bloque .segmento { display: flex; flex-wrap: wrap; }
-  .lat-bloque .segmento button { flex: 1 1 auto; }
   .nav { display: flex; flex-direction: column; gap: 2px; }
   .nav button { display: flex; align-items: center; gap: 10px; width: 100%; background: none; border: 0; border-radius: 10px; padding: 9px 10px;
                 cursor: pointer; color: var(--text2); font-weight: 600; font-size: 13.5px; text-align: left; }
@@ -50,7 +47,6 @@
   .principal { padding: 22px 28px 40px; min-width: 0; }
   .encabezado { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
   .encabezado h1 { font-family: "Sora", sans-serif; font-size: 21px; font-weight: 800; margin: 0; }
-  .encabezado .filtro-activo { margin: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px; }
   .nav .insignia-gris { background: var(--surface3); color: var(--text2); }
   .nav .insignia-verde { background: var(--accent); }
   .barra-filtros { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
@@ -61,7 +57,6 @@
   .tabla a.abrir { font-size: 12.5px; font-weight: 600; text-decoration: none; padding: 4px 9px; border-radius: 7px; background: var(--azul-suave); color: var(--azul); white-space: nowrap; }
   .cargando-base { display: flex; align-items: center; gap: 10px; color: var(--text2); padding: 30px 4px; }
   .dia { font-family: "Sora", sans-serif; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent-texto); margin: 16px 0 6px; }
-  .lat-filtros.apagado { opacity: .4; pointer-events: none; }
   /* Detalle de una carpeta (Legajo por OC → clic en la fila) */
   .tabla tr.fila-click { cursor: pointer; }
   .tabla tr.fila-click:hover td, .tabla tr.fila-click.abierta td { background: var(--surface2); }
@@ -148,7 +143,7 @@
   .kpi-riesgo { border-color: #F2C9C9; background: linear-gradient(180deg, #FFF 0%, #FFF7F7 100%); }
   .kpi-riesgo .kpi-valor { color: var(--danger); }
   .kpi-anillo { display: flex; align-items: center; gap: 14px; }
-  .chispa { display: block; margin-top: 10px; }
+  .chispa { display: block; margin-top: 10px; max-width: 100%; height: auto; }
   .variacion { font-weight: 700; }
   .sube { color: var(--danger); } .baja { color: var(--ok); } .igual { color: var(--text3); }
 
@@ -187,7 +182,7 @@
   .dona-leyenda { flex: 1; min-width: 180px; display: flex; flex-direction: column; gap: 10px; }
   .ley { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; }
   .ley i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 8px; vertical-align: -1px; }
-  .ley b { font-variant-numeric: tabular-nums; }
+  .ley b { font-variant-numeric: tabular-nums; white-space: nowrap; }
 
   /* Barras */
   .fila-barra { margin-bottom: 11px; border-radius: 8px; padding: 4px 6px; margin-left: -6px; margin-right: -6px; }
@@ -254,11 +249,8 @@
 
   @media (max-width: 900px) {
     /* En el celular el menú pasa arriba: filtros en una fila y las secciones como pestañas. */
-    .app { grid-template-columns: 1fr; }
+    .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
     .lateral { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--border); padding: 14px 16px; gap: 12px; }
-    .lat-filtros { flex-direction: row; flex-wrap: wrap; align-items: center; }
-    .lat-filtros .lat-rotulo { display: none; }
-    .lat-filtros select { width: auto; }
     .nav { flex-direction: row; overflow-x: auto; }
     .nav button { width: auto; white-space: nowrap; }
     .lat-pie { display: none; }
@@ -274,7 +266,13 @@
     .factura { grid-template-columns: minmax(0, 1fr) auto; row-gap: 4px; }
     .factura > :nth-child(1), .factura > :nth-child(5) { display: none; }
   }
-  @media (max-width: 560px) { .kpis { grid-template-columns: 1fr; } .barra-filtros .segmento { max-width: 100%; overflow-x: auto; } }
+  /* Las tablas anchas se desplazan dentro de su tarjeta (en el celular), sin mover toda la página. */
+  #lTabla, #sTabla, #detLista, #cLista { overflow-x: auto; }
+  @media (max-width: 560px) {
+    .kpis { grid-template-columns: 1fr; }
+    .segmento { max-width: 100%; overflow-x: auto; }
+    .tarjeta { padding: 16px 14px; }
+  }
 </style>
 </head>
 <body>
@@ -317,16 +315,8 @@
       <div class="lat-sub">Comprobantes con detalle · Contabilidad</div>
     </div>
 
-    <div class="lat-bloque lat-filtros">
-      <div class="lat-rotulo">Filtros</div>
-      <select id="fMes" aria-label="Mes"></select>
-      <div class="segmento" id="fOrigen"><button data-v="0" class="activo">Compras</button><button data-v="1">Ventas</button></div>
-      <div class="segmento" id="fMoneda"></div>
-      <button class="limpiar" id="fLimpiar" style="align-self:flex-start">Quitar filtros</button>
-    </div>
-
     <div class="lat-bloque">
-      <div class="lat-rotulo">Secciones</div>
+      <div class="lat-rotulo">Comprobantes SUNAT</div>
       <nav class="nav" id="nav">
       <button data-vista="resumen" class="activo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg><span>Resumen</span></button>
       <button data-vista="impuestos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 5 5 19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg><span>Impuestos</span><span class="insignia" id="insigniaImpuestos" style="display:none"></span></button>
@@ -358,6 +348,14 @@
   <main class="principal">
     <div class="encabezado">
       <h1 id="tituloSeccion">Resumen</h1>
+    </div>
+    <!-- Los filtros de SUNAT: solo en las secciones que los usan (Resumen, Impuestos, Proveedores, OC y centros de costo).
+         Las demás tienen los suyos (Buscar factura, Precios, Legajo, Facturas sin OC, Cambios). -->
+    <div class="barra-filtros filtros-sunat" id="filtrosSunat">
+      <select id="fMes" aria-label="Mes"></select>
+      <div class="segmento" id="fOrigen"><button data-v="0" class="activo">Compras</button><button data-v="1">Ventas</button></div>
+      <div class="segmento" id="fMoneda"></div>
+      <button class="limpiar" id="fLimpiar">Quitar filtros</button>
       <span class="filtro-activo" id="fResumen"></span>
     </div>
 
@@ -720,7 +718,6 @@
       return (x[20] ? '<span class="chip chip-rojo">Falta: ' + esc(x[20]) + '</span> ' : '') +
         (x[19] ? '<span class="chip chip-warn" title="' + esc(x[19].split(' | ').join('\n')) + '">◐ Por subir: ' + esc(nombres) + '</span>' : '');
     };
-    var fechaIso = function (t) { var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t || ''); return m ? m[3] + '/' + m[2] + '/' + m[1] : (t || ''); };
     document.getElementById('lTabla').innerHTML = lista.length ? '<table class="tabla"><thead><tr><th>OC</th><th>Proveedor</th><th>Comprador</th><th>Legajo</th><th class="num">Facturas SUNAT</th><th></th></tr></thead><tbody>' +
       lista.slice(0, L.cuantos).map(function (x) {
         return '<tr class="fila-click' + (L.abierta === x.i ? ' abierta' : '') + '" data-i="' + x.i + '" title="Clic para ver sus documentos"><td><b>' + esc(x[5]) + '</b><div class="sub">' + esc(x[7]) + '</div>' +
@@ -769,7 +766,6 @@
     var existe = {};
     (fu.por_subir || []).forEach(function (e) { existe[e.doc] = e; });
     if (d.facturas.length) existe.FACTURA = { evidencia: 'SUNAT: ' + d.facturas.map(function (f) { return f.comprobante; }).join(', ') };
-    var fIso = function (t) { var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t || ''); return m ? m[3] + '/' + m[2] + '/' + m[1] : (t || ''); };
     var otros = d.archivos.filter(function (a) { return !a.docs.length; });
     var docs = DOCS_LEGAJO.map(function (k) {
       var suyos = d.archivos.filter(function (a) { return a.docs.indexOf(k[0]) >= 0; });
@@ -799,13 +795,13 @@
       '<div class="det-info">' +
         dato('Proyecto (carpeta)', c.proyecto) + dato('Centro de costo', (c.cc_codigo && c.cc_codigo !== '-' ? c.cc_codigo + ' ' : '') + (c.cc_nombre || '')) +
         dato('Centro de costo según', c.cc_segun) + dato('Comprador', (lg.comprador || x[2]) + (!lg.comprador && x[21] ? ' (según ' + x[21] + ')' : '')) + dato('Área', lg.area || x[1]) +
-        dato('Fecha OC', lg.fecha_oc || fIso(fc.fecha)) +
+        dato('Fecha OC', lg.fecha_oc || fechaIso(fc.fecha)) +
         dato('Monto en soles', lg.monto_soles ? montoCod(Number(lg.monto_soles), 'PEN') : fc.total_soles != null ? montoCod(Number(fc.total_soles), 'PEN') : '') +
         dato('Situación del pago', lg.situacion_pago) + dato('Forma de pago', lg.forma_pago || [fc.forma_pago, fc.condicion_pago].filter(Boolean).join(' · ')) +
         dato('Estatus en el cuadro', [lg.estatus, lg.estado_aprobacion].filter(Boolean).join(' · ')) +
         dato('Tipo', c.tipo === 'OS' ? 'Servicio (OS)' : 'Bien (OC)') + dato('Leída por el robot', fechaHora(c.leida)) +
       '</div>' +
-      bloqueFuentes(fu, fc, fx, vales, impo, c.tipo === 'OS', fIso, dato) +
+      bloqueFuentes(fu, fc, fx, vales, impo, c.tipo === 'OS', dato) +
       '<div class="det-lista"><b>Facturas de SUNAT unidas</b>' + (facturas.length ? facturas.join(' · ') : '<span class="nota">ninguna todavía</span>') + '</div>' +
       (otros.length ? '<div class="det-lista"><b>Otros archivos de la carpeta</b>' + otros.map(function (a) {
         return '<a href="' + esc(a.url) + '" target="_blank" rel="noopener">' + esc(a.nombre) + '</a>';
@@ -826,14 +822,14 @@
    * cambió en esas fuentes. Lo copia la hoja privada de Contabilidad dos veces
    * al día y lo sube el robot.
    */
-  function bloqueFuentes(fu, fc, fx, vales, impo, servicio, fIso, dato) {
+  function bloqueFuentes(fu, fc, fx, vales, impo, servicio, dato) {
     if (!fu || (!fu.compras && !fu.comex && !vales.length && !(fu.cambios || []).length)) {
       return fu && fu.copia ? '<div class="det-lista"><b>Compras, COMEX y Almacén</b><span class="nota">Esta OC no aparece en la base de Compras, el STATUS de COMEX ni el kardex.</span></div>' : '';
     }
     var cajas = [];
     if (fu.compras) {
       cajas.push('<div class="det-fuente"><h4>Base de Compras' + (impo ? ' (importaciones)' : '') + '</h4><div class="det-info">' +
-        dato('Fecha', fIso(fc.fecha)) + dato('Elaborada por', fc.elaborado) + dato('Solicitado por', fc.solicitado) +
+        dato('Fecha', fechaIso(fc.fecha)) + dato('Elaborada por', fc.elaborado) + dato('Solicitado por', fc.solicitado) +
         dato('Requerimiento', fc.requerimiento) +
         dato('Total', fc.total != null ? (fc.moneda ? fc.moneda + ' ' : '') + Number(fc.total).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '') +
         dato('Total en soles', fc.total_soles != null ? montoCod(Number(fc.total_soles), 'PEN') : '') +
@@ -847,12 +843,12 @@
     if (impo) {
       if (fx) {
         var duas = (fx.duas || []).map(function (u) {
-          return esc(u.dua) + (u.fecha ? ' <span class="nota">(' + esc(fIso(u.fecha)) + (u.subio_oc ? ' · ¿subió OC? ' + esc(u.subio_oc) : '') + ')</span>' : '');
+          return esc(u.dua) + (u.fecha ? ' <span class="nota">(' + esc(fechaIso(u.fecha)) + (u.subio_oc ? ' · ¿subió OC? ' + esc(u.subio_oc) : '') + ')</span>' : '');
         }).join('<br>');
         cajas.push('<div class="det-fuente"><h4>STATUS de COMEX</h4><div class="det-info">' +
           dato('Estado', fx.estado_compra) + dato('Comprador', fx.comprador) +
-          dato('Envío', [fx.modalidad, fx.operador].filter(Boolean).join(' · ')) + dato('ETA', fIso(fx.eta)) + dato('ATA', fIso(fx.ata)) +
-          dato('En planta', fIso(fx.fecha_real_planta) || (fx.fecha_aprox_planta ? 'aprox. ' + fIso(fx.fecha_aprox_planta) : '')) +
+          dato('Envío', [fx.modalidad, fx.operador].filter(Boolean).join(' · ')) + dato('ETA', fechaIso(fx.eta)) + dato('ATA', fechaIso(fx.ata)) +
+          dato('En planta', fechaIso(fx.fecha_real_planta) || (fx.fecha_aprox_planta ? 'aprox. ' + fechaIso(fx.fecha_aprox_planta) : '')) +
           dato('Agente de aduanas', fx.agente_aduanas) + dato('DAM', fx.dam) + dato('Costeo', fx.costeo) +
           (duas ? '<div><span>DUA (DUAS-SUNAT)</span>' + duas + '</div>' : '') +
           dato('Observaciones', fx.observaciones) +
@@ -863,10 +859,10 @@
     }
     var lineaVale = function (v) {
       var doc = (v.tipo_documento ? v.tipo_documento.toLowerCase().replace('guia remision', 'guía') + ' ' : '') + (v.numero_documento || '');
-      return '<div class="vale' + (v.movimiento === 'ANULADO' ? ' anulado' : '') + '"><b>Vale ' + esc(v.vale) + '</b> · ' + esc(fIso(v.fecha)) +
+      return '<div class="vale' + (v.movimiento === 'ANULADO' ? ' anulado' : '') + '"><b>Vale ' + esc(v.vale) + '</b> · ' + esc(fechaIso(v.fecha)) +
         (v.movimiento !== 'INGRESO' ? ' · ' + esc(v.movimiento) : '') + (doc.trim() ? ' · ' + esc(doc) : '') +
         (v.items ? ' · ' + v.items + (v.items === 1 ? ' producto' : ' productos') + (v.cantidad ? ', ' + Number(v.cantidad).toLocaleString('es-PE') + ' und.' : '') : '') +
-        (v.recepcionado ? '<div class="nota">recibió ' + esc(v.recepcionado) + (v.registrado && v.registrado !== v.fecha ? ' · registrado el ' + esc(fIso(v.registrado)) : '') + '</div>' : '') +
+        (v.recepcionado ? '<div class="nota">recibió ' + esc(v.recepcionado) + (v.registrado && v.registrado !== v.fecha ? ' · registrado el ' + esc(fechaIso(v.registrado)) : '') + '</div>' : '') +
         (v.documento_url ? '<a href="' + esc(v.documento_url) + '" target="_blank" rel="noopener">ver el escaneo ↗</a>'
           : v.tiene_escaneo ? '<span class="nota">escaneo en la app de Almacén</span>' : '') + '</div>';
     };
@@ -931,6 +927,7 @@
     document.getElementById('cLista').innerHTML = lista.length ? html + '</tbody></table>' : '<p class="vacio">Sin cambios con este filtro. El robot los anota desde el 02/10/2026.</p>';
   }
 
+  var SECCIONES_CON_FILTRO = ['resumen', 'impuestos', 'proveedores', 'oc'];
   function mostrarSeccion(k) {
     Array.prototype.forEach.call(document.querySelectorAll('.vista'), function (v) { v.classList.toggle('activa', v.getAttribute('data-vista') === k); });
     var titulo = '';
@@ -940,13 +937,8 @@
       if (es) titulo = b.querySelector('span').textContent;
     });
     document.getElementById('tituloSeccion').textContent = titulo;
-    // El buscador de facturas y las secciones de compras y legajo no usan los
-    // filtros de SUNAT: el resumen de filtros no aplica ahí.
-    var propios = ['factura', 'legajo', 'sinoc', 'cambios'].indexOf(k) >= 0;
-    document.getElementById('fResumen').style.visibility = propios ? 'hidden' : '';
-    var filtros = document.querySelector('.lat-filtros');
-    filtros.classList.toggle('apagado', propios);
-    filtros.title = propios ? 'Los filtros de SUNAT no aplican a esta sección: tiene los suyos arriba' : '';
+    // Los filtros de mes, compras/ventas y moneda solo se muestran donde se usan.
+    document.getElementById('filtrosSunat').style.display = SECCIONES_CON_FILTRO.indexOf(k) >= 0 ? '' : 'none';
     try { localStorage.setItem('vistaSunatSeccion', k); } catch (e) { /* sin almacenamiento */ }
     window.scrollTo(0, 0);
   }
