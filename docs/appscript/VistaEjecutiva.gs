@@ -377,28 +377,15 @@ function datosDeLaBaseVistaAhora_() {
     }
     var token = sesionBaseVista_(cfg);
     var idCarpeta = function (u) { var m = /folders\/([\w-]{10,})/.exec(u || ''); return m ? m[1] : ''; };
-    // Todo a la vez: las primeras páginas de carpetas (3) y de facturas sin OC (2), los cambios y la copia.
-    var rpc = function (fn, consulta, desde) {
-      return { metodo: 'post', ruta: 'rpc/' + fn + '?' + consulta + '&limit=1000&offset=' + desde, cuerpo: { p_empresa_ruc: VISTA_RUC } };
-    };
-    var qCarpetas = 'order=procedencia.desc,oc,carpeta_url';
-    var qSinOc = 'senal=in.(ALTA,MEDIA)&order=senal,total.desc,proveedor_ruc,serie,numero';
+    // Todo a la vez, y cada lista en UNA consulta (la base la entrega entera en una fila: *_json, migración 058).
     var r = pedirVariasBaseVista_(cfg, token, [
-      rpc('carpetas_madre_fuentes', qCarpetas, 0), rpc('carpetas_madre_fuentes', qCarpetas, 1000), rpc('carpetas_madre_fuentes', qCarpetas, 2000),
-      rpc('facturas_sin_oc', qSinOc, 0), rpc('facturas_sin_oc', qSinOc, 1000),
+      { metodo: 'post', ruta: 'rpc/carpetas_madre_fuentes_json', cuerpo: { p_empresa_ruc: VISTA_RUC } },
+      { metodo: 'post', ruta: 'rpc/facturas_sin_oc_json', cuerpo: { p_empresa_ruc: VISTA_RUC } },
       { metodo: 'get', ruta: 'carpeta_cambio?select=fecha,procedencia,oc,tipo,detalle,carpeta_url&empresa_ruc=eq.' + VISTA_RUC + '&order=fecha.desc,id.desc&limit=500' },
       { metodo: 'get', ruta: 'fuente_copia?select=pestana,filas,fin,resultado,leido_en&empresa_ruc=eq.' + VISTA_RUC + '&order=pestana', opcional: true }
     ]);
-    // Si la última página que se pidió vino llena, hay más: se siguen pidiendo de a una.
-    var juntar = function (paginas, fn, consulta) {
-      var todo = [].concat.apply([], paginas);
-      if (paginas[paginas.length - 1].length === 1000) {
-        todo = todo.concat(paginasBaseVista_(cfg, token, 'rpc/' + fn, { p_empresa_ruc: VISTA_RUC }, consulta, paginas.length * 1000));
-      }
-      return todo;
-    };
     // carpetas_madre_fuentes: las carpetas madre con lo que dicen Compras, COMEX y Almacén (la hoja privada de Contabilidad).
-    var carpetas = juntar([r[0], r[1], r[2]], 'carpetas_madre_fuentes', qCarpetas)
+    var carpetas = (r[0] || [])
       .map(function (f) {
         return [f.procedencia === 'Importación' ? 1 : 0, f.area_responsable || '', f.comprador || '', f.situacion_pago || '', f.forma_pago || '',
           f.oc, f.proveedor || '', String(f.proyecto_carpeta || '').trim(), f.carpeta_nombre || '', idCarpeta(f.carpeta_url),
@@ -409,16 +396,16 @@ function datosDeLaBaseVistaAhora_() {
           f.monto_soles == null ? null : Number(f.monto_soles), f.ingreso_almacen || '', f.estado_comex || '', f.llegada_planta || '',
           f.cambios_fuentes || 0];
       });
-    var sinOc = juntar([r[3], r[4]], 'facturas_sin_oc', qSinOc)
+    var sinOc = (r[1] || [])
       .map(function (f) {
         return [f.senal, f.razon || '', f.area_probable || '', f.comprador_probable || '', f.fecha_emision || '', f.proveedor_ruc,
           f.proveedor_nombre || '', f.serie + '-' + f.numero, f.moneda || 'PEN', Number(f.total) || 0, f.ocs_del_proveedor || '',
           idDrive_(f.enlace_pdf || '')];
       });
-    var cambios = r[5]
+    var cambios = r[2]
       .map(function (f) { return [f.fecha, f.procedencia === 'Importación' ? 1 : 0, f.oc, f.tipo, f.detalle || '', idCarpeta(f.carpeta_url)]; });
     // Cuándo leyó el robot la hoja de Compras, COMEX y Almacén (y cuándo se copió).
-    var copia = r[6] || [];
+    var copia = r[3] || [];
     return { error: null, carpetas: carpetas, sinOc: sinOc, cambios: cambios, copia: copia,
       armadoEl: new Date().toISOString() };
   } catch (e) {
@@ -484,14 +471,4 @@ function pedirVariasBaseVista_(cfg, token, pedidos) {
     }
     return JSON.parse(r.getContentText());
   });
-}
-
-/** La base entrega como mucho 1000 filas por consulta: se piden por páginas (desde «inicio»). */
-function paginasBaseVista_(cfg, token, ruta, args, consulta, inicio) {
-  var todo = [];
-  for (var desde = inicio || 0; ; desde += 1000) {
-    var parte = pedirBaseVista_(cfg, token, 'post', ruta + '?' + consulta + '&limit=1000&offset=' + desde, args);
-    todo = todo.concat(parte);
-    if (parte.length < 1000) return todo;
-  }
 }

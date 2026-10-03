@@ -2,7 +2,7 @@
  * La carpeta madre de compras, en la hoja GENERAL
  * --------------------------------------------------------------------------
  *
- * Trae de la base (función carpetas_madre_fuentes) lo que el robot de cada noche
+ * Trae de la base (carpetas_madre_fuentes_json) lo que el robot de cada noche
  * (`scripts/carpetas-oc.mts`, 02:00) leyó de las dos carpetas madre de
  * compras: «5. Ordenes de Compra» (nacionales) e importaciones. Una fila por
  * carpeta de OC:
@@ -23,7 +23,7 @@
  *     vio el robot (archivo nuevo, eliminado, completó, ahora le falta…).
  *
  * Y las facturas de SUNAT que no están unidas a ninguna OC pero aparentan
- * que deberían (función facturas_sin_oc): ALTA si el proveedor trabaja con
+ * que deberían (facturas_sin_oc_json): ALTA si el proveedor trabaja con
  * OC; MEDIA si el monto es alto y no es un gasto típico sin OC (bancos,
  * seguros, combustible, pasajes, comida…).
  *
@@ -184,25 +184,14 @@ function traerCarpetaMadre_(siNoEs) {
   }
   try {
     var token = sesionCarpetaMadre_(cfg);
-    var filas = [];
-    for (var desde = 0; ; desde += CM_PAGINA) {
-      // Las carpetas con lo que dicen Compras, COMEX y Almacén (la hoja privada de Contabilidad).
-      var parte = rpcCarpetaMadre_(cfg, token, 'carpetas_madre_fuentes', { p_empresa_ruc: CM_RUC },
-        '?order=procedencia.desc,oc,carpeta_url&limit=' + CM_PAGINA + '&offset=' + desde);
-      filas = filas.concat(parte);
-      if (parte.length < CM_PAGINA) break;
-    }
+    // Las carpetas con lo que dicen Compras, COMEX y Almacén (la hoja privada de Contabilidad), todas en
+    // una sola consulta (la base las entrega en una fila: así no se calcula todo de nuevo por cada página).
+    var filas = rpcCarpetaMadre_(cfg, token, 'carpetas_madre_fuentes_json', { p_empresa_ruc: CM_RUC }) || [];
     if (!filas.length) return { error: 'La base no devolvió carpetas: ¿ya corrió el robot de las carpetas?' };
     var ultimaLectura = filas.reduce(function (m, f) { return f.cargado_en && f.cargado_en > m ? f.cargado_en : m; }, '');
     if (siNoEs && ultimaLectura === siNoEs) return { sinCambios: true };
     // Solo las que aparentan que les falta la OC (ALTA y MEDIA).
-    var sinOc = [];
-    for (var d2 = 0; ; d2 += CM_PAGINA) {
-      var p2 = rpcCarpetaMadre_(cfg, token, 'facturas_sin_oc', { p_empresa_ruc: CM_RUC },
-        '?senal=in.(ALTA,MEDIA)&order=senal,total.desc,proveedor_ruc,serie,numero&limit=' + CM_PAGINA + '&offset=' + d2);
-      sinOc = sinOc.concat(p2);
-      if (p2.length < CM_PAGINA) break;
-    }
+    var sinOc = rpcCarpetaMadre_(cfg, token, 'facturas_sin_oc_json', { p_empresa_ruc: CM_RUC }) || [];
     var libro = SpreadsheetApp.getActiveSpreadsheet();
     escribirDetalleCarpetaMadre_(libro, filas);
     escribirFacturasSinOc_(libro, sinOc);

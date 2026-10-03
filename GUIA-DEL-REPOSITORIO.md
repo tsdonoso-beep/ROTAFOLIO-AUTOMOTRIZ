@@ -374,8 +374,9 @@ Apps Script entran como el usuario robot; la app, como la persona.
 | `evidencias_de_fuentes(p_empresa_ruc)` | Por OC, los documentos que ya existen en otro lado: guía (Almacén), DAM y costeo (COMEX) | 057 |
 | `carpetas_madre_fuentes(p_empresa_ruc)` | `carpetas_madre` + estado con «Por subir», lo que falta sin rastro, lo que existe en otro lado, fecha y monto de la OC, ingreso a Almacén, estado y llegada en COMEX. La usan `CarpetaMadre.gs` y la vista | 057 |
 | `cargar_fuentes_compras(p_empresa_ruc, p_fuente, p_filas)` | Carga COMPRAS, COMEX, ALMACEN o COPIA y anota los cambios | 057 |
+| `facturas_sin_oc_json(…)`, `carpetas_madre_fuentes_json(…)` | Las mismas listas en UNA fila (jsonb), para no recalcular todo por cada página de 1000. Las usan la vista y `CarpetaMadre.gs` | 058 |
 | `carpetas_madre(p_empresa_ruc)` | `legajo_de_carpetas` + área responsable (por la carpeta madre), comprador, situación y forma de pago (del legajo por OC). La usa `CarpetaMadre.gs` | 052 |
-| `facturas_sin_oc(p_empresa_ruc, p_desde)` | Facturas recibidas sin OC unida, con señal ALTA (el proveedor trabaja con OC) o MEDIA (monto alto, no es gasto típico sin OC). Pestaña FACTURAS SIN OC de GENERAL | 052 |
+| `facturas_sin_oc(p_empresa_ruc, p_desde)` | Facturas recibidas sin OC unida, con señal ALTA (el proveedor trabaja con OC) o MEDIA (monto alto, no es gasto típico sin OC). Pestaña FACTURAS SIN OC de GENERAL. Ojo: la base corta a los 8 s cada consulta del robot; 058 la bajó de ~6 s a ~1,3 s | 052, 058 |
 | `vinculos_oc()` | Cruza comprobantes con archivos de las carpetas de OC | 039, 040, 042, 045, 046, 048, 049, 050 |
 | `cargar_captura_oc(...)` | Recibe la captura de OC desde Apps Script | 039, 042 |
 
