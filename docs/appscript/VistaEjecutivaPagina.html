@@ -350,7 +350,7 @@
       <span class="chip chip-ok" style="align-self:flex-start"><span class="punto"></span>Se actualiza sola</span>
       <div class="grande" id="estadoDocs">—</div>
       <div class="linea" id="estadoRango"></div>
-      <div class="linea">Vista armada: <b id="estadoHora">—</b></div>
+      <div class="linea">Vista armada: <b id="estadoHora">—</b> <button class="limpiar" id="actualizarVista" title="Volver a armarla con lo último (tarda cerca de un minuto). Se arma sola cada hora.">↻ Actualizar</button></div>
       <a class="boton" id="enlaceHoja" href="#" target="_blank" rel="noopener">Abrir la hoja completa ↗</a>
     </div>
   </aside>
@@ -519,7 +519,12 @@
   var pct = function (a, b) { return b ? Math.round(100 * a / b) : 0; };
 
   // ── Arranque ──
+  // Las dos partes se piden a la vez: lo de SUNAT (la hoja) y lo de la base (carpetas, facturas sin OC, cambios).
+  // Lo de la base se pinta apenas estén las dos.
+  var BASE_LLEGO = null, SUNAT_LISTO = false;
   google.script.run.withSuccessHandler(arrancar).withFailureHandler(function (e) { fallar(e && e.message ? e.message : String(e)); }).datosDeLaVistaEjecutiva();
+  google.script.run.withSuccessHandler(function (d) { BASE_LLEGO = { d: d }; if (SUNAT_LISTO) arrancarBase(d); })
+    .withFailureHandler(function (e) { BASE_LLEGO = { e: e }; if (SUNAT_LISTO) baseFallo(e); }).datosDeLaBaseVista();
 
   function fallar(t) {
     document.getElementById('cargando').style.display = 'none';
@@ -546,6 +551,14 @@
     document.getElementById('estadoDocs').textContent = miles(d.docs.length) + ' comprobantes';
     document.getElementById('estadoRango').innerHTML = 'De <b>' + etqMes(D.meses[0]) + '</b> a <b>' + etqMes(D.meses[D.meses.length - 1]) + '</b> · ' + miles(d.lineas) + ' líneas de detalle';
     document.getElementById('estadoHora').textContent = d.generadoEl.replace(/ de \d{4},/, ',');
+    document.getElementById('actualizarVista').onclick = function () {
+      var b = this; b.disabled = true; b.textContent = 'Armando… (≈1 min)';
+      google.script.run.withSuccessHandler(function (r) {
+        if (r && r.url) { window.open(r.url, '_top'); return; }
+        b.disabled = false; b.textContent = '↻ Actualizar'; alert('No se pudo actualizar: ' + (r && r.error ? r.error : 'sin respuesta'));
+      }).withFailureHandler(function (e) { b.disabled = false; b.textContent = '↻ Actualizar'; alert('No se pudo actualizar: ' + (e && e.message ? e.message : e)); })
+        .actualizarVistaAhora();
+    };
     document.getElementById('pie').textContent = 'Generado el ' + d.generadoEl + ' · a partir de «COMPROBANTES SUNAT - DETALLE»';
     // El menú lateral: una sección a la vez; se recuerda la última vista.
     ['nav', 'nav2'].forEach(function (id) {
@@ -606,10 +619,12 @@
   function estadoBase(html) { Array.prototype.forEach.call(document.querySelectorAll('[data-base]'), function (e) { e.innerHTML = html; }); }
 
   function cargarBase() {
+    SUNAT_LISTO = true;
+    if (BASE_LLEGO) return BASE_LLEGO.e ? baseFallo(BASE_LLEGO.e) : arrancarBase(BASE_LLEGO.d);
     estadoBase('<div class="cargando-base"><span class="giro"></span> Leyendo las carpetas de OC de la base…</div>');
-    google.script.run.withSuccessHandler(arrancarBase).withFailureHandler(function (e) {
-      estadoBase('<div class="tarjeta"><h2>No se pudo leer la base</h2><p class="linea">' + esc(e && e.message ? e.message : String(e)) + '</p></div>');
-    }).datosDeLaBaseVista();
+  }
+  function baseFallo(e) {
+    estadoBase('<div class="tarjeta"><h2>No se pudo leer la base</h2><p class="linea">' + esc(e && e.message ? e.message : String(e)) + '</p></div>');
   }
 
   function arrancarBase(d) {

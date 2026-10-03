@@ -46,6 +46,8 @@
  *    (Configuración del proyecto) → Propiedades del script → SUPABASE_URL,
  *    SUPABASE_ANON_KEY, ROBOT_CORREO y ROBOT_CLAVE, los mismos de
  *    CarpetaMadre.gs. Sin ellas, el resto de la vista funciona igual.
+ * 9. Para que abra en segundos: elige «instalarVistaRapida» → Ejecutar (una
+ *    vez). Deja la vista armada cada hora; ver «La vista lista».
  */
 
 var HOJA_ID_VISTA = '1Kp5RS_7_dIwQDziSsK-vKbuYyCUxtG7VYktk5XkWj_A';
@@ -61,12 +63,98 @@ function doGet() {
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
 }
 
-/** Lo que pide el HTML por `google.script.run`. Nunca lanza: el error viaja en el objeto. */
+/**
+ * Lo que pide el HTML por `google.script.run`. Nunca lanza: el error viaja en el objeto.
+ * Sale de lo ya preparado (ver «La vista lista» abajo); solo si no está, se arma en el momento.
+ */
 function datosDeLaVistaEjecutiva() {
   try {
-    return datosCompactosVista_();
+    var listo = leerVistaLista_('sunat');
+    if (listo) return listo;
+    var d = datosCompactosVista_();
+    guardarVistaLista_('sunat', d);
+    return d;
   } catch (e) {
     return { error: e.message };
+  }
+}
+
+// ── La vista lista ──
+//
+// Armar la vista es lo lento: leer las ~27 000 líneas de la hoja (≈30 s) y
+// pedir a la base las carpetas y las facturas sin OC (≈15 s). Un activador
+// lo arma cada hora y lo deja guardado (CacheService, comprimido y en
+// trozos de 90 000 caracteres): quien abre la vista recibe lo último ya
+// listo en pocos segundos. Si no hay nada guardado (la primera vez, o si
+// Google lo borró), se arma en el momento como antes. Cada hora y no cada
+// menos: los activadores de una cuenta tienen un tope de tiempo al día
+// (≈90 min) y lo comparten con CarpetaMadre.gs y CopiarFuentes.gs. El botón
+// «↻ Actualizar» de la vista la arma en el momento cuando hace falta.
+//
+// Una sola vez: en Apps Script elige «instalarVistaRapida» → Ejecutar.
+
+var VISTA_TROZO = 90000;
+
+/** Crea el activador que deja la vista lista cada hora, y la prepara ahora. */
+function instalarVistaRapida() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'prepararVista') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('prepararVista').timeBased().everyHours(1).create();
+  prepararVista();
+}
+
+/** Lo corre el activador: arma las dos partes de la vista y las guarda. */
+function prepararVista() {
+  guardarVistaLista_('sunat', datosCompactosVista_());
+  var b = datosDeLaBaseVistaAhora_();
+  if (!b.error) guardarVistaLista_('base', b);
+}
+
+/** El botón «Actualizar» de la vista: la vuelve a armar ya y devuelve su dirección para recargarla. */
+function actualizarVistaAhora() {
+  try {
+    prepararVista();
+    return { error: null, url: ScriptApp.getService().getUrl() };
+  } catch (e) {
+    return { error: String(e.message || e) };
+  }
+}
+
+function guardarVistaLista_(clave, datos) {
+  try {
+    var b64 = Utilities.base64Encode(Utilities.gzip(Utilities.newBlob(JSON.stringify(datos), 'application/json')).getBytes());
+    var n = Math.ceil(b64.length / VISTA_TROZO);
+    if (n > 300) return;   // demasiado grande para guardarla: se arma en cada visita
+    // Cada versión con su propio nombre: quien lee a la mitad de una escritura sigue leyendo la anterior entera.
+    var version = clave + '_' + new Date().getTime();
+    var trozos = {};
+    for (var i = 0; i < n; i++) trozos[version + '_' + i] = b64.substr(i * VISTA_TROZO, VISTA_TROZO);
+    var cache = CacheService.getScriptCache();
+    cache.putAll(trozos, 21600);
+    cache.put(clave + '_lista', JSON.stringify({ version: version, n: n }), 21600);
+  } catch (e) {
+    console.warn('No se pudo guardar la vista lista (' + clave + '): ' + e.message);
+  }
+}
+
+function leerVistaLista_(clave) {
+  try {
+    var cache = CacheService.getScriptCache();
+    var guia = JSON.parse(cache.get(clave + '_lista') || 'null');
+    if (!guia) return null;
+    var nombres = [];
+    for (var i = 0; i < guia.n; i++) nombres.push(guia.version + '_' + i);
+    var t = cache.getAll(nombres);
+    var b64 = '';
+    for (var j = 0; j < nombres.length; j++) {
+      if (t[nombres[j]] == null) return null;
+      b64 += t[nombres[j]];
+    }
+    var blob = Utilities.ungzip(Utilities.newBlob(Utilities.base64Decode(b64), 'application/x-gzip'));
+    return JSON.parse(blob.getDataAsString());
+  } catch (e) {
+    return null;
   }
 }
 
@@ -266,12 +354,20 @@ function redondear4_(n) { return Math.round(n * 10000) / 10000; }
 // cada carpeta de OC de las carpetas madre, con lo que dicen Compras, COMEX y
 // Almacén (carpetas_madre_fuentes), las facturas de
 // SUNAT que aparentan no tener OC (facturas_sin_oc) y lo que cambió en las
-// carpetas (carpeta_cambio). La página lo pide aparte, después de pintar lo
-// de SUNAT, para no demorar la primera carga.
+// carpetas (carpeta_cambio). La página lo pide a la vez que lo de SUNAT y lo
+// pinta apenas llega. Todas las consultas a la base salen juntas (fetchAll).
 
 var VISTA_RUC = '20512201611';
 
 function datosDeLaBaseVista() {
+  var listo = leerVistaLista_('base');
+  if (listo) return listo;
+  var d = datosDeLaBaseVistaAhora_();
+  if (!d.error) guardarVistaLista_('base', d);
+  return d;
+}
+
+function datosDeLaBaseVistaAhora_() {
   try {
     var cfg = configuracionBaseVista_();
     var faltan = ['url', 'anon', 'correo', 'clave'].filter(function (k) { return !cfg[k]; });
@@ -281,8 +377,28 @@ function datosDeLaBaseVista() {
     }
     var token = sesionBaseVista_(cfg);
     var idCarpeta = function (u) { var m = /folders\/([\w-]{10,})/.exec(u || ''); return m ? m[1] : ''; };
+    // Todo a la vez: las primeras páginas de carpetas (3) y de facturas sin OC (2), los cambios y la copia.
+    var rpc = function (fn, consulta, desde) {
+      return { metodo: 'post', ruta: 'rpc/' + fn + '?' + consulta + '&limit=1000&offset=' + desde, cuerpo: { p_empresa_ruc: VISTA_RUC } };
+    };
+    var qCarpetas = 'order=procedencia.desc,oc,carpeta_url';
+    var qSinOc = 'senal=in.(ALTA,MEDIA)&order=senal,total.desc,proveedor_ruc,serie,numero';
+    var r = pedirVariasBaseVista_(cfg, token, [
+      rpc('carpetas_madre_fuentes', qCarpetas, 0), rpc('carpetas_madre_fuentes', qCarpetas, 1000), rpc('carpetas_madre_fuentes', qCarpetas, 2000),
+      rpc('facturas_sin_oc', qSinOc, 0), rpc('facturas_sin_oc', qSinOc, 1000),
+      { metodo: 'get', ruta: 'carpeta_cambio?select=fecha,procedencia,oc,tipo,detalle,carpeta_url&empresa_ruc=eq.' + VISTA_RUC + '&order=fecha.desc,id.desc&limit=500' },
+      { metodo: 'get', ruta: 'fuente_copia?select=pestana,filas,fin,resultado,leido_en&empresa_ruc=eq.' + VISTA_RUC + '&order=pestana', opcional: true }
+    ]);
+    // Si la última página que se pidió vino llena, hay más: se siguen pidiendo de a una.
+    var juntar = function (paginas, fn, consulta) {
+      var todo = [].concat.apply([], paginas);
+      if (paginas[paginas.length - 1].length === 1000) {
+        todo = todo.concat(paginasBaseVista_(cfg, token, 'rpc/' + fn, { p_empresa_ruc: VISTA_RUC }, consulta, paginas.length * 1000));
+      }
+      return todo;
+    };
     // carpetas_madre_fuentes: las carpetas madre con lo que dicen Compras, COMEX y Almacén (la hoja privada de Contabilidad).
-    var carpetas = paginasBaseVista_(cfg, token, 'rpc/carpetas_madre_fuentes', { p_empresa_ruc: VISTA_RUC }, 'order=procedencia.desc,oc,carpeta_url')
+    var carpetas = juntar([r[0], r[1], r[2]], 'carpetas_madre_fuentes', qCarpetas)
       .map(function (f) {
         return [f.procedencia === 'Importación' ? 1 : 0, f.area_responsable || '', f.comprador || '', f.situacion_pago || '', f.forma_pago || '',
           f.oc, f.proveedor || '', String(f.proyecto_carpeta || '').trim(), f.carpeta_nombre || '', idCarpeta(f.carpeta_url),
@@ -293,22 +409,18 @@ function datosDeLaBaseVista() {
           f.monto_soles == null ? null : Number(f.monto_soles), f.ingreso_almacen || '', f.estado_comex || '', f.llegada_planta || '',
           f.cambios_fuentes || 0];
       });
-    var sinOc = paginasBaseVista_(cfg, token, 'rpc/facturas_sin_oc', { p_empresa_ruc: VISTA_RUC },
-      'senal=in.(ALTA,MEDIA)&order=senal,total.desc,proveedor_ruc,serie,numero')
+    var sinOc = juntar([r[3], r[4]], 'facturas_sin_oc', qSinOc)
       .map(function (f) {
         return [f.senal, f.razon || '', f.area_probable || '', f.comprador_probable || '', f.fecha_emision || '', f.proveedor_ruc,
           f.proveedor_nombre || '', f.serie + '-' + f.numero, f.moneda || 'PEN', Number(f.total) || 0, f.ocs_del_proveedor || '',
           idDrive_(f.enlace_pdf || '')];
       });
-    var cambios = pedirBaseVista_(cfg, token, 'get', 'carpeta_cambio?select=fecha,procedencia,oc,tipo,detalle,carpeta_url' +
-      '&empresa_ruc=eq.' + VISTA_RUC + '&order=fecha.desc,id.desc&limit=500')
+    var cambios = r[5]
       .map(function (f) { return [f.fecha, f.procedencia === 'Importación' ? 1 : 0, f.oc, f.tipo, f.detalle || '', idCarpeta(f.carpeta_url)]; });
     // Cuándo leyó el robot la hoja de Compras, COMEX y Almacén (y cuándo se copió).
-    var copia = [];
-    try {
-      copia = pedirBaseVista_(cfg, token, 'get', 'fuente_copia?select=pestana,filas,fin,resultado,leido_en&empresa_ruc=eq.' + VISTA_RUC + '&order=pestana');
-    } catch (e) { copia = []; }
-    return { error: null, carpetas: carpetas, sinOc: sinOc, cambios: cambios, copia: copia };
+    var copia = r[6] || [];
+    return { error: null, carpetas: carpetas, sinOc: sinOc, cambios: cambios, copia: copia,
+      armadoEl: new Date().toISOString() };
   } catch (e) {
     return { error: String(e.message || e) };
   }
@@ -354,10 +466,30 @@ function pedirBaseVista_(cfg, token, metodo, ruta, cuerpo) {
   return JSON.parse(r.getContentText());
 }
 
-/** La base entrega como mucho 1000 filas por consulta: se piden por páginas. */
-function paginasBaseVista_(cfg, token, ruta, args, consulta) {
+/**
+ * Varias consultas a la base a la vez (UrlFetchApp.fetchAll): tarda lo que la
+ * más lenta, no la suma. Una «opcional» que falla devuelve null en vez de cortar todo.
+ */
+function pedirVariasBaseVista_(cfg, token, pedidos) {
+  var respuestas = UrlFetchApp.fetchAll(pedidos.map(function (p) {
+    var o = { url: cfg.url + '/rest/v1/' + p.ruta, method: p.metodo,
+              headers: { apikey: cfg.anon, Authorization: 'Bearer ' + token }, muteHttpExceptions: true };
+    if (p.cuerpo) { o.contentType = 'application/json'; o.payload = JSON.stringify(p.cuerpo); }
+    return o;
+  }));
+  return respuestas.map(function (r, i) {
+    if (r.getResponseCode() >= 300) {
+      if (pedidos[i].opcional) return null;
+      throw new Error(pedidos[i].ruta.split('?')[0] + ' falló: ' + r.getContentText().slice(0, 200));
+    }
+    return JSON.parse(r.getContentText());
+  });
+}
+
+/** La base entrega como mucho 1000 filas por consulta: se piden por páginas (desde «inicio»). */
+function paginasBaseVista_(cfg, token, ruta, args, consulta, inicio) {
   var todo = [];
-  for (var desde = 0; ; desde += 1000) {
+  for (var desde = inicio || 0; ; desde += 1000) {
     var parte = pedirBaseVista_(cfg, token, 'post', ruta + '?' + consulta + '&limit=1000&offset=' + desde, args);
     todo = todo.concat(parte);
     if (parte.length < 1000) return todo;

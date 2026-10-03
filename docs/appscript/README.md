@@ -296,6 +296,15 @@ compartido lo refleje: **Implementar** → **Gestionar implementaciones** →
 el lápiz sobre la implementación activa → **Versión: Nueva versión** →
 **Implementar**. La URL no cambia.
 
+### Que abra en segundos
+
+Armar la vista desde cero tarda cerca de un minuto (leer las ~27 000 líneas
+de la hoja y pedir a la base carpetas y facturas sin OC). Para no esperarlo
+en cada visita: en Apps Script elige **instalarVistaRapida → Ejecutar** una
+vez. Deja la vista armada y guardada cada hora (CacheService); quien la
+abre recibe lo último ya listo. El botón **↻ Actualizar** del menú lateral
+la arma en el momento. Si no hay nada guardado, se arma como antes.
+
 ## Captura de archivos en las carpetas de OC
 
 `CapturaCarpetasOC.gs` recorre el **LINK DE CARPETA** de cada OC de la base
