@@ -70,7 +70,9 @@ function doGet() {
 function datosDeLaVistaEjecutiva() {
   try {
     var listo = leerVistaLista_('sunat');
-    if (listo) return listo;
+    // Si la hoja cambió de tamaño desde que se armó (el robot la republicó), lo guardado ya es viejo:
+    // se vuelve a armar en el momento. Contar las filas es inmediato; leerlas, no.
+    if (listo && listo.lineas === lineasDeLaHojaVista_()) return listo;
     var d = datosCompactosVista_();
     guardarVistaLista_('sunat', d);
     return d;
@@ -86,7 +88,8 @@ function datosDeLaVistaEjecutiva() {
 // lo arma cada hora y lo deja guardado (CacheService, comprimido y en
 // trozos de 90 000 caracteres): quien abre la vista recibe lo último ya
 // listo en pocos segundos. Si no hay nada guardado (la primera vez, o si
-// Google lo borró), se arma en el momento como antes. Cada hora y no cada
+// Google lo borró) o la hoja cambió de tamaño desde que se armó (el robot la
+// republicó), se arma en el momento como antes. Cada hora y no cada
 // menos: los activadores de una cuenta tienen un tope de tiempo al día
 // (≈90 min) y lo comparten con CarpetaMadre.gs y CopiarFuentes.gs. El botón
 // «↻ Actualizar» de la vista la arma en el momento cuando hace falta.
@@ -119,6 +122,21 @@ function actualizarVistaAhora() {
   } catch (e) {
     return { error: String(e.message || e) };
   }
+}
+
+/** Cuántas líneas de detalle tiene la hoja ahora (sin leerlas). */
+function lineasDeLaHojaVista_() {
+  var libro = SpreadsheetApp.openById(HOJA_ID_VISTA);
+  var hoja = libro.getSheetByName(NOMBRE_PESTANA_VISTA) || libro.getSheets()[0];
+  return hoja.getLastRow() - 1;
+}
+
+/** «5 de octubre de 2026, 08:20»: el nombre del mes en castellano, sea cual sea el idioma de la cuenta. */
+function fechaLargaVista_(d) {
+  var meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  var zona = Session.getScriptTimeZone() || 'America/Lima';
+  var mes = Number(Utilities.formatDate(d, zona, 'M')) - 1;
+  return Utilities.formatDate(d, zona, 'd') + ' de ' + meses[mes] + ' de ' + Utilities.formatDate(d, zona, 'yyyy, HH:mm');
 }
 
 function guardarVistaLista_(clave, datos) {
@@ -282,7 +300,7 @@ function datosCompactosVista_() {
   return {
     error: null,
     urlHoja: URL_HOJA_VISTA,
-    generadoEl: Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'America/Lima', "d 'de' MMMM 'de' yyyy, HH:mm"),
+    generadoEl: fechaLargaVista_(new Date()),
     dic: dic,
     docs: docs,
     productos: lista.slice(0, VISTA_MAX_PRODUCTOS),
