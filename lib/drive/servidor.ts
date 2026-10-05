@@ -219,6 +219,21 @@ const FILAS_POR_ENVIO = 5000;
  * `tipos` dice qué contiene cada columna. Sin eso la hoja adivina, y adivina
  * mal: ver el comentario de TIPOS_SUNAT.
  */
+/**
+ * Hojas que tienen un archivo FIJO, no «el que se llame así en la carpeta».
+ * La hoja DETALLE es la que lee la vista ejecutiva y la que lleva los Apps
+ * Script de Contabilidad (1Kp5RS…). Buscándola por nombre, el robot de GitHub
+ * (otra carpeta raíz que la computadora de Contabilidad) no la encontró y creó
+ * otra igual (18MQSQ…, 04/10/2026): publicaba ahí y la de la vista quedó en el
+ * 02/10. Se puede cambiar con la variable HOJA_DETALLE_ID.
+ */
+function hojaFija(nombre: string): string | null {
+  const fijas: Record<string, string> = {
+    "COMPROBANTES SUNAT - DETALLE": process.env.HOJA_DETALLE_ID?.trim() || "1Kp5RS_7_dIwQDziSsK-vKbuYyCUxtG7VYktk5XkWj_A",
+  };
+  return fijas[nombre] ?? null;
+}
+
 export async function publicarHoja(p: {
   filas: string[][];
   nombre: string;
@@ -226,8 +241,21 @@ export async function publicarHoja(p: {
   tipos?: TipoColumna[];
 }): Promise<{ id: string; url: string; reemplazada: boolean }> {
   const { drive, hojas, raiz } = conectarDrive();
-  const destino = await asegurarRuta(drive, p.carpetas, raiz);
 
+  const fija = hojaFija(p.nombre);
+  if (fija) {
+    try {
+      await escribirPestana(hojas, fija, p.nombre, p.filas, p.tipos ?? []);
+      const info = await drive.files.get({ fileId: fija, fields: "id,webViewLink", ...DRIVES });
+      return { id: info.data.id!, url: info.data.webViewLink!, reemplazada: true };
+    } catch (e) {
+      // Sin permiso de edición (o el archivo ya no está): se avisa fuerte y se publica por nombre, como antes.
+      console.error(`⚠ No se pudo escribir en la hoja fija de «${p.nombre}» (${fija}): ${e instanceof Error ? e.message : e}. ` +
+        `Se publica en la que se llame así en la carpeta: compártela con la cuenta de servicio como Editor.`);
+    }
+  }
+
+  const destino = await asegurarRuta(drive, p.carpetas, raiz);
   const previo = await buscarPorNombre(drive, p.nombre, destino);
   const id = previo ?? await crearHojaVacia(drive, hojas, p.nombre, destino);
 
