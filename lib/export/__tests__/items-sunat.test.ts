@@ -178,16 +178,20 @@ describe("nombreArchivoItems", () => {
 });
 
 describe("detalleCpeCompleto", () => {
-  /** Un cliente falso que reparte `total` filas en páginas de `tamano`. */
-  function clienteFalso(total: number, tamano: number) {
-    const pedidos: Array<[number, number]> = [];
+  /** Un cliente falso: `porPeriodo` filas por período, repartidas en páginas de 1000. */
+  function clienteFalso(porPeriodo: Record<string, number>) {
+    const pedidos: Array<[string, number, number]> = [];
     return {
       cliente: {
-        rpc: (_fn: string, _args: Record<string, unknown>) => ({
+        rpc: (fn: string, args: Record<string, unknown>) => ({
           range: async (desde: number, hasta: number) => {
-            pedidos.push([desde, hasta]);
+            if (fn === "periodos_detalle_cpe") return { data: Object.keys(porPeriodo).map(periodo => ({ periodo })), error: null };
+            const p = String(args.p_periodo);
+            pedidos.push([p, desde, hasta]);
             const filas = [];
-            for (let i = desde; i <= Math.min(hasta, total - 1); i++) filas.push({ linea: i });
+            for (let i = desde; i <= Math.min(hasta, (porPeriodo[p] ?? 0) - 1); i++) {
+              filas.push({ periodo: p, fecha_emision: `${p.slice(0, 4)}-${p.slice(4)}-01`, serie: "F001", numero: String(i), linea: 1 });
+            }
             return { data: filas, error: null };
           },
         }),
@@ -196,25 +200,27 @@ describe("detalleCpeCompleto", () => {
     };
   }
 
-  test("una sola página cuando el detalle no llega al tope", async () => {
-    const { cliente, pedidos } = clienteFalso(120, 1000);
-    const filas = await detalleCpeCompleto(cliente, null);
+  test("una sola página cuando el período no llega al tope", async () => {
+    const { cliente, pedidos } = clienteFalso({ "202609": 120 });
+    const filas = await detalleCpeCompleto(cliente, "202609");
     assert.equal(filas.length, 120);
-    assert.deepEqual(pedidos, [[0, 999]]);
+    assert.deepEqual(pedidos, [["202609", 0, 999]]);
   });
 
-  test("pide una página más cuando el detalle cae justo en el tope: si no, se corta lo más reciente", async () => {
-    const { cliente, pedidos } = clienteFalso(1000, 1000);
-    const filas = await detalleCpeCompleto(cliente, null);
+  test("pide una página más cuando el período cae justo en el tope: si no, se corta lo más reciente", async () => {
+    const { cliente, pedidos } = clienteFalso({ "202609": 1000 });
+    const filas = await detalleCpeCompleto(cliente, "202609");
     assert.equal(filas.length, 1000);
-    assert.deepEqual(pedidos, [[0, 999], [1000, 1999]]);
+    assert.deepEqual(pedidos, [["202609", 0, 999], ["202609", 1000, 1999]]);
   });
 
-  test("junta varias páginas cuando el detalle las supera", async () => {
-    const { cliente, pedidos } = clienteFalso(2350, 1000);
+  test("todo el año: de a un período, con sus páginas, en orden de fecha", async () => {
+    const { cliente, pedidos } = clienteFalso({ "202609": 2350, "202608": 10 });
     const filas = await detalleCpeCompleto(cliente, null);
-    assert.equal(filas.length, 2350);
-    assert.deepEqual(pedidos, [[0, 999], [1000, 1999], [2000, 2999]]);
+    assert.equal(filas.length, 2360);
+    assert.deepEqual(pedidos.map(p => p[0]), ["202608", "202609", "202609", "202609"]);
+    assert.equal(filas[0].periodo, "202608");
+    assert.equal(filas[filas.length - 1].numero, "2349");
   });
 
   test("propaga el error de una página en vez de devolver lo parcial", async () => {

@@ -174,10 +174,30 @@ const TAMANO_PAGINA_DETALLE = 1000;
 export async function detalleCpeCompleto(
   sb: ClienteConRpc, periodo: string | null
 ): Promise<Record<string, unknown>[]> {
+  if (periodo) return paginasDelDetalle(sb, periodo);
+  // Todo el año, de a un período: pedido entero, la base recalculaba los ~27 000
+  // ítems por cada página de 1000 (~6 s cada una) y alguna pasaba los 8 s que da
+  // a cada consulta («statement timeout», 05/10/2026). Un período tarda ~1 s.
+  const periodos = (await paginasDeRpc(sb, "periodos_detalle_cpe", {}))
+    .map(f => String((f as { periodo?: unknown }).periodo ?? ""))
+    .filter(Boolean);
+  const filas: Record<string, unknown>[] = [];
+  for (const p of periodos) filas.push(...await paginasDelDetalle(sb, p));
+  // El mismo orden que el detalle entero: por fecha de emisión (un comprobante
+  // registrado tarde queda en otro período que el de su fecha).
+  const t = (v: unknown) => (v == null ? "" : String(v));
+  const clave = (f: Record<string, unknown>) => [t(f.fecha_emision), t(f.serie), t(f.numero).padStart(12, "0"), t(f.linea).padStart(6, "0")].join("|");
+  return filas.sort((a, b) => (clave(a) < clave(b) ? -1 : clave(a) > clave(b) ? 1 : 0));
+}
+
+async function paginasDelDetalle(sb: ClienteConRpc, periodo: string): Promise<Record<string, unknown>[]> {
+  return paginasDeRpc(sb, "detalle_cpe_hoja", { p_periodo: periodo });
+}
+
+async function paginasDeRpc(sb: ClienteConRpc, fn: string, args: Record<string, unknown>): Promise<Record<string, unknown>[]> {
   const filas: Record<string, unknown>[] = [];
   for (let desde = 0; ; desde += TAMANO_PAGINA_DETALLE) {
-    const { data, error } = await sb.rpc("detalle_cpe_hoja", { p_periodo: periodo })
-      .range(desde, desde + TAMANO_PAGINA_DETALLE - 1);
+    const { data, error } = await sb.rpc(fn, args).range(desde, desde + TAMANO_PAGINA_DETALLE - 1);
     if (error) throw new Error(error.message);
     const pagina = Array.isArray(data) ? (data as Record<string, unknown>[]) : [];
     filas.push(...pagina);

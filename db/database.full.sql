@@ -1,7 +1,7 @@
 -- ════════════════════════════════════════════════════════════════
 -- database.full.sql — GENERADO, no editar a mano (pnpm db:consolidar)
--- 59 migraciones: 001_esquema_inicial.sql → 059_historico_sunat_por_periodo.sql
--- huella: 6a5b67b39bce3aa4
+-- 60 migraciones: 001_esquema_inicial.sql → 060_periodos_del_detalle.sql
+-- huella: 39820da525d8f001
 --
 -- Aplicar sobre una base VACÍA (proyecto nuevo de Supabase): SQL Editor →
 -- pegar todo → Run. Para una base existente, aplicar solo las migraciones
@@ -9195,4 +9195,28 @@ as $$
     where p_periodo is null or c.periodo = p_periodo
   ) t;
 $$;
+
+
+-- ┌──────────────────────────────────────────────────────────────
+-- │ 060_periodos_del_detalle.sql
+-- └──────────────────────────────────────────────────────────────
+
+-- Los períodos del detalle, para pedir la hoja DETALLE de a uno
+--
+-- La hoja DETALLE se pedía entera, paginada de a 1000: cada página volvía a
+-- calcular los ~27 000 ítems (~6 s) y alguna pasaba los 8 s que la base da a
+-- cada consulta del robot («statement timeout», 05/10/2026, en la
+-- computadora de Contabilidad). detalleCpeCompleto() (lib/export/items-sunat.ts)
+-- ahora pide la lista de períodos y el detalle de cada uno (~1 s).
+
+create or replace function periodos_detalle_cpe()
+returns table (periodo text)
+language sql
+stable
+set search_path = public, pg_temp
+as $$
+  select distinct c.periodo from cpe_comprobante c where c.periodo is not null order by 1;
+$$;
+
+grant execute on function periodos_detalle_cpe() to authenticated;
 
