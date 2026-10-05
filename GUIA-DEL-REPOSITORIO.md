@@ -364,7 +364,7 @@ Apps Script entran como el usuario robot; la app, como la persona.
 | Función | Qué hace | Migraciones que la tocan |
 |---|---|---|
 | `guardar_cpe(p_empresa_ruc, p_docs)` | Guarda comprobante + ítems; idempotente (repetir actualiza, no duplica) | 032 a 036 |
-| `historico_comprobantes_sunat(p_periodo)` | Filas de la hoja **COMPROBANTES SUNAT** | 017, 039, 041, 042 |
+| `historico_comprobantes_sunat(p_periodo)` | Filas de la hoja **COMPROBANTES SUNAT**. `sunat-diario` la pide de a un período (`periodos_comprobantes_sunat()`): todo junto (~18 000, ~15 MB) pasaba los 8 s de la base | 017, 039, 041, 042, 059 |
 | `detalle_cpe(p_periodo)` | Filas de la hoja **COMPROBANTES SUNAT - DETALLE** | 032 a 036, 039, 041, 042 |
 | `detalle_cpe_carpeta(p_periodo)` | `detalle_cpe` + proyecto, de dónde sale el centro de costo y documentos de la carpeta madre (lo que publica el DETALLE) | 051 |
 | `legajo_de_carpetas(p_empresa_ruc)` | Una fila por carpeta de OC de las carpetas madre, para la pestaña CARPETA MADRE de GENERAL (`CarpetaMadre.gs`) | 051 |

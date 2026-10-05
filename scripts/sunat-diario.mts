@@ -167,17 +167,41 @@ async function consultar(periodo: string): Promise<boolean> {
  * Es opcional: si faltan las credenciales de Drive, la consulta igual sirvió
  * y los datos quedaron guardados. Se avisa y se sigue.
  */
+/** El histórico de comprobantes, período por período, en orden de fecha. Null (y avisa) si algo falla. */
+async function historicoPorPeriodo(): Promise<ComprobanteHistorico[] | null> {
+  const { data: periodos, error: eP } = await sb.rpc("periodos_comprobantes_sunat");
+  if (eP || !Array.isArray(periodos)) {
+    console.error("⚠ No se pudo leer el histórico para la hoja (períodos):", eP?.message);
+    return null;
+  }
+  const todo: ComprobanteHistorico[] = [];
+  for (const periodo of periodos as string[]) {
+    let ultimo: string | undefined;
+    for (let intento = 1; intento <= 3; intento++) {
+      const { data, error } = await sb.rpc("historico_comprobantes_sunat", { p_periodo: periodo });
+      if (!error && Array.isArray(data)) { todo.push(...(data as ComprobanteHistorico[])); ultimo = undefined; break; }
+      ultimo = error?.message ?? "respuesta inesperada";
+      await new Promise(r => setTimeout(r, 3000 * intento));
+    }
+    if (ultimo) {
+      console.error(`⚠ No se pudo leer el histórico para la hoja (${periodo}):`, ultimo);
+      return null;
+    }
+  }
+  const clave = (c: ComprobanteHistorico) => `${c.fechaEmision ?? ""}|${c.numero ?? ""}`;
+  return todo.sort((a, b) => clave(a).localeCompare(clave(b)));
+}
+
 async function publicarLaHoja(): Promise<void> {
   if (!process.env.GOOGLE_SA_EMAIL || !process.env.GOOGLE_DRIVE_FOLDER_ID) {
     console.log("\nSin credenciales de Drive: no se actualiza la hoja de Contabilidad.");
     return;
   }
 
-  const { data, error } = await sb.rpc("historico_comprobantes_sunat");
-  if (error || !Array.isArray(data)) {
-    console.error("⚠ No se pudo leer el histórico para la hoja:", error?.message);
-    return;
-  }
+  // De a un período: todo junto (~18 000 comprobantes, ~15 MB) pasaba los 8 s
+  // que la base le da a cada consulta y la hoja dejó de publicarse (02/10/2026).
+  const data = await historicoPorPeriodo();
+  if (!data) return;
 
   // Quién rindió cada comprobante: es la columna que SUNAT no puede dar, y la
   // que hace que esta hoja valga más que bajar el archivo del portal.

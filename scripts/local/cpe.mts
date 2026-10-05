@@ -16,7 +16,7 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { num, texto, LIMITE, PERIODOS, RUCS, SERIES, TIPOS } from "./comun/config.mts";
-import { crearBitacora, vigilarProceso, primeraLinea, usarSalida } from "./comun/bitacora.mts";
+import { crearBitacora, vigilarProceso, primeraLinea, usarSalida, dormir } from "./comun/bitacora.mts";
 import { Barra } from "./comun/barra.mts";
 import { pendientes, pendientesSinPdf } from "./comun/base.mts";
 import { publicarDetalle } from "./comun/guardar.mts";
@@ -67,18 +67,34 @@ const tuberia = new Tuberia(b, aProcesar, {
 });
 
 const nav = await abrirNavegador();
-const principal = await nuevoContexto(nav);
-const login = await principal.newPage();
-login.on("dialog", d => {
-  d.accept().catch(() => {});
-});
-try {
-  await entrar(b, login, "login");
-} catch (e) {
-  await login.screenshot({ path: join(b.dir, "errores", "login.png"), fullPage: true }).catch(() => {});
-  b.log("error", "login", primeraLinea(e));
-  await nav.close();
-  process.exit(1);
+let principal = await nuevoContexto(nav);
+let login = await principal.newPage();
+// A veces la autenticación de SUNAT queda a medias (su portada, sin volver al
+// menú): del 02 al 04/10/2026 la corrida murió así 3 de 4 días. Se reintenta
+// con una sesión NUEVA (cookies limpias) tras una pausa. Un captcha o la clave
+// rechazada no se reintentan: insistir puede bloquear la cuenta.
+const INTENTOS_LOGIN = Math.max(1, num("INTENTOS_LOGIN", 3));
+for (let intento = 1; ; intento++) {
+  login.on("dialog", d => {
+    d.accept().catch(() => {});
+  });
+  try {
+    await entrar(b, login, intento === 1 ? "login" : `login-${intento}`);
+    break;
+  } catch (e) {
+    await login.screenshot({ path: join(b.dir, "errores", `login-${intento}.png`), fullPage: true }).catch(() => {});
+    const motivo = primeraLinea(e);
+    if (/captcha|rechazó las credenciales/i.test(motivo) || intento >= INTENTOS_LOGIN) {
+      b.log("error", "login", intento > 1 ? `${motivo} (intento ${intento} de ${INTENTOS_LOGIN})` : motivo);
+      await nav.close();
+      process.exit(1);
+    }
+    b.log("aviso", "login", `${motivo} — se reintenta con una sesión nueva en 60 s (${intento}/${INTENTOS_LOGIN})`);
+    await principal.close().catch(() => {});
+    await dormir(60000);
+    principal = await nuevoContexto(nav);
+    login = await principal.newPage();
+  }
 }
 // La pestaña del login NO se cierra: cerrarla puede terminar la sesión de SOL
 // (así pasó en GitHub Actions). En la vía API es la que pide el token.
