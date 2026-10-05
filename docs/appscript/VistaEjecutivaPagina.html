@@ -681,12 +681,15 @@
       return (L.area === '' || String(x[0]) === L.area) &&
         (L.comprador === '' || (L.comprador === '-' ? !x[2] : x[2] === L.comprador));
     });
-    var lista = delArea.filter(function (x) {
-      if (L.estado === 'SUBIR' ? !x[19] : L.estado === 'INC' ? x[10] !== 'INCOMPLETA' : L.estado && x[10] !== L.estado) return false;
+    var pasaEstado = function (x) { return L.estado === 'SUBIR' ? !!x[19] : L.estado === 'INC' ? x[10] === 'INCOMPLETA' : !L.estado || x[10] === L.estado; };
+    var pasaTexto = function (x) {
       if (!palabras.length) return true;
       var t = plano([x[5], x[6], x[7], x[8], x[2], x[11], x[12], x[19]].join(' '));
       return palabras.every(function (w) { return t.indexOf(w) !== -1; });
-    });
+    };
+    var lista = delArea.filter(function (x) { return pasaEstado(x) && pasaTexto(x); });
+    // Lo que la búsqueda encuentra pero el filtro de estado esconde (p. ej. una OC completa con «Incompletas»).
+    var escondidas = palabras.length ? delArea.filter(function (x) { return !pasaEstado(x) && pasaTexto(x); }) : [];
     var ok = delArea.filter(function (x) { return x[10] === 'OK'; }).length;
     var cuenta = function (re) { return delArea.filter(function (x) { return re.test(x[11]); }).length; };
     // Lo que falta sin rastro en ningún lado (x[20]) y lo que existe en otro lado y solo falta subir (x[19]).
@@ -729,6 +732,16 @@
           '<td class="num">' + (x[13] || '—') + '</td><td>' + enlaceCarpeta(x[9]) + '</td></tr>' +
           (L.abierta === x.i ? '<tr class="detalle-carpeta"><td colspan="6" id="detalleCarpeta">' + detalleCarpeta(x) + '</td></tr>' : '');
       }).join('') + '</tbody></table>' : '<p class="vacio">Ninguna carpeta con este filtro.</p>';
+    if (escondidas.length) {
+      var porEstado = {};
+      escondidas.forEach(function (x) { var e = x[10] === 'OK' ? 'completa' : x[10] === 'VACÍA' ? 'vacía' : 'incompleta'; porEstado[e] = (porEstado[e] || 0) + 1; });
+      document.getElementById('lTabla').insertAdjacentHTML('beforeend', '<p class="nota" style="margin-top:10px">Con «' + esc(L.texto.trim()) + '» hay ' +
+        escondidas.length + ' carpeta' + (escondidas.length === 1 ? '' : 's') + ' más que este filtro no muestra (' +
+        Object.keys(porEstado).map(function (k) { return porEstado[k] + ' ' + k + (porEstado[k] === 1 ? '' : 's'); }).join(', ') +
+        ': ' + escondidas.slice(0, 5).map(function (x) { return esc(x[5]) + (x[0] ? ' COMEX' : ''); }).join(', ') + (escondidas.length > 5 ? '…' : '') +
+        ') · <button class="limpiar" id="lVerTodas">Ver en «Todas»</button></p>');
+      document.getElementById('lVerTodas').onclick = function () { L.estado = ''; marcar('lEstado', ''); L.cuantos = 50; pintarLegajo(); };
+    }
     document.getElementById('lMas').style.display = lista.length > L.cuantos ? '' : 'none';
     // Ranking por comprador (con el filtro de área).
     var g = {};
