@@ -64,33 +64,41 @@ export async function entrar(b: Bitacora, page: Page, quien: string): Promise<vo
   await page.click((await page.$("#btnAceptar")) ? "#btnAceptar" : "text=Iniciar sesión");
   // Se espera a VER el menú, no a que la URL cambie: esperar la URL espera
   // además el «load» completo, que en GitHub Actions tardaba 64 s.
+  //
+  // A veces la autenticación de SUNAT termina en su portada
+  // (api-seguridad.sunat.gob.pe/?state=&code=…, «Bienvenidos a SUNAT», con el
+  // «state» vacío: perdió a dónde volver) en vez de en el menú. Se pide el menú
+  // de nuevo y, si vuelve el formulario de ingreso, se llena otra vez. El
+  // 04/10/2026 la segunda vuelta TAMBIÉN cayó en la portada y, como solo se
+  // manejaba una, la corrida murió: ahora se repite hasta VUELTAS_PORTADA veces.
+  const VUELTAS_PORTADA = 3;
   const t0 = Date.now();
-  let pidioMenu = false;
-  let reingreso = false;
-  while (Date.now() - t0 < 90000) {
-    // A veces la autenticación de SUNAT termina en su portada
-    // (api-seguridad.sunat.gob.pe/?state=&code=…, «Bienvenidos a SUNAT») en vez
-    // de volver al menú: el login SÍ quedó hecho, falta el regreso. Se pide el
-    // menú una vez; con la sesión ya autenticada, entra (30/09/2026).
-    if (!pidioMenu && Date.now() - t0 > 5000 && ES_PORTADA_SEGURIDAD.test(page.url())) {
-      pidioMenu = true;
-      b.log("aviso", quien, "la autenticación quedó en la portada de SUNAT; se pide el menú de nuevo");
+  let ultimaAccion = Date.now();
+  let vueltas = 0;
+  let llenadoEnVuelta = 0;
+  while (Date.now() - t0 < 150000) {
+    if (await menuVisible(page)) {
+      b.log("info", quien, `sesión abierta en ${((Date.now() - t0) / 1000).toFixed(0)} s` + (vueltas ? ` (tras ${vueltas} vuelta(s) por la portada)` : ""));
+      return;
+    }
+    if (Date.now() - ultimaAccion > 5000 && ES_PORTADA_SEGURIDAD.test(page.url())) {
+      if (vueltas >= VUELTAS_PORTADA) break;
+      vueltas++;
+      b.log("aviso", quien, `la autenticación quedó en la portada de SUNAT; se pide el menú de nuevo (${vueltas}/${VUELTAS_PORTADA})`);
       await irConReintento(b, page, LOGIN_URL, quien).catch(() => {});
+      ultimaAccion = Date.now();
       continue;
     }
-    // Si al pedir el menú vuelve el formulario de ingreso, se llena una vez más.
-    if (pidioMenu && !reingreso && (await ingresoVisible(page))) {
-      reingreso = true;
+    // Si al pedir el menú vuelve el formulario de ingreso, se llena una vez por vuelta.
+    if (vueltas > llenadoEnVuelta && (await ingresoVisible(page))) {
+      llenadoEnVuelta = vueltas;
       b.log("aviso", quien, "volvió el formulario de ingreso; se ingresa otra vez");
       await page.fill("#txtRuc", RUC);
       await page.fill("#txtUsuario", usuario);
       await page.fill("#txtContrasena", clave);
       await page.click((await page.$("#btnAceptar")) ? "#btnAceptar" : "text=Iniciar sesión");
+      ultimaAccion = Date.now();
       continue;
-    }
-    if (await menuVisible(page)) {
-      b.log("info", quien, `sesión abierta en ${((Date.now() - t0) / 1000).toFixed(0)} s`);
-      return;
     }
     const texto = (
       await page
@@ -108,7 +116,7 @@ export async function entrar(b: Bitacora, page: Page, quien: string): Promise<vo
     await page.waitForTimeout(500);
   }
   await guardarEvidencia(b, page, "login-sin-menu");
-  throw new ErrorSesion(`después del login no apareció el menú en 90 s (${page.url().slice(0, 120)})`);
+  throw new ErrorSesion(`después del login no apareció el menú (${vueltas} vuelta(s) por la portada; ${page.url().slice(0, 120)})`);
 }
 
 /** La portada del servicio de autenticación de SUNAT (a veces el login termina ahí en vez de en el menú). */
