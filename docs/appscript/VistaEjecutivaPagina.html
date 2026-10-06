@@ -116,6 +116,13 @@
   .chip-warn { background: var(--warn-suave); color: var(--warn); }
   .chip-azul { background: var(--azul-suave); color: var(--azul); }
   .chip-gris { background: var(--surface3); color: var(--text2); }
+  /* Ficha del proveedor (padrón de SUNAT) en «Buscar factura». */
+  .ficha-prov { border: 1px solid var(--border); border-radius: 12px; background: var(--surface2); padding: 12px 14px; margin: 4px 0 12px; }
+  .ficha-prov .fp-nombre { font-weight: 700; font-size: 15px; }
+  .ficha-prov .fp-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 6px; }
+  .ficha-prov .chip { font-size: 12px; padding: 3px 9px; }
+  .ficha-prov .fp-dom { font-size: 13px; color: var(--text2); line-height: 1.45; overflow-wrap: anywhere; }
+  .marca-bc { color: var(--ok); font-weight: 700; }
   .punto { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
   .pasos { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--text2); }
   .paso { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 4px 9px; }
@@ -599,6 +606,32 @@
 
   // ══ Compras y legajo: directo de la base (datosDeLaBaseVista) ══
   var BASE = null;
+  // La ficha de cada RUC (padrón de SUNAT): [ruc, buen contribuyente, agente de retención, agente de percepción,
+  // estado, condición, dirección, distrito, provincia, departamento, consultado el]. Llega con la base.
+  var FICHAS = null;
+  function fichaDe(ruc) {
+    if (!FICHAS && BASE && BASE.rucs) { FICHAS = {}; BASE.rucs.forEach(function (r) { FICHAS[r[0]] = r; }); }
+    return FICHAS ? FICHAS[ruc] || null : null;
+  }
+  var lugarDe = function (f) { return f ? [f[7], f[8], f[9]].filter(Boolean).filter(function (v, i, a) { return a.indexOf(v) === i; }).join(', ') : ''; };
+  function fichaProveedor(ruc, nombre) {
+    if (!BASE) return '';
+    var f = fichaDe(ruc);
+    if (!f) return '<div class="ficha-prov"><div class="fp-nombre">' + esc(nombre || ruc) + '</div><div class="sub">RUC ' + esc(ruc) + '</div>' +
+      '<p class="nota" style="margin:6px 0 0">Todavía sin ficha de SUNAT para este RUC: el robot la trae en su próxima corrida.</p></div>';
+    var chip = function (clase, texto, titulo) { return '<span class="chip ' + clase + '"' + (titulo ? ' title="' + esc(titulo) + '"' : '') + '>' + esc(texto) + '</span>'; };
+    var raro = (f[4] && f[4] !== 'ACTIVO') || (f[5] && f[5] !== 'HABIDO');
+    return '<div class="ficha-prov"><div class="fp-nombre">' + esc(nombre || ruc) + '</div><div class="sub">RUC ' + esc(ruc) + '</div>' +
+      '<div class="fp-chips">' +
+        (f[1] ? chip('chip-ok', '✓ Buen contribuyente', 'Está en el padrón de Buenos Contribuyentes de SUNAT') : chip('chip-gris', 'No es buen contribuyente')) +
+        (f[2] ? chip('chip-azul', 'Agente de retención') : '') + (f[3] ? chip('chip-azul', 'Agente de percepción') : '') +
+        (f[4] || f[5] ? chip(raro ? 'chip-warn' : 'chip-gris', [f[4], f[5]].filter(Boolean).join(' · '), raro ? 'Ojo: no está activo o no está habido' : '') : '') +
+      '</div>' +
+      (f[6] || lugarDe(f) ? '<div class="fp-dom"><b>Domicilio fiscal:</b> ' + esc(f[6] || '—') + (lugarDe(f) ? ' · ' + esc(lugarDe(f)) : '') + '</div>'
+        : '<div class="fp-dom nota">' + (/^10|^15|^17/.test(ruc) ? 'Persona natural: SUNAT no publica su domicilio.' : 'Domicilio todavía no cargado.') + '</div>') +
+      (f[10] ? '<div class="nota" style="margin-top:4px">Condición consultada en SUNAT el ' + esc(fechaIso(f[10])) + '</div>' : '') +
+    '</div>';
+  }
   // empresa: INROPRIN por defecto; '*' = todas (los consorcios solo si alguien los elige).
   var L = { area: '', estado: 'INC', empresa: 'INROPRIN', comprador: '', texto: '', cuantos: 50, abierta: -1 };
   var empresaDe = function (x) { return x[28] || 'INROPRIN'; };
@@ -686,6 +719,9 @@
     insignia('insigniaSinOc', alta, alta + ' facturas que aparentan no tener OC (ALTA)');
     insignia('insigniaCambios', recientes, recientes + ' cambios en la última lectura del robot');
     pintarLegajo(); pintarSinOc(); pintarCambios();
+    // La ficha de SUNAT de cada proveedor llega con la base: se repinta lo que ya estaba a la vista.
+    var inF = document.getElementById('buscarFactura');
+    if (D && BASE.rucs && BASE.rucs.length) { pintar(); if (inF && inF.value.trim()) buscarFacturas(inF.value); }
   }
 
   // ── Legajo por OC ──
@@ -1190,7 +1226,8 @@
     document.getElementById('notaTop').textContent = F.mes ? etqMes(F.mes) : 'todo el año';
     document.getElementById('top').innerHTML = claves.length ? claves.map(function (k) {
       var p = D.dic.prov[k] || ['', ''];
-      return '<div class="fila-barra" title="' + esc(p[0]) + '"><div class="fb-cab"><span class="fb-etq">' + esc(p[1] || p[0]) + '</span><span class="fb-cifras"><b>' + dinero(prov[k], null, true) + '</b> · ' + pct(prov[k], total) + '%</span></div>' +
+      var bc = (fichaDe(p[0]) || [])[1];
+      return '<div class="fila-barra" title="' + esc(p[0]) + (bc ? ' · Buen contribuyente' : '') + '"><div class="fb-cab"><span class="fb-etq">' + esc(p[1] || p[0]) + (bc ? ' <span class="marca-bc" title="Buen contribuyente">✓</span>' : '') + '</span><span class="fb-cifras"><b>' + dinero(prov[k], null, true) + '</b> · ' + pct(prov[k], total) + '%</span></div>' +
         '<div class="fb-pista"><span style="width:' + Math.max(3, 100 * prov[k] / max) + '%"></span></div></div>';
     }).join('') : '<p class="vacio">Sin datos.</p>';
   }
@@ -1266,19 +1303,26 @@
       });
     }
     lista.sort(function (a, b) { var ka = claveFecha(a), kb = claveFecha(b); return ka < kb ? 1 : ka > kb ? -1 : 0; });
-    var total = lista.length; lista = lista.slice(0, 30);
-    caja.innerHTML = total ? '<p class="nota" style="margin:2px 0 6px">' + miles(total) + (total === 1 ? ' comprobante' : ' comprobantes') + (total > 30 ? ' · se muestran los 30 más recientes' : '') + '</p>' +
+    var total = lista.length;
+    // Si todo lo encontrado es de un solo proveedor (o se buscó un RUC), su ficha de SUNAT va arriba.
+    var rucsHallados = {};
+    lista.forEach(function (x) { rucsHallados[(D.dic.prov[x[2]] || [''])[0]] = D.dic.prov[x[2]] || ['', '']; });
+    var unico = Object.keys(rucsHallados).length === 1 ? rucsHallados[Object.keys(rucsHallados)[0]] : null;
+    var ficha = unico && unico[0] ? fichaProveedor(unico[0], unico[1]) : '';
+    lista = lista.slice(0, 30);
+    caja.innerHTML = ficha + (total ? '<p class="nota" style="margin:2px 0 6px">' + miles(total) + (total === 1 ? ' comprobante' : ' comprobantes') + (total > 30 ? ' · se muestran los 30 más recientes' : '') + '</p>' +
       lista.map(function (x) {
         var prov = D.dic.prov[x[2]] || ['', ''], oc = x[7] >= 0 ? D.dic.oc[x[7]] : null, i = D.docs.indexOf(x);
         return '<div class="factura" data-i="' + i + '">' +
           '<div class="p-dato">' + esc(x[11] || etqMes(x[0])) + '</div>' +
           '<div><div class="f-comp">' + esc(x[10]) + '</div><div class="sub">' + TIPO_NOMBRE[x[3]] + ' · ' + (x[1] === 1 ? 'emitida' : 'recibida') + '</div></div>' +
-          '<div style="min-width:0"><div class="fb-etq">' + esc(prov[1] || prov[0]) + '</div><div class="sub">' + esc(prov[0]) + '</div></div>' +
+          '<div style="min-width:0"><div class="fb-etq">' + esc(prov[1] || prov[0]) + '</div><div class="sub">' + esc(prov[0]) +
+            ((fichaDe(prov[0]) || [])[1] ? ' · <span class="marca-bc" title="Buen contribuyente (padrón de SUNAT)">✓ Buen contribuyente</span>' : '') + '</div></div>' +
           '<div class="f-total' + (x[5] < 0 ? ' sube' : '') + '">' + dinero(x[5], x[4]) + '</div>' +
           '<div>' + (oc ? '<span class="chip chip-azul">OC ' + esc(oc[0]) + '</span>' : '<span class="nota">sin OC</span>') + '</div>' +
           '<div class="f-acc">' + (x[12] ? '<a href="https://drive.google.com/file/d/' + esc(x[12]) + '/view" target="_blank" rel="noopener">PDF ↗</a>' : '') +
           (x[13] ? '<a href="https://drive.google.com/file/d/' + esc(x[13]) + '/view" target="_blank" rel="noopener">XML ↗</a>' : '') + '</div></div>';
-      }).join('') : '<p class="vacio" style="padding:10px 4px">No hay comprobantes con «' + esc(q) + '». Prueba solo con el número o con el RUC. Para buscar por producto (lo que dice dentro de la factura), usa el buscador de compras de más abajo.</p>';
+      }).join('') : '<p class="vacio" style="padding:10px 4px">No hay comprobantes con «' + esc(q) + '». Prueba solo con el número o con el RUC. Para buscar por producto (lo que dice dentro de la factura), usa el buscador de compras de más abajo.</p>');
   }
   function abrirFactura(fila) {
     var sig = fila.nextElementSibling;
@@ -1299,6 +1343,12 @@
         (r.detraccion ? '<span>Detracción: <b>' + dinero(r.detraccion, x[4]) + '</b></span>' : '') +
         (oc ? '<span>OC: <b>' + esc(oc[0]) + '</b>' + (oc[2] ? ' · ' + esc(oc[2]) : '') + '</span>' : '') +
         (r.cc ? '<span>Centro de costo: <b>' + esc(r.cc) + '</b></span>' : '') +
+        (function (f) {
+          if (!f) return '';
+          return '<span>' + (x[1] === 1 ? 'Cliente' : 'Proveedor') + ': <b>' + (f[1] ? 'Buen contribuyente' : 'no es buen contribuyente') + '</b>' +
+            (f[2] ? ' · agente de retención' : '') + (f[3] ? ' · agente de percepción' : '') + '</span>' +
+            (lugarDe(f) ? '<span title="' + esc(f[6]) + '">Domicilio fiscal: <b>' + esc(lugarDe(f)) + '</b></span>' : '');
+        })(fichaDe(prov[0])) +
         (r.comprador ? '<span>Comprador: <b>' + esc(r.comprador) + '</b></span>' : '') +
         (oc && oc[1] ? '<span class="chip ' + (/^Completo/.test(oc[1]) ? 'chip-ok' : 'chip-warn') + '">' + esc(oc[1]) + '</span>' : '') +
         (oc && oc[3] ? '<a href="https://drive.google.com/drive/folders/' + esc(oc[3]) + '" target="_blank" rel="noopener"><b>Carpeta de la OC ↗</b></a>' : '') +

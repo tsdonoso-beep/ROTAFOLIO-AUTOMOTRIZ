@@ -400,7 +400,9 @@ function datosDeLaBaseVistaAhora_() {
       { metodo: 'post', ruta: 'rpc/carpetas_madre_fuentes_json', cuerpo: { p_empresa_ruc: VISTA_RUC } },
       { metodo: 'post', ruta: 'rpc/facturas_sin_oc_json', cuerpo: { p_empresa_ruc: VISTA_RUC } },
       { metodo: 'get', ruta: 'carpeta_cambio?select=fecha,procedencia,oc,tipo,detalle,carpeta_url&empresa_ruc=eq.' + VISTA_RUC + '&order=fecha.desc,id.desc&limit=500' },
-      { metodo: 'get', ruta: 'fuente_copia?select=pestana,filas,fin,resultado,leido_en&empresa_ruc=eq.' + VISTA_RUC + '&order=pestana', opcional: true }
+      { metodo: 'get', ruta: 'fuente_copia?select=pestana,filas,fin,resultado,leido_en&empresa_ruc=eq.' + VISTA_RUC + '&order=pestana', opcional: true },
+      // La ficha de cada RUC: Buen Contribuyente, agentes, estado, domicilio fiscal (migración 062).
+      { metodo: 'post', ruta: 'rpc/fichas_ruc_json', cuerpo: {}, opcional: true }
     ]);
     // carpetas_madre_fuentes: las carpetas madre con lo que dicen Compras, COMEX y Almacén (la hoja privada de Contabilidad).
     var carpetas = (r[0] || [])
@@ -426,7 +428,10 @@ function datosDeLaBaseVistaAhora_() {
       .map(function (f) { return [f.fecha, f.procedencia === 'Importación' ? 1 : 0, f.oc, f.tipo, f.detalle || '', idCarpeta(f.carpeta_url)]; });
     // Cuándo leyó el robot la hoja de Compras, COMEX y Almacén (y cuándo se copió).
     var copia = r[3] || [];
-    return { error: null, carpetas: carpetas, sinOc: sinOc, cambios: cambios, copia: copia,
+    // [ruc, buen contribuyente, agente de retención, agente de percepción, estado, condición,
+    //  dirección, distrito, provincia, departamento, consultado el].
+    var rucs = r[4] || [];
+    return { error: null, carpetas: carpetas, sinOc: sinOc, cambios: cambios, copia: copia, rucs: rucs,
       armadoEl: new Date().toISOString() };
   } catch (e) {
     return { error: String(e.message || e) };

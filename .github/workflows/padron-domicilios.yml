@@ -1,0 +1,68 @@
+# El domicilio fiscal de proveedores y clientes, desde el padrón reducido de SUNAT
+#
+# SUNAT publica cada día un archivo con todos los RUC del país (~400 MB). Esto
+# lo baja, lo lee sin descomprimirlo a disco y guarda en la base (ruc_domicilio)
+# la dirección, el distrito, la provincia y el departamento de los RUC que nos
+# importan. La vista lo muestra en «Buscar factura» junto con la condición de
+# Buen Contribuyente (que trae «SUNAT padrón de RUC»).
+#
+# No necesita Clave SOL: el archivo es público. Corre solo los lunes; también
+# se puede correr a mano. Ver scripts/padron-domicilios.mts.
+
+name: SUNAT domicilio fiscal (padrón reducido)
+
+on:
+  schedule:
+    # Lunes 09:40 en Lima (UTC-5), después de «SUNAT diario» y del padrón de RUC.
+    - cron: "40 14 * * 1"
+  workflow_dispatch:
+    inputs:
+      debug:
+        description: "Solo leer y mostrar una muestra, sin guardar en la base."
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  group: padron-domicilios
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  leer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Bajar el padrón y guardar los domicilios
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          PROJECT_URL: ${{ secrets.PROJECT_URL }}
+          ANON_KEY: ${{ secrets.ANON_KEY }}
+          ROBOT_CORREO: ${{ secrets.ROBOT_CORREO }}
+          ROBOT_CLAVE: ${{ secrets.ROBOT_CLAVE }}
+          DEBUG: ${{ inputs.debug && '1' || '0' }}
+        run: node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/local/comun/con-bitacora.mts scripts/padron-domicilios.mts
+
+      - name: Subir el resultado
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: padron-domicilios
+          # Solo lo nuestro: el zip de SUNAT (400 MB) no.
+          path: |
+            salida/padron-domicilios/domicilios.json
+            logs/
+          if-no-files-found: ignore
+          retention-days: 14
