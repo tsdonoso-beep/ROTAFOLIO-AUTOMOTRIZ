@@ -412,7 +412,9 @@ function datosDeLaBaseVistaAhora_() {
           // 18…: el estado con «Por subir», lo que existe en otro lado, lo que falta sin rastro y los datos de la OC.
           f.estado_detalle || '', f.por_subir || '', f.falta_sin_rastro || '', f.comprador_segun || '', f.fecha_oc || '',
           f.monto_soles == null ? null : Number(f.monto_soles), f.ingreso_almacen || '', f.estado_comex || '', f.llegada_planta || '',
-          f.cambios_fuentes || 0];
+          f.cambios_fuentes || 0,
+          // 28…: la empresa de la OC (INROPRIN o un consorcio, migración 061) y de dónde sale.
+          f.empresa || 'INROPRIN', f.empresa_segun || ''];
       });
     var sinOc = (r[1] || [])
       .map(function (f) {

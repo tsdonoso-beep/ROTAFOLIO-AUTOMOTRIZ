@@ -437,6 +437,7 @@
         <div class="barra-filtros">
           <div class="segmento" id="lArea"><button data-v="" class="activo">Todas</button><button data-v="0">Nacionales</button><button data-v="1">COMEX</button></div>
           <div class="segmento" id="lEstado"><button data-v="INC" class="activo">Incompletas</button><button data-v="SUBIR" title="El documento existe en Almacén, COMEX o SUNAT, pero no está en la carpeta">◐ Por subir</button><button data-v="OK">Completas</button><button data-v="VACÍA">Vacías</button><button data-v="">Todas</button></div>
+          <select id="lEmpresa" title="La contabilidad se lleva por empresa: INROPRIN o cada consorcio"></select>
           <select id="lComprador"></select>
           <input class="buscador" id="lBuscar" type="search" placeholder="OC, proveedor, proyecto o lo que falta (guía, DAM…)">
         </div>
@@ -598,7 +599,10 @@
 
   // ══ Compras y legajo: directo de la base (datosDeLaBaseVista) ══
   var BASE = null;
-  var L = { area: '', estado: 'INC', comprador: '', texto: '', cuantos: 50, abierta: -1 };
+  // empresa: INROPRIN por defecto; '*' = todas (los consorcios solo si alguien los elige).
+  var L = { area: '', estado: 'INC', empresa: 'INROPRIN', comprador: '', texto: '', cuantos: 50, abierta: -1 };
+  var empresaDe = function (x) { return x[28] || 'INROPRIN'; };
+  var pasaEmpresa = function (x) { return L.empresa === '*' || empresaDe(x) === L.empresa; };
   var DETALLES = {};   // el detalle de cada carpeta ya pedido, por su ID de Drive
   // Los 12 documentos del legajo, en orden. solo: I = solo importaciones.
   var DOCS_LEGAJO = [['FACTURA', 'Factura'], ['OC', 'OC'], ['SWIFT', 'SWIFT', 'I'], ['GUIA', 'Guía de remisión'], ['DAM', 'DAM', 'I'],
@@ -639,6 +643,16 @@
     sel.innerHTML = '<option value="">Todos los compradores</option>' + compradores.map(function (c) { return '<option>' + esc(c) + '</option>'; }).join('') +
       '<option value="-">Comprador por identificar</option>';
     sel.onchange = function () { L.comprador = this.value; L.cuantos = 50; pintarLegajo(); };
+    // Empresas: INROPRIN primero, después cada consorcio con cuántas carpetas tiene.
+    var porEmpresa = {};
+    d.carpetas.forEach(function (x) { var e = empresaDe(x); porEmpresa[e] = (porEmpresa[e] || 0) + 1; });
+    var selE = document.getElementById('lEmpresa');
+    selE.innerHTML = Object.keys(porEmpresa).sort(function (a, b) { return a === 'INROPRIN' ? -1 : b === 'INROPRIN' ? 1 : a.localeCompare(b); })
+      .map(function (e) { return '<option value="' + esc(e) + '">' + esc(e) + ' (' + miles(porEmpresa[e]) + ')</option>'; }).join('') +
+      '<option value="*">Todas las empresas (' + miles(d.carpetas.length) + ')</option>';
+    if (!porEmpresa[L.empresa]) L.empresa = '*';
+    selE.value = L.empresa;
+    selE.onchange = function () { L.empresa = this.value; L.cuantos = 50; L.abierta = -1; pintarLegajo(); };
     segmento('lArea', function (v) { L.area = v; L.cuantos = 50; pintarLegajo(); });
     segmento('lEstado', function (v) { L.estado = v; L.cuantos = 50; pintarLegajo(); });
     var t1; document.getElementById('lBuscar').oninput = function () { var v = this.value; clearTimeout(t1); t1 = setTimeout(function () { L.texto = v; L.cuantos = 50; pintarLegajo(); }, 150); };
@@ -663,7 +677,7 @@
     segmento('cArea', function (v) { C.area = v; pintarCambios(); });
     var t3; document.getElementById('cBuscar').oninput = function () { var v = this.value; clearTimeout(t3); t3 = setTimeout(function () { C.texto = v; pintarCambios(); }, 150); };
     // Contadores del menú.
-    var inc = d.carpetas.filter(function (x) { return x[10] !== 'OK'; }).length;
+    var inc = d.carpetas.filter(function (x) { return x[10] !== 'OK' && pasaEmpresa(x); }).length;
     var alta = d.sinOc.filter(function (x) { return x[0] === 'ALTA'; }).length;
     var ultima = d.cambios.length ? new Date(d.cambios[0][0]).getTime() : 0;
     var recientes = d.cambios.filter(function (x) { return ultima - new Date(x[0]).getTime() < 6 * 3600e3; }).length;
@@ -677,19 +691,20 @@
   // ── Legajo por OC ──
   function pintarLegajo() {
     var palabras = plano(L.texto).split(/\s+/).filter(function (w) { return w.length > 1; });
-    var delArea = BASE.carpetas.filter(function (x) {
+    var delAreaTodas = BASE.carpetas.filter(function (x) {
       return (L.area === '' || String(x[0]) === L.area) &&
         (L.comprador === '' || (L.comprador === '-' ? !x[2] : x[2] === L.comprador));
     });
+    var delArea = delAreaTodas.filter(pasaEmpresa);
     var pasaEstado = function (x) { return L.estado === 'SUBIR' ? !!x[19] : L.estado === 'INC' ? x[10] === 'INCOMPLETA' : !L.estado || x[10] === L.estado; };
     var pasaTexto = function (x) {
       if (!palabras.length) return true;
-      var t = plano([x[5], x[6], x[7], x[8], x[2], x[11], x[12], x[19]].join(' '));
+      var t = plano([x[5], x[6], x[7], x[8], x[2], x[11], x[12], x[19], x[28]].join(' '));
       return palabras.every(function (w) { return t.indexOf(w) !== -1; });
     };
     var lista = delArea.filter(function (x) { return pasaEstado(x) && pasaTexto(x); });
-    // Lo que la búsqueda encuentra pero el filtro de estado esconde (p. ej. una OC completa con «Incompletas»).
-    var escondidas = palabras.length ? delArea.filter(function (x) { return !pasaEstado(x) && pasaTexto(x); }) : [];
+    // Lo que la búsqueda encuentra pero el filtro de estado o de empresa esconde (p. ej. una OC completa con «Incompletas»).
+    var escondidas = palabras.length ? delAreaTodas.filter(function (x) { return !(pasaEstado(x) && pasaEmpresa(x)) && pasaTexto(x); }) : [];
     var ok = delArea.filter(function (x) { return x[10] === 'OK'; }).length;
     var cuenta = function (re) { return delArea.filter(function (x) { return re.test(x[11]); }).length; };
     // Lo que falta sin rastro en ningún lado (x[20]) y lo que existe en otro lado y solo falta subir (x[19]).
@@ -723,7 +738,9 @@
     };
     document.getElementById('lTabla').innerHTML = lista.length ? '<table class="tabla"><thead><tr><th>OC</th><th>Proveedor</th><th>Comprador</th><th>Legajo</th><th class="num">Facturas SUNAT</th><th></th></tr></thead><tbody>' +
       lista.slice(0, L.cuantos).map(function (x) {
-        return '<tr class="fila-click' + (L.abierta === x.i ? ' abierta' : '') + '" data-i="' + x.i + '" title="Clic para ver sus documentos"><td><b>' + esc(x[5]) + '</b><div class="sub">' + esc(x[7]) + '</div>' +
+        return '<tr class="fila-click' + (L.abierta === x.i ? ' abierta' : '') + '" data-i="' + x.i + '" title="Clic para ver sus documentos"><td><b>' + esc(x[5]) + '</b>' +
+            (empresaDe(x) !== 'INROPRIN' ? '<div class="sub" style="color:var(--warn);font-weight:600" title="Empresa según ' + esc(x[29] || '') + '">' + esc(empresaDe(x)) + '</div>' : '') +
+            '<div class="sub">' + esc(x[7]) + '</div>' +
             (x[22] || x[23] != null ? '<div class="sub" style="white-space:nowrap">' + esc(fechaIso(x[22])) + (x[23] != null ? ' · ' + montoCod(x[23], 'PEN') : '') + '</div>' : '') + '</td>' +
           '<td>' + esc(x[6]) + '<div class="sub" title="' + esc(x[12]) + '">' + esc(x[12]) + '</div></td>' +
           '<td' + (x[21] ? ' title="Comprador según ' + esc(x[21]) + '"' : '') + '>' + (x[2] ? esc(x[2]) : '<span class="nota">por identificar</span>') +
@@ -734,19 +751,27 @@
       }).join('') + '</tbody></table>' : '<p class="vacio">Ninguna carpeta con este filtro.</p>';
     if (escondidas.length) {
       var porEstado = {};
-      escondidas.forEach(function (x) { var e = x[10] === 'OK' ? 'completa' : x[10] === 'VACÍA' ? 'vacía' : 'incompleta'; porEstado[e] = (porEstado[e] || 0) + 1; });
+      escondidas.forEach(function (x) {
+        var e = !pasaEmpresa(x) ? 'de otra empresa' : x[10] === 'OK' ? 'completa' : x[10] === 'VACÍA' ? 'vacía' : 'incompleta';
+        porEstado[e] = (porEstado[e] || 0) + 1;
+      });
       document.getElementById('lTabla').insertAdjacentHTML('beforeend', '<p class="nota" style="margin-top:10px">Con «' + esc(L.texto.trim()) + '» hay ' +
         escondidas.length + ' carpeta' + (escondidas.length === 1 ? '' : 's') + ' más que este filtro no muestra (' +
-        Object.keys(porEstado).map(function (k) { return porEstado[k] + ' ' + k + (porEstado[k] === 1 ? '' : 's'); }).join(', ') +
+        Object.keys(porEstado).map(function (k) { return porEstado[k] + ' ' + (porEstado[k] === 1 || k === 'de otra empresa' ? k : k + 's'); }).join(', ') +
         ': ' + escondidas.slice(0, 5).map(function (x) { return esc(x[5]) + (x[0] ? ' COMEX' : ''); }).join(', ') + (escondidas.length > 5 ? '…' : '') +
         ') · <button class="limpiar" id="lVerTodas">Ver en «Todas»</button></p>');
-      document.getElementById('lVerTodas').onclick = function () { L.estado = ''; marcar('lEstado', ''); L.cuantos = 50; pintarLegajo(); };
+      document.getElementById('lVerTodas').onclick = function () {
+        L.estado = ''; marcar('lEstado', '');
+        if (escondidas.some(function (x) { return !pasaEmpresa(x); })) { L.empresa = '*'; document.getElementById('lEmpresa').value = '*'; }
+        L.cuantos = 50; pintarLegajo();
+      };
     }
     document.getElementById('lMas').style.display = lista.length > L.cuantos ? '' : 'none';
     // Ranking por comprador (con el filtro de área).
     var g = {};
     BASE.carpetas.forEach(function (x) {
       if (L.area !== '' && String(x[0]) !== L.area) return;
+      if (!pasaEmpresa(x)) return;
       var k = x[2] || '-'; var c = g[k] || (g[k] = { n: 0, ok: 0, area: x[1] }); c.n++; if (x[10] === 'OK') c.ok++;
     });
     var claves = Object.keys(g).sort(function (a, b) { return a === '-' ? 1 : b === '-' ? -1 : g[b].ok / g[b].n - g[a].ok / g[a].n || g[b].n - g[a].n; });
@@ -779,11 +804,18 @@
     var existe = {};
     (fu.por_subir || []).forEach(function (e) { existe[e.doc] = e; });
     if (d.facturas.length) existe.FACTURA = { evidencia: 'SUNAT: ' + d.facturas.map(function (f) { return f.comprobante; }).join(', ') };
-    var otros = d.archivos.filter(function (a) { return !a.docs.length; });
+    // En nacionales no hay SWIFT (es del pago al exterior): va el comprobante de pago con su N.º de operación,
+    // el que se usa en la conciliación bancaria (reunión con Contabilidad, 06/10/2026). No se exige.
+    // En importaciones, el comprobante de pago al exterior es el SWIFT (como en LegajoPorOC.gs).
+    var esPago = function (a) { return a.docs.indexOf('SWIFT') >= 0 || /^PAGO/.test(a.parece || ''); };
+    var otros = d.archivos.filter(function (a) { return !a.docs.length && !esPago(a); });
     var docs = DOCS_LEGAJO.map(function (k) {
-      var suyos = d.archivos.filter(function (a) { return a.docs.indexOf(k[0]) >= 0; });
+      var pagoNacional = k[0] === 'SWIFT' && !impo;
+      if (pagoNacional) k = ['SWIFT', 'Pago de OC (N.º de operación)'];
+      var suyos = d.archivos.filter(function (a) { return k[0] === 'SWIFT' ? esPago(a) : a.docs.indexOf(k[0]) >= 0; });
       var marca, clase = '';
       if (suyos.length) marca = 's';
+      else if (pagoNacional) marca = 'o';
       else if (k[2] === 'I' && !impo) marca = 'x';
       else if (falta.indexOf(k[1]) >= 0 && existe[k[0]]) { marca = 'p'; clase = ' porsubir'; }
       else if (falta.indexOf(k[1]) >= 0) { marca = 'n'; clase = ' falta'; }
@@ -806,7 +838,7 @@
     });
     return '<div class="det-docs">' + docs + '</div>' +
       '<div class="det-info">' +
-        dato('Proyecto (carpeta)', c.proyecto) + dato('Centro de costo', (c.cc_codigo && c.cc_codigo !== '-' ? c.cc_codigo + ' ' : '') + (c.cc_nombre || '')) +
+        dato('Empresa', empresaDe(x) + (x[29] ? ' (según ' + x[29] + ')' : '')) + dato('Proyecto (carpeta)', c.proyecto) + dato('Centro de costo', (c.cc_codigo && c.cc_codigo !== '-' ? c.cc_codigo + ' ' : '') + (c.cc_nombre || '')) +
         dato('Centro de costo según', c.cc_segun) + dato('Comprador', (lg.comprador || x[2]) + (!lg.comprador && x[21] ? ' (según ' + x[21] + ')' : '')) + dato('Área', lg.area || x[1]) +
         dato('Fecha OC', lg.fecha_oc || fechaIso(fc.fecha)) +
         dato('Monto en soles', lg.monto_soles ? montoCod(Number(lg.monto_soles), 'PEN') : fc.total_soles != null ? montoCod(Number(fc.total_soles), 'PEN') : '') +

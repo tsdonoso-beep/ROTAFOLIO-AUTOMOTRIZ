@@ -68,6 +68,8 @@ var CM_PAGINA = 1000;
 var CM_COLUMNAS = [
   ['Procedencia', 'procedencia'],
   ['OC', 'oc'],
+  ['Empresa', 'empresa'],
+  ['Empresa según', 'empresa_segun'],
   ['Área responsable', 'area_responsable'],
   ['Comprador', 'comprador'],
   ['Comprador según', 'comprador_segun'],
@@ -296,7 +298,7 @@ function escribirResumenCarpetaMadre_(libro, filas, sinOc) {
   var cuenta = {};
   grupos.forEach(function (g) {
     cuenta[g] = { carpetas: 0, ocs: {}, ok: 0, incompletas: 0, vacias: 0, conFactura: 0, enCg: 0,
-      factura: 0, guia: 0, acta: 0, dam: 0, sinCc: 0, fuentes: {}, porSubir: 0, sinRastro: 0, guiaAlmacen: 0 };
+      factura: 0, guia: 0, acta: 0, dam: 0, sinCc: 0, fuentes: {}, empresas: {}, porSubir: 0, sinRastro: 0, guiaAlmacen: 0 };
   });
   filas.forEach(function (f) {
     [f.procedencia, 'Total'].forEach(function (g) {
@@ -318,6 +320,8 @@ function escribirResumenCarpetaMadre_(libro, filas, sinOc) {
       if (!f.cc_nombre) c.sinCc++;
       var s = f.centro_costo_segun || 'Sin asignar';
       c.fuentes[s] = (c.fuentes[s] || 0) + 1;
+      var e = f.empresa || 'INROPRIN';
+      c.empresas[e] = (c.empresas[e] || 0) + 1;
     });
   });
 
@@ -351,6 +355,11 @@ function escribirResumenCarpetaMadre_(libro, filas, sinOc) {
   Object.keys(fuentes).sort(function (a, b) { return cuenta.Total.fuentes[b] - cuenta.Total.fuentes[a]; }).forEach(function (s) {
     tabla.push(fila(s, function (c) { return c.fuentes[s] || 0; }));
   });
+  // La contabilidad se lleva por empresa: cuántas carpetas son de INROPRIN y cuántas de cada consorcio.
+  tabla.push(['', '', '', '']);
+  tabla.push(['Empresa de la OC (según la Base de Compras)', '', '', '']);
+  Object.keys(cuenta.Total.empresas).sort(function (a, b) { return a === 'INROPRIN' ? -1 : b === 'INROPRIN' ? 1 : cuenta.Total.empresas[b] - cuenta.Total.empresas[a]; })
+    .forEach(function (e) { tabla.push(fila(e, function (c) { return c.empresas[e] || 0; })); });
 
   // Las facturas de SUNAT que aparentan no tener OC, por área probable.
   var porArea = { 'Compras nacionales': 'Nacional', 'COMEX (importaciones)': 'Importación' };
