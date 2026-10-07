@@ -402,7 +402,9 @@ function datosDeLaBaseVistaAhora_() {
       { metodo: 'get', ruta: 'carpeta_cambio?select=fecha,procedencia,oc,tipo,detalle,carpeta_url&empresa_ruc=eq.' + VISTA_RUC + '&order=fecha.desc,id.desc&limit=500' },
       { metodo: 'get', ruta: 'fuente_copia?select=pestana,filas,fin,resultado,leido_en&empresa_ruc=eq.' + VISTA_RUC + '&order=pestana', opcional: true },
       // La ficha de cada RUC: Buen Contribuyente, agentes, estado, domicilio fiscal (migración 062).
-      { metodo: 'post', ruta: 'rpc/fichas_ruc_json', cuerpo: {}, opcional: true }
+      { metodo: 'post', ruta: 'rpc/fichas_ruc_json', cuerpo: {}, opcional: true },
+      // El cuadre de ventas e IGV por mes, como el PDT 621 (migración 063).
+      { metodo: 'post', ruta: 'rpc/cuadre_ventas_json', cuerpo: { p_empresa_ruc: VISTA_RUC }, opcional: true }
     ]);
     // carpetas_madre_fuentes: las carpetas madre con lo que dicen Compras, COMEX y Almacén (la hoja privada de Contabilidad).
     var carpetas = (r[0] || [])
@@ -431,7 +433,7 @@ function datosDeLaBaseVistaAhora_() {
     // [ruc, buen contribuyente, agente de retención, agente de percepción, estado, condición,
     //  dirección, distrito, provincia, departamento, consultado el].
     var rucs = r[4] || [];
-    return { error: null, carpetas: carpetas, sinOc: sinOc, cambios: cambios, copia: copia, rucs: rucs,
+    return { error: null, carpetas: carpetas, sinOc: sinOc, cambios: cambios, copia: copia, rucs: rucs, cuadreVentas: r[5] || [],
       armadoEl: new Date().toISOString() };
   } catch (e) {
     return { error: String(e.message || e) };

@@ -123,6 +123,8 @@
   .ficha-prov .chip { font-size: 12px; padding: 3px 9px; }
   .ficha-prov .fp-dom { font-size: 13px; color: var(--text2); line-height: 1.45; overflow-wrap: anywhere; }
   .marca-bc { color: var(--ok); font-weight: 700; }
+  .tabla tr.fila-total td { border-top: 2px solid var(--border); background: var(--surface2); }
+  .tabla tr.mes-elegido td { background: var(--accent-suave); }
   .punto { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
   .pasos { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--text2); }
   .paso { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 4px 9px; }
@@ -382,6 +384,10 @@
 
     <section class="vista" data-vista="impuestos">
       <div class="kpis" id="kpisImpuestos"></div>
+      <div class="tarjeta tarjeta-ancha" id="cuadreCaja" style="display:none;margin-bottom:18px">
+        <div class="tarjeta-cab"><h2>Cuadre de ventas e IGV por mes</h2><span class="nota">Como el PDT 621: ventas − notas de crédito = IGV del mes · de los XML emitidos, en soles</span></div>
+        <div id="cuadre" style="overflow-x:auto"></div>
+      </div>
       <details class="tarjeta tarjeta-ancha desplegable" id="detCaja" style="display:none" open>
         <summary><h2>Detracciones a revisar · <span class="det-cuenta" id="detCuenta"></span></h2><span class="nota">El % aplicado no es el que lleva su código de bien o servicio (anexos de la R.S. 183-2004/SUNAT)</span></summary>
         <div id="detLista"></div>
@@ -718,7 +724,7 @@
     insignia('insigniaLegajo', inc, inc + ' carpetas con el legajo incompleto');
     insignia('insigniaSinOc', alta, alta + ' facturas que aparentan no tener OC (ALTA)');
     insignia('insigniaCambios', recientes, recientes + ' cambios en la última lectura del robot');
-    pintarLegajo(); pintarSinOc(); pintarCambios();
+    pintarLegajo(); pintarSinOc(); pintarCambios(); pintarCuadre();
     // La ficha de SUNAT de cada proveedor llega con la base: se repinta lo que ya estaba a la vista.
     var inF = document.getElementById('buscarFactura');
     if (D && BASE.rucs && BASE.rucs.length) { pintar(); if (inF && inF.value.trim()) buscarFacturas(inF.value); }
@@ -817,6 +823,39 @@
         '<div class="fb-cab"><span class="fb-etq">' + (k === '-' ? 'Por identificar' : esc(k)) + '</span><span class="fb-cifras"><b>' + p + '%</b> · ' + c.ok + ' de ' + c.n + '</span></div>' +
         '<div class="fb-pista"><span style="width:' + Math.max(2, p) + '%;background:' + (p >= 80 ? 'var(--ok)' : p >= 50 ? 'var(--accent)' : 'var(--warn)') + '"></span></div></div>';
     }).join('');
+  }
+
+  // ── Cuadre de ventas e IGV por mes (cuadre_ventas_json, migración 063) ──
+  // Reunión con Contabilidad (06/10/2026): el IGV de ventas «no cuadraba». La factura que aplica un anticipo
+  // trae el IGV ya neto (el anticipo pagó el suyo el mes en que se facturó) y las notas de crédito restan:
+  // se muestra cada pieza por mes para compararla con el PDT casilla por casilla.
+  function pintarCuadre() {
+    var caja = document.getElementById('cuadreCaja');
+    var filas = BASE && BASE.cuadreVentas || [];
+    if (!filas.length) { caja.style.display = 'none'; return; }
+    caja.style.display = '';
+    var soles = function (n) { return montoCod(Number(n) || 0, 'PEN'); };
+    var tot = {};
+    ['n_ventas', 'base_ventas', 'igv_ventas', 'n_notas', 'base_notas', 'igv_notas', 'base_neta', 'igv_neto', 'no_gravado', 'n_anticipos', 'anticipos', 'cubiertas_por_anticipo', 'total_neto']
+      .forEach(function (k) { tot[k] = filas.reduce(function (a, f) { return a + (Number(f[k]) || 0); }, 0); });
+    var fila = function (f, etq, clase) {
+      return '<tr' + (clase ? ' class="' + clase + '"' : '') + '><td><b>' + etq + '</b></td>' +
+        '<td class="num">' + soles(f.base_ventas) + '<div class="sub">' + miles(f.n_ventas) + ' comprobantes</div></td>' +
+        '<td class="num">' + soles(f.igv_ventas) + '</td>' +
+        '<td class="num">' + (f.n_notas ? '−' + soles(f.igv_notas) + '<div class="sub">' + miles(f.n_notas) + ' notas · base −' + soles(f.base_notas) + '</div>' : '—') + '</td>' +
+        '<td class="num"><b>' + soles(f.igv_neto) + '</b><div class="sub">base ' + soles(f.base_neta) + '</div></td>' +
+        '<td class="num">' + (Number(f.no_gravado) ? soles(f.no_gravado) : '—') + '</td>' +
+        '<td class="num">' + (f.n_anticipos ? soles(f.anticipos) + '<div class="sub">' + miles(f.n_anticipos) + ' facturas' +
+          (f.cubiertas_por_anticipo ? ' · ' + miles(f.cubiertas_por_anticipo) + ' en cero' : '') + '</div>' : '—') + '</td></tr>';
+    };
+    document.getElementById('cuadre').innerHTML = '<table class="tabla"><thead><tr><th>Mes</th><th class="num">Base gravada de ventas</th><th class="num">IGV de ventas</th>' +
+      '<th class="num">Notas de crédito (IGV)</th><th class="num">IGV del mes</th><th class="num">No gravado</th>' +
+      '<th class="num" title="Lo que se descontó por anticipos ya facturados antes: ese IGV se pagó el mes del anticipo, no se vuelve a sumar">Anticipos aplicados</th></tr></thead><tbody>' +
+      filas.map(function (f) { return fila(f, esc(etqMes(f.periodo)), F.mes === f.periodo ? 'mes-elegido' : ''); }).join('') +
+      fila(tot, 'Total del año', 'fila-total') + '</tbody></table>' +
+      '<p class="nota" style="margin-top:8px">Base = IGV ÷ 18%. Una factura con anticipo trae su IGV ya neto: el anticipo pagó el suyo el mes en que se facturó ' +
+      '(por eso «Anticipos aplicados» es solo informativo y no se resta otra vez). Los comprobantes dados de baja no están en los XML: si hay alguno, ' +
+      'es una diferencia con el PDT que este cuadre no ve.</p>';
   }
 
   // ── El detalle de una carpeta ──
@@ -1117,6 +1156,7 @@
       kpi('Con centro de costo', '<div class="kpi-anillo">' + anillo(pct(conCc, docs.length), '#006DB1') + '<div class="kpi-extra" style="margin:0">' + miles(conCc) + ' de ' + miles(docs.length) + '<br>listos para CONCAR</div></div>') +
       kpi('Importaciones', dinero(suma(docs.filter(function (x) { return x[9]; }), 5)), '<div class="kpi-extra">gastos en Perú unidos a OC de importación</div>')
       : '<p class="vacio">Las órdenes de compra y los centros de costo son de las compras: elige «Compras» en los filtros.</p>';
+    pintarCuadre();
     var ins = document.getElementById('insigniaImpuestos');
     ins.textContent = revisar; ins.style.display = revisar ? '' : 'none';
     ins.title = revisar + ' detracciones a revisar';
