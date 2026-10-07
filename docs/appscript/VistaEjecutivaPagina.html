@@ -630,7 +630,9 @@
     var raro = (f[4] && f[4] !== 'ACTIVO') || (f[5] && f[5] !== 'HABIDO');
     return '<div class="ficha-prov"><div class="fp-nombre">' + esc(nombre || ruc) + '</div><div class="sub">RUC ' + esc(ruc) + '</div>' +
       '<div class="fp-chips">' +
-        (f[1] ? chip('chip-ok', '✓ Buen contribuyente', 'Está en el padrón de Buenos Contribuyentes de SUNAT') : chip('chip-gris', 'No es buen contribuyente')) +
+        (f[1] ? chip('chip-ok', '✓ Buen contribuyente', 'Está en el padrón de Buenos Contribuyentes de SUNAT')
+          : f[10] ? chip('chip-gris', 'No es buen contribuyente')
+          : chip('chip-gris', 'Buen contribuyente: sin consultar', 'La Consulta RUC todavía no lo revisó: el robot lo trae en su próxima corrida')) +
         (f[2] ? chip('chip-azul', 'Agente de retención') : '') + (f[3] ? chip('chip-azul', 'Agente de percepción') : '') +
         (f[4] || f[5] ? chip(raro ? 'chip-warn' : 'chip-gris', [f[4], f[5]].filter(Boolean).join(' · '), raro ? 'Ojo: no está activo o no está habido' : '') : '') +
       '</div>' +
@@ -1386,7 +1388,7 @@
         (r.cc ? '<span>Centro de costo: <b>' + esc(r.cc) + '</b></span>' : '') +
         (function (f) {
           if (!f) return '';
-          return '<span>' + (x[1] === 1 ? 'Cliente' : 'Proveedor') + ': <b>' + (f[1] ? 'Buen contribuyente' : 'no es buen contribuyente') + '</b>' +
+          return '<span>' + (x[1] === 1 ? 'Cliente' : 'Proveedor') + ': <b>' + (f[1] ? 'Buen contribuyente' : f[10] ? 'no es buen contribuyente' : 'buen contribuyente sin consultar') + '</b>' +
             (f[2] ? ' · agente de retención' : '') + (f[3] ? ' · agente de percepción' : '') + '</span>' +
             (lugarDe(f) ? '<span title="' + esc(f[6]) + '">Domicilio fiscal: <b>' + esc(lugarDe(f)) + '</b></span>' : '');
         })(fichaDe(prov[0])) +
