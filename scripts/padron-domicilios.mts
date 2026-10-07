@@ -81,9 +81,15 @@ let buscados: Set<string>;
 if (process.env.RUCS?.trim()) {
   buscados = new Set(process.env.RUCS.split(",").map(r => r.trim()).filter(r => /^\d{11}$/.test(r)));
 } else {
-  const { data, error } = await sb!.rpc("rucs_para_domicilio");
-  if (error) { console.error(`✗ rucs_para_domicilio: ${error.message}`); process.exit(1); }
-  buscados = new Set((data as Array<{ ruc: string }>).map(f => f.ruc));
+  // La base entrega de a 1000 filas: se pide por páginas hasta que no venga ninguna.
+  buscados = new Set();
+  for (let desde = 0; ; desde += 1000) {
+    const { data, error } = await sb!.rpc("rucs_para_domicilio").range(desde, desde + 999);
+    if (error) { console.error(`✗ rucs_para_domicilio: ${error.message}`); process.exit(1); }
+    const pagina = (data ?? []) as Array<{ ruc: string }>;
+    pagina.forEach(f => buscados.add(f.ruc));
+    if (pagina.length < 1000) break;
+  }
 }
 console.log(`· ${buscados.size} RUC por buscar en el padrón`);
 
