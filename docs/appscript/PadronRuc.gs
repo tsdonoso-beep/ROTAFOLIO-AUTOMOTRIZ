@@ -38,7 +38,9 @@ var PESTANA_PADRON = 'PADRÓN RUC';
 var CABECERAS_PADRON = [
   'RUC', 'Razón social', 'Estado', 'Condición',
   'Buen Contribuyente', 'Agente de Retención', 'Agente de Percepción',
-  'Padrones (detalle)', 'Consultado el'
+  'Padrones (detalle)', 'Consultado el',
+  // El domicilio fiscal (padrón reducido de SUNAT, tabla ruc_domicilio, migración 062).
+  'Domicilio fiscal', 'Distrito', 'Provincia', 'Departamento'
 ];
 
 /**
@@ -114,19 +116,43 @@ function iniciarSesionRobotPadron_(cfg) {
   return JSON.parse(resp.getContentText()).access_token;
 }
 
-/** Toda la tabla `padron_ruc`, ordenada por RUC. La RLS ya la deja de solo lectura por REST. */
-function padronDesdeBase_(cfg, token) {
-  var resp = UrlFetchApp.fetch(
-    cfg.supabaseUrl + '/rest/v1/padron_ruc?select=*&order=ruc.asc&limit=5000',
-    {
-      headers: { apikey: cfg.anonKey, Authorization: 'Bearer ' + token },
-      muteHttpExceptions: true
+/**
+ * Toda una tabla de la base, de a 1000 filas: la base entrega como máximo 1000
+ * por consulta (antes se pedía todo de una vez y la pestaña quedaba en 1000 RUC).
+ */
+function tablaCompletaPadron_(cfg, token, tabla, campos) {
+  var todas = [];
+  for (var desde = 0; ; desde += 1000) {
+    var resp = UrlFetchApp.fetch(
+      cfg.supabaseUrl + '/rest/v1/' + tabla + '?select=' + campos + '&order=ruc.asc&limit=1000&offset=' + desde,
+      { headers: { apikey: cfg.anonKey, Authorization: 'Bearer ' + token }, muteHttpExceptions: true }
+    );
+    if (resp.getResponseCode() >= 300) {
+      throw new Error('No se pudo leer ' + tabla + ' de la base: ' + resp.getContentText());
     }
-  );
-  if (resp.getResponseCode() >= 300) {
-    throw new Error('No se pudo leer el padrón de la base: ' + resp.getContentText());
+    var pagina = JSON.parse(resp.getContentText());
+    todas = todas.concat(pagina);
+    if (pagina.length < 1000) return todas;
   }
-  return JSON.parse(resp.getContentText());
+}
+
+/**
+ * El padrón (padron_ruc) con el domicilio de cada RUC (ruc_domicilio), por RUC.
+ * Los RUC que tienen domicilio pero todavía no se consultaron en la Consulta RUC
+ * van igual, con la condición «Sin consultar».
+ */
+function padronDesdeBase_(cfg, token) {
+  var padron = tablaCompletaPadron_(cfg, token, 'padron_ruc', '*');
+  var domicilios = tablaCompletaPadron_(cfg, token, 'ruc_domicilio', 'ruc,razon_social,estado,condicion,direccion,distrito,provincia,departamento');
+  var dom = {};
+  domicilios.forEach(function (d) { dom[d.ruc] = d; });
+  var vistos = {};
+  var filas = padron.map(function (r) { vistos[r.ruc] = true; r.domicilio = dom[r.ruc] || null; return r; });
+  domicilios.forEach(function (d) {
+    if (!vistos[d.ruc]) filas.push({ ruc: d.ruc, razon_social: d.razon_social, estado: d.estado, condicion: d.condicion, sinConsultar: true, domicilio: d });
+  });
+  filas.sort(function (a, b) { return a.ruc < b.ruc ? -1 : a.ruc > b.ruc ? 1 : 0; });
+  return filas;
 }
 
 function hojaPadron_() {
@@ -144,15 +170,19 @@ function escribirPadronCompleto_(filas) {
   if (!filas || filas.length === 0) return;
 
   var valores = filas.map(function (r) {
+    var siNo = function (v) { return r.sinConsultar ? 'Sin consultar' : v ? 'Sí' : 'No'; };
+    var d = r.domicilio || {};
     return [
       r.ruc || '', r.razon_social || '', r.estado || '', r.condicion || '',
-      r.buen_contribuyente ? 'Sí' : 'No',
-      r.agente_retencion ? 'Sí' : 'No',
-      r.agente_percepcion ? 'Sí' : 'No',
+      siNo(r.buen_contribuyente), siNo(r.agente_retencion), siNo(r.agente_percepcion),
       r.padrones_detalle || '',
-      r.consultado_en ? new Date(r.consultado_en) : ''
+      r.consultado_en ? new Date(r.consultado_en) : '',
+      d.direccion || '', d.distrito || '', d.provincia || '', d.departamento || ''
     ];
   });
+  // Todo como texto (que el RUC no se vuelva número), menos la fecha de consulta.
+  hoja.getRange(2, 1, valores.length, CABECERAS_PADRON.length).setNumberFormat('@');
+  hoja.getRange(2, 9, valores.length, 1).setNumberFormat('dd/mm/yyyy');
   hoja.getRange(2, 1, valores.length, CABECERAS_PADRON.length).setValues(valores);
 }
 

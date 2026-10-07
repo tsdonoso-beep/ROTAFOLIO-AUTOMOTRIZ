@@ -45,7 +45,7 @@ funciona cada pieza está en `GUIA-DEL-REPOSITORIO.md` y `docs/appscript/README.
 - [ ] ¿Sacar las facturas del BCP (20100047218) de los reintentos de la API (siempre error 500) y marcarlas «pedir al banco»?
 - [ ] ¿Barrido semanal automático de todo el SIRE del año (no solo mes actual y anterior)?
 - [ ] ¿Ampliar el robot de buen contribuyente a los 180 RUC sin consultar (clientes y Base de Compras)?
-- [ ] ¿Agregar domicilio a la pestaña PADRÓN RUC?
+- [x] Domicilio en la pestaña PADRÓN RUC (y la pestaña ya trae todos los RUC, no solo 1000).
 
 **Siguiente trabajo pedido**
 - [ ] **Detracciones**: extraer las constancias de depósito del menú SPOT de SUNAT SOL. El usuario va a mandar
