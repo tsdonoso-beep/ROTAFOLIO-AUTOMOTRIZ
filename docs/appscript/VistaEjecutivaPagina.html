@@ -320,8 +320,8 @@
         <path d="M183.001 22.6211H180.886V33.7495H177.325V16.1055H180.886V20.1562H183.001V22.6155" fill="#1D1D1B"/>
         <path d="M77.3037 22.8049C76.686 21.553 75.7234 20.6738 74.4159 20.1619C73.2808 19.7558 72.0066 19.6445 70.5988 19.8337C69.1855 20.0228 68.0393 20.6182 67.1435 21.6364C66.5926 22.2429 66.1865 23.0052 65.9305 23.9178C65.6746 24.8303 65.541 25.7484 65.541 26.6609C65.541 27.7793 65.6968 28.8532 66.0084 29.8825C66.3144 30.9175 66.8319 31.7354 67.5552 32.3475C68.2396 32.954 69.1633 33.388 70.3151 33.6439C71.4669 33.8999 72.6131 33.8721 73.7482 33.566C75.0224 33.2989 76.0684 32.6034 76.8975 31.485C77.2758 30.9453 77.5819 30.2832 77.8267 29.5042C78.066 28.7252 78.1884 27.796 78.1884 26.711C78.1884 25.2253 77.8935 23.9178 77.3092 22.7994L77.3037 22.8049ZM71.8619 30.9954C69.9144 30.9954 68.9741 29.1091 68.9741 26.7833C68.9741 24.4575 69.9089 22.5712 71.8619 22.5712C73.8149 22.5712 74.7497 24.4575 74.7497 26.7833C74.7497 29.1091 73.8038 30.9954 71.8619 30.9954Z" fill="#1D1D1B"/>
       </svg>
-      <div class="lat-titulo">Vista <span>SUNAT</span></div>
-      <div class="lat-sub">Comprobantes con detalle · Contabilidad</div>
+      <div class="lat-titulo">INRO<span>CONTA</span></div>
+      <div class="lat-sub">Contabilidad · SUNAT, compras y legajo</div>
     </div>
 
     <div class="lat-bloque">
@@ -571,7 +571,7 @@
       }).withFailureHandler(function (e) { b.disabled = false; b.textContent = '↻ Actualizar'; alert('No se pudo actualizar: ' + (e && e.message ? e.message : e)); })
         .actualizarVistaAhora();
     };
-    document.getElementById('pie').textContent = 'Generado el ' + d.generadoEl + ' · a partir de «COMPROBANTES SUNAT - DETALLE»';
+    document.getElementById('pie').textContent = 'Generado el ' + d.generadoEl + ' · libro INROCONTA';
     // El menú lateral: una sección a la vez; se recuerda la última vista.
     ['nav', 'nav2'].forEach(function (id) {
       document.getElementById(id).onclick = function (e) {

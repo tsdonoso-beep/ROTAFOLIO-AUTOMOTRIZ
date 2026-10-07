@@ -59,7 +59,7 @@ var URL_HOJA_VISTA = 'https://docs.google.com/spreadsheets/d/' + HOJA_ID_VISTA +
 function doGet() {
   return HtmlService.createTemplateFromFile('VistaEjecutivaPagina')
     .evaluate()
-    .setTitle('SUNAT · Comprobantes — Vista ejecutiva')
+    .setTitle('INROCONTA · Contabilidad INROPRIN')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
 }
