@@ -18,7 +18,7 @@ funciona cada pieza está en `GUIA-DEL-REPOSITORIO.md` y `docs/appscript/README.
 - **Hojas viejas** (solo consulta, el robot TODAVÍA publica también ahí):
   DETALLE `1Kp5RS…`, COMPROBANTES SUNAT `1ttW7D…`, GENERAL `1tWakeoj…`.
 - **Hoja privada de fuentes** `1sJhaKxamPG1lIEAaso5uprqUU_ixHLylQtAY53KUEms`: queda aparte (sensible).
-- **Base**: Supabase `vqabgnynidehfqueupki`. Migraciones hasta la **064**.
+- **Base**: Supabase `vqabgnynidehfqueupki`. Migraciones hasta la **065**.
 - **Guía para Gabo** (Claude Docs): https://claude.ai/code/artifact/3540ccae-f2c2-43b3-bc41-e0d259a7f503
 
 ## Hecho en la reunión del 06/10/2026 (y después)
@@ -44,7 +44,7 @@ funciona cada pieza está en `GUIA-DEL-REPOSITORIO.md` y `docs/appscript/README.
 **Decisiones del usuario sin responder**
 - [ ] ¿Sacar las facturas del BCP (20100047218) de los reintentos de la API (siempre error 500) y marcarlas «pedir al banco»?
 - [ ] ¿Barrido semanal automático de todo el SIRE del año (no solo mes actual y anterior)?
-- [ ] ¿Ampliar el robot de buen contribuyente a los 180 RUC sin consultar (clientes y Base de Compras)?
+- [x] Robot de buen contribuyente ampliado a clientes, Base de Compras y RUC con domicilio (migración 065): 180 pendientes, ~2 días.
 - [x] Domicilio en la pestaña PADRÓN RUC (y la pestaña ya trae todos los RUC, no solo 1000).
 
 **Siguiente trabajo pedido**
