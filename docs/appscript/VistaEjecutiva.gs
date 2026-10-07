@@ -379,7 +379,8 @@ var VISTA_RUC = '20512201611';
 
 function datosDeLaBaseVista() {
   var listo = leerVistaLista_('base');
-  if (listo) return listo;
+  // Una copia guardada por una versión anterior (sin la ficha de los RUC ni el cuadre de ventas) se vuelve a armar.
+  if (listo && listo.rucs && listo.cuadreVentas) return listo;
   var d = datosDeLaBaseVistaAhora_();
   if (!d.error) guardarVistaLista_('base', d);
   return d;

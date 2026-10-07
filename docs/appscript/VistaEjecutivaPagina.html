@@ -621,7 +621,8 @@
   }
   var lugarDe = function (f) { return f ? [f[7], f[8], f[9]].filter(Boolean).filter(function (v, i, a) { return a.indexOf(v) === i; }).join(', ') : ''; };
   function fichaProveedor(ruc, nombre) {
-    if (!BASE) return '';
+    // Sin la lista de fichas (base todavía cargando, o una copia vieja): no se afirma nada del RUC.
+    if (!BASE || !BASE.rucs || !BASE.rucs.length) return '';
     var f = fichaDe(ruc);
     if (!f) return '<div class="ficha-prov"><div class="fp-nombre">' + esc(nombre || ruc) + '</div><div class="sub">RUC ' + esc(ruc) + '</div>' +
       '<p class="nota" style="margin:6px 0 0">Todavía sin ficha de SUNAT para este RUC: el robot la trae en su próxima corrida.</p></div>';
