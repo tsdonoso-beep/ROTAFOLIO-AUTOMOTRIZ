@@ -703,6 +703,37 @@ El robot la lee en `scripts/fuentes-compras.mts` (paso «Leer las fuentes de
 Compras, COMEX y Almacén» de `carpetas-oc.yml`, o solo con
 `fuentes-compras.yml`).
 
+## Novedades de la reunión del 06/10/2026
+
+- **Filtro por empresa en el legajo** (`VistaEjecutivaPagina.html`, `CarpetaMadre.gs`):
+  cada carpeta trae la empresa de su OC según la Base de Compras (INROPRIN o
+  el consorcio). La vista muestra INROPRIN por defecto; los consorcios solo si
+  se eligen. GENERAL suma las columnas «Empresa» y «Empresa según».
+- **«Pago de OC» en nacionales**: el SWIFT es del pago al exterior. En
+  nacionales el comprobante de pago (N.º de operación) sale como «Pago de OC».
+- **Ficha del proveedor en «Buscar factura»**: Buen Contribuyente, agentes de
+  retención/percepción, estado y domicilio fiscal. El domicilio lo trae el
+  robot semanal `padron-domicilios.yml` (padrón reducido de SUNAT).
+- **Cuadre de ventas e IGV por mes** en Impuestos (como el PDT 621).
+
+## Verificar una carga antes del CONCAR
+
+`VerificarComprobantes.gs` va en la hoja donde se arma la carga masiva (por
+ejemplo, la tabla de rendiciones de Rosa). Menú **SUNAT → Verificar esta
+pestaña**: por cada fila dice si el comprobante está emitido en SUNAT, si
+tiene nota de crédito, si ya no aparece en el SIRE (¿de baja?) o si el monto
+de SUNAT es otro; y si está repetido en la pestaña o ya en el CONCAR.
+
+- Reconoce las columnas por su título: RUC, Serie y Número (o una sola
+  «Comprobante» con F001-123), Tipo y Total (opcionales).
+- **Duplicados contra lo ya cargado:** pegar el registro de compras exportado
+  del CONCAR en una pestaña **«REGISTRO CONCAR»** de la misma hoja. Se
+  compara dentro de la hoja: el registro no se sube a la base.
+- Instalación: Extensiones → Apps Script → pegar el archivo → Propiedades del
+  script SUPABASE_URL, SUPABASE_ANON_KEY, ROBOT_CORREO y ROBOT_CLAVE (las de
+  CarpetaMadre.gs) → recargar la hoja. Si la hoja ya tiene otro `onOpen`,
+  agregar el menú «SUNAT» dentro de ese.
+
 ## Si algo falla
 
 **«La hoja no trae estas columnas…»** — cambiaron los títulos en la fuente. El

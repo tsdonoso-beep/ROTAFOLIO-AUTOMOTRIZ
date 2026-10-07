@@ -186,6 +186,16 @@ que es la evidencia para diagnosticar cuando algo falla.
   más de 30 días.
 - **Cuándo:** cron 09:00 + manual. Tope 30 min. No necesita Clave SOL.
 
+#### SUNAT domicilio fiscal — `padron-domicilios.yml` → `scripts/padron-domicilios.mts`
+- **Qué hace:** baja el **padrón reducido** que SUNAT publica cada día
+  (~400 MB, todos los RUC del país), lo lee sin descomprimirlo a disco y
+  guarda en `ruc_domicilio` la dirección, distrito, provincia y departamento
+  de nuestros RUC (`rucs_para_domicilio`: proveedores, clientes, Base de
+  Compras). Los nombres del ubigeo salen de la lista del INEI del paquete npm
+  `ubigeo-peru`, bajada en cada corrida. Las personas naturales vienen sin
+  dirección. La vista lo muestra con `fichas_ruc_json`.
+- **Cuándo:** lunes 09:40 + manual. ~1 min. No necesita Clave SOL.
+
 #### Carpetas de OC (nacionales e importaciones) — `carpetas-oc.yml` → `scripts/carpetas-oc.mts`
 - **Qué hace:** recorre la carpeta madre de compras nacionales
   («5. Ordenes de Compra», compartida como Lector con la cuenta de servicio)
