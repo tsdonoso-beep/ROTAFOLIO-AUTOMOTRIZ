@@ -92,7 +92,10 @@ if (!existsSync(zip)) { console.error(`✗ No existe ${zip}`); process.exit(1); 
 
 // Leer el padrón de corrido: unzip -p | latin1 → líneas.
 const t0 = Date.now();
-const unzip = spawn("unzip", ["-p", zip], { stdio: ["ignore", "pipe", "inherit"] });
+// En Windows no hay unzip: su tar (bsdtar, viene con Windows 10/11) también lee zip.
+const unzip = process.platform === "win32"
+  ? spawn("tar", ["-xOf", zip], { stdio: ["ignore", "pipe", "inherit"] })
+  : spawn("unzip", ["-p", zip], { stdio: ["ignore", "pipe", "inherit"] });
 unzip.stdout.setEncoding("latin1");
 const filas: Array<Record<string, string>> = [];
 let leidas = 0;
