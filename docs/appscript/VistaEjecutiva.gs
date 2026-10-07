@@ -50,7 +50,8 @@
  *    vez). Deja la vista armada cada hora; ver «La vista lista».
  */
 
-var HOJA_ID_VISTA = '1Kp5RS_7_dIwQDziSsK-vKbuYyCUxtG7VYktk5XkWj_A';
+// El libro único de Contabilidad «INROCONTA» (desde el 07/10/2026; antes, la hoja DETALLE 1Kp5RS…).
+var HOJA_ID_VISTA = '1n_MZD30CQ1b3HZlVCstQZ3giGaE-sKsB5_U3dobtdpE';
 var NOMBRE_PESTANA_VISTA = 'COMPROBANTES SUNAT - DETALLE';
 var URL_HOJA_VISTA = 'https://docs.google.com/spreadsheets/d/' + HOJA_ID_VISTA + '/edit';
 

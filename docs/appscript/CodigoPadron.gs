@@ -33,7 +33,9 @@
  */
 
 /** La hoja que publica la aplicación cada mañana, y la pestaña con los datos. */
-var HOJA_SIRE = '1ttW7DOAiem0bl2FVL5n06MdAcmq79Yqu-S35P-rzJK0';
+// El libro único «INROCONTA» (desde el 07/10/2026). Este tablero tiene su propio doGet: va en un
+// proyecto aparte, no en el del libro (ahí el doGet es el de la vista ejecutiva).
+var HOJA_SIRE = '1n_MZD30CQ1b3HZlVCstQZ3giGaE-sKsB5_U3dobtdpE';
 var PESTANA_SIRE = 'COMPROBANTES SUNAT';
 var URL_HOJA_SHEET = 'https://docs.google.com/spreadsheets/d/' + HOJA_SIRE + '/edit';
 

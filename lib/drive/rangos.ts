@@ -87,6 +87,11 @@ export interface Pestana {
  * Lo importante es a cuáles NO devuelve: el tablero que arma Contabilidad
  * vive en otra pestaña del mismo archivo y no se toca.
  */
+/** La pestaña que se llama exactamente así, o null (en el libro único no se escribe «en la primera»). */
+export function buscarPestana(pestanas: Pestana[], nombre: string): Pestana | null {
+  return pestanas.find(p => p.titulo === nombre) ?? null;
+}
+
 export function elegirPestana(pestanas: Pestana[], nombre: string): Pestana {
   if (pestanas.length === 0) throw new Error("La hoja no tiene ninguna pestaña.");
   return pestanas.find(p => p.titulo === nombre) ?? pestanas[0];

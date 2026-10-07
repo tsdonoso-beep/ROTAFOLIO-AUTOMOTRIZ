@@ -716,6 +716,46 @@ Compras, COMEX y Almacén» de `carpetas-oc.yml`, o solo con
   robot semanal `padron-domicilios.yml` (padrón reducido de SUNAT).
 - **Cuadre de ventas e IGV por mes** en Impuestos (como el PDT 621).
 
+## El libro único «INROCONTA» (desde el 07/10/2026)
+
+Todo lo de Contabilidad vive en un solo libro de Google Sheets,
+**INROCONTA** (`1n_MZD30CQ1b3HZlVCstQZ3giGaE-sKsB5_U3dobtdpE`), cada cosa en
+su pestaña:
+
+| Pestaña | La llena |
+|---|---|
+| COMPROBANTES SUNAT (y «… 2025») | Robot `sunat-diario` |
+| COMPROBANTES SUNAT - DETALLE (y «… 2025») | Robot `descargar-cpe` / `npm run hojas:detalle` |
+| OC - CARPETAS COMPRAS NACIONALES / IMPORTACIONES | Robot `carpetas-oc` |
+| CARPETA MADRE, CARPETA MADRE - RESUMEN, FACTURAS SIN OC | `CarpetaMadre.gs` (cada hora) |
+| PADRÓN RUC | `PadronRuc.gs` |
+
+El robot crea la pestaña si no existe y escribe solo en la suya
+(`lib/drive/servidor.ts`, `LIBRO_ID`). Mientras dura la mudanza publica
+también en los archivos de antes; `HOJAS_SUELTAS=0` lo apaga. La hoja
+privada de fuentes (`CopiarFuentes.gs`) sigue aparte, por seguridad.
+
+**Un solo proyecto de Apps Script, dentro de INROCONTA**
+(Extensiones → Apps Script): `VistaEjecutiva.gs` + `VistaEjecutivaPagina.html`,
+`CarpetaMadre.gs`, `PadronRuc.gs` y, si se usa, `Codigo.gs` + `Tablero.html`.
+No van ahí: `CodigoPadron.gs` (tiene su propio `doGet`; la vista ya muestra el
+padrón en la ficha del proveedor) ni los scripts viejos del legajo
+(`LegajoPorOC`, `VistaLegajo`, `SubirLegajo`, `TableroLegajo`,
+`CapturaCarpetasOC`, `LecturaFacturas`, `SubirCapturaOC`, `Desglose`): los
+reemplazaron el robot de carpetas y `CarpetaMadre.gs`.
+
+**Pasos de la mudanza:**
+1. Que el robot llene el libro: correr `npm run hojas:detalle` (DETALLE) y
+   `npm run sire:local` (COMPROBANTES), o esperar las corridas de la mañana.
+2. En INROCONTA → Apps Script: pegar los archivos de arriba y las Propiedades
+   del script (SUPABASE_URL, SUPABASE_ANON_KEY, ROBOT_CORREO, ROBOT_CLAVE).
+3. Correr `instalarCarpetaMadre` y `instalarVistaRapida` (activadores de cada hora).
+4. Implementar → Nueva implementación → Aplicación web → copiar el enlace
+   nuevo de la vista y repartirlo.
+5. En los proyectos viejos: quitar sus activadores (GENERAL → menú Carpeta
+   madre → «Dejar de traerla sola»; la vista vieja → Activadores → borrar
+   `prepararVista`) para que no corran dos veces.
+
 ## Verificar una carga antes del CONCAR
 
 `VerificarComprobantes.gs` va en la hoja donde se arma la carga masiva (por

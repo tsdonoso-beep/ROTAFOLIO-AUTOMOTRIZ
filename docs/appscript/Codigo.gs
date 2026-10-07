@@ -12,7 +12,8 @@
  */
 
 /** La hoja que publica la aplicación. Se cambia solo si se muda de archivo. */
-var HOJA_FUENTE = "1ttW7DOAiem0bl2FVL5n06MdAcmq79Yqu-S35P-rzJK0";
+// El libro único «INROCONTA» (desde el 07/10/2026; antes, COMPROBANTES SUNAT 1ttW7D…).
+var HOJA_FUENTE = "1n_MZD30CQ1b3HZlVCstQZ3giGaE-sKsB5_U3dobtdpE";
 
 // La pestaña con los datos. Es la que reescribe la aplicación cada mañana;
 // esta de acá al lado no la toca. Se busca por nombre y no por posición

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  letraColumna, citarPestana, rangoA1, enBloques, anchoMaximo, elegirPestana,
+  letraColumna, citarPestana, rangoA1, enBloques, anchoMaximo, elegirPestana, buscarPestana,
 } from "../rangos.ts";
 
 test("las letras de columna no tienen cifra cero", () => {
@@ -66,4 +66,10 @@ test("si la renombraron, escribe en la primera y no en el tablero", () => {
 
 test("una hoja sin pestañas es un error y no la pestaña cero", () => {
   assert.throws(() => elegirPestana([], "COMPROBANTES SUNAT"));
+});
+
+test("en el libro único se busca la pestaña exacta: si no está, no se toma la primera", () => {
+  const pestanas = [P("Hoja 1", 0), P("COMPROBANTES SUNAT", 5)];
+  assert.equal(buscarPestana(pestanas, "COMPROBANTES SUNAT")?.id, 5);
+  assert.equal(buscarPestana(pestanas, "COMPROBANTES SUNAT - DETALLE"), null);
 });

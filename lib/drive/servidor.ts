@@ -13,7 +13,7 @@
 import { google } from "googleapis";
 import { Readable } from "stream";
 import {
-  anchoMaximo, elegirPestana, enBloques, rangoA1, type Pestana,
+  anchoMaximo, buscarPestana, elegirPestana, enBloques, rangoA1, type Pestana,
 } from "./rangos.ts";
 import { aTabla, columnasDeFecha } from "./celdas.ts";
 import type { TipoColumna } from "../export/comprobantes-sunat.ts";
@@ -234,6 +234,18 @@ function hojaFija(nombre: string): string | null {
   return fijas[nombre] ?? null;
 }
 
+/**
+ * El libro único de Contabilidad («INROCONTA», 07/10/2026): todo lo que el
+ * robot publica va ahí, cada cosa en su pestaña con el mismo nombre que tenía
+ * su archivo («COMPROBANTES SUNAT», «COMPROBANTES SUNAT - DETALLE», …), así
+ * los Apps Script la encuentran igual. HOJA_LIBRO_ID cambia el libro; «no» lo apaga.
+ *
+ * Mientras dura la mudanza se sigue publicando también en los archivos de
+ * antes (la vista y las hojas viejas siguen al día). HOJAS_SUELTAS=0 lo apaga.
+ */
+export const LIBRO_ID = (process.env.HOJA_LIBRO_ID?.trim() || "1n_MZD30CQ1b3HZlVCstQZ3giGaE-sKsB5_U3dobtdpE").replace(/^no$/i, "");
+const HOJAS_SUELTAS = process.env.HOJAS_SUELTAS?.trim() !== "0";
+
 export async function publicarHoja(p: {
   filas: string[][];
   nombre: string;
@@ -241,6 +253,19 @@ export async function publicarHoja(p: {
   tipos?: TipoColumna[];
 }): Promise<{ id: string; url: string; reemplazada: boolean }> {
   const { drive, hojas, raiz } = conectarDrive();
+
+  let enLibro: { id: string; url: string; reemplazada: boolean } | null = null;
+  if (LIBRO_ID) {
+    try {
+      await escribirPestana(hojas, LIBRO_ID, p.nombre, p.filas, p.tipos ?? [], { crearSiFalta: true });
+      enLibro = { id: LIBRO_ID, url: `https://docs.google.com/spreadsheets/d/${LIBRO_ID}/edit`, reemplazada: true };
+      console.log(`· [libro] «${p.nombre}» publicado en INROCONTA (${p.filas.length - 1} filas)`);
+    } catch (e) {
+      console.error(`⚠ No se pudo escribir «${p.nombre}» en el libro INROCONTA (${LIBRO_ID}): ${e instanceof Error ? e.message : e}. ` +
+        `Compártelo con la cuenta de servicio como Editor.`);
+    }
+  }
+  if (!HOJAS_SUELTAS && enLibro) return enLibro;
 
   const fija = hojaFija(p.nombre);
   if (fija) {
@@ -356,7 +381,8 @@ export async function publicarHojaPorAnio(p: Parameters<typeof publicarHoja>[0])
 }
 
 export async function escribirPestana(
-  hojas: Hojas, hojaId: string, nombre: string, filas: string[][], tipos: TipoColumna[]
+  hojas: Hojas, hojaId: string, nombre: string, filas: string[][], tipos: TipoColumna[],
+  opciones: { crearSiFalta?: boolean } = {}
 ): Promise<void> {
   const meta = await hojas.spreadsheets.get({
     spreadsheetId: hojaId,
@@ -369,7 +395,21 @@ export async function escribirPestana(
     filas: s.properties?.gridProperties?.rowCount ?? 0,
     columnas: s.properties?.gridProperties?.columnCount ?? 0,
   }));
-  const pestana = elegirPestana(pestanas, nombre);
+  // En el libro único cada cosa tiene SU pestaña: si no está, se crea (nunca se escribe en otra).
+  let pestana: Pestana;
+  const exacta = buscarPestana(pestanas, nombre);
+  if (exacta) {
+    pestana = exacta;
+  } else if (opciones.crearSiFalta) {
+    const r = await hojas.spreadsheets.batchUpdate({
+      spreadsheetId: hojaId,
+      requestBody: { requests: [{ addSheet: { properties: { title: nombre } } }] },
+    });
+    const props = r.data.replies?.[0]?.addSheet?.properties;
+    pestana = { id: props?.sheetId ?? 0, titulo: nombre, filas: props?.gridProperties?.rowCount ?? 1000, columnas: props?.gridProperties?.columnCount ?? 26 };
+  } else {
+    pestana = elegirPestana(pestanas, nombre);
+  }
 
   const anchoNecesario = Math.max(anchoMaximo(filas), 1);
   const altoNecesario = Math.max(filas.length, 1);
