@@ -1,5 +1,13 @@
 # Guía del repositorio — dónde está cada cosa
 
+> **Desde el 08/10/2026 la automatización SUNAT vive en
+> [InroConta](https://github.com/tsdonoso-beep/InroConta)**: los workflows,
+> los scripts que corren, los Apps Script y las migraciones. Este repositorio
+> ya no tiene workflows (`.github/workflows/` se quitó para que no corran dos
+> veces); lo de SUNAT que sigue acá es lo que usa la aplicación de viáticos.
+> Las secciones 4, 10 y 11 de esta guía quedan como historia: la versión al
+> día está en `docs/GUIA-DEL-REPOSITORIO.md` de InroConta.
+
 > Punto de entrada para cualquier persona (o asistente de IA) que llegue a
 > este repositorio. Explica qué hay, dónde corre, qué credenciales usa, cómo
 > se verifica que funciona y dónde están los documentos de detalle.
